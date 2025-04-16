@@ -1,0 +1,1109 @@
+#' Compute trip statistics of animals from a central place
+#'
+#' \code{trip_stats} is the main workhorse function to produce trip statistics having first
+#' run the function to define the trips: \code{\link{define_trips}}.
+#'
+#' The \code{trip_stats} relies on specification of a central place to process individual trips and calculates the final statistics.
+#' This CPF can either be per animal and year, fed through as a data.frame (nestfile argument) or a
+#' listed option per animal (nest_lls argument), or as a simple two-length vector of long and lat (nest_lls). Otherwise,
+#' the function can use a shape (use_shape argument) from that provided to \code{define_trips()} to estimate a centroid
+#' long,lat that was used under that function. Finally, if none of those options are used, then the
+#' start point of individual trips within the CPF are taken as the point to 'measure' against for trip stats.
+#' The stats used here (not really "stats" but just a shorthand for metrics), are: \strong{trip duration},
+#' \strong{max distance reached}, i.e. distance of the "distal point" and \strong{total distance travelled}.
+#' Trip duration is simply taken as the end time of the trip minus the start time, with \emph{start} and
+#' \emph{end} also included as a date-time output for each trip. Further, the \strong{bearings} of the
+#' maximum point are also taken, and the mean bearing per trip is also provided. Further tortuosity measures are
+#' not directly provided here but can be evaluated as the distal point lat long per trip is also provided.
+#'
+#' @param data Input data object, with required columns: TagID, DateTime, longitude, latitude.
+#' @param Phase A two-letter character of wither \code{"br"} or \code{"wi"} for breeding or winter; essentially the code
+#' is meant for breeding season usage, but should maximum distance (for example) be needed for
+#' non-breeding movements, then a dummy "1" is inserted for trips and the function can be used to get that information.
+#' @param nestfile The \code{trip_stats} function needs to know where to measure the
+#' distance from, i.e. for the central place. The option exists here to feed in a control file to give exact
+#' nest-specific information for individual birds, via the \code{nestfile} argument, which is in the format of a data.frame of:
+#' TagID, longitude, latitude, and \strong{one nest coordinate per TagID}. Optionally a 'year' value can
+#' be provided for example if nest locations for the same animal differ per year, forcing the function to assess
+#' this within the telemetry data provided. A further option exists to provide the same information as nestfile
+#' but in a listed format using the \code{nest_lls} argument - see below. The nestfile argument defaults to NULL.
+#' Rather obviously, it is best if TagIDs are present in the nestfile and the telemetry data, but the function will
+#' check for this - if TagIDs are missing from nestfile but are in the telemetry data, the missing IDs will be
+#' taken as the \strong{mean} of the other nests provided. Any additional nests provided in nestfile that are not in the
+#' telemetry data will be filtered out and not used. The same logic also applies to the nest_lls argument.
+#' @param nest_lls A second way of providing nestfile inputs (akin to the \code{nestfile} argument) is provided, through the
+#' \code{nest_lls} argument, which defaults to NULL. This statement is expected as a \code{list()} of the same structure as
+#' \code{nestfile} being as: list(TagID = c(a,b,c), longitude = c(a,b,c), latitude =c(a,b,c)).
+#' As with \code{nestfile} this allows matching of the TagIDs in data to the nest_lls
+#' lookup. Also, \code{nest_lls} can accept a two-length vector of c(longitude,latitude)
+#' should the user only want to calculate distance from a single point for all nests in \code{data}.
+#' This is the only instance when a different length structure of the nest_lls argument is permitted, otherwise
+#' the function will fall over if there is an imbalance in TagID, longitude and latitude (and year) lengths.
+#' Finally, if \code{nest_lls} and \code{nestfile} are both NULL (and the use_shape argument is FALSE - see below), then the function
+#' will assume the start latitude and longitude of the trip are desired to estimate foraging range.
+#' @param use_shape A Boolean (defaults to FALSE) as to whether to look for a specified shape that was use
+#' from the \code{define_trips()} function; if \code{use_shape} is specified as TRUE, then the function will
+#' look for the shape used (stored under attributes of data) - if not found the function will return an error. If
+#' the shape is found, the centroid of this shape will be taken as the central place.
+#' @param dist2Coast logical defaults to TRUE for whether metrics for distance to coast are to be returned; see details
+#' for more information on data returned. Note, the metrics will be returned only if the relevant dist2coast
+#' column(s) exist having been generated by function \code{\link{dist2coast}}.
+#' @param distcolOff logical defaults to TRUE for whether metrics for distance reached per tip offshore
+#' are to be returned; see details for more information on the metrics. Note, the metrics will only
+#' be returned if the relevant \code{offshore} column has been generated from function \code{\link{offshore}}.
+#' @param simple_output Logical for if simple output removing calculation of max lat longs and N fixes
+#' in offshore or onshore environments and for dist2coast; irrelevant if offshore or dist2coast elements are not used.
+#' Also removes max lat long fix point information for offshore/onshore and distance to coast summaries.
+#' @param by A by level grouping in the tbl structure over which to assess data by, default NULL. This is stricter than
+#' e.g. \code{define_trips} as here the function always uses TagID, year, and tripNo to assess trip stats; the by
+#' is for a further potential level after year.
+#' @param use_current_by An option (logical default FALSE) to use the existing by variable structure in the data
+#' but including TagID and year as the highest level grouping if not included and tripNo as the lowest.
+#' @param incompl_meth Character vector with two options of "all" or "part" for the complex, and often subjective
+#' definition of what constitutes an \strong{incomplete trip}. For "all" this is for whether any trip contains an identified gap between fixes
+#' either during or at the start/end of a trip, but "part" only flags incomplete trips if during the trip (i.e. not right at the start or end)
+#' there is a clear temporal split between fixes; thus the first "all" method (default) is stricter and
+#' for instance if there is a gap AFTER the trip to the next point, then this will get labelled as incomplete
+#' even through perhaps the animal could have been very near to the central place. Without examining every instance graphically
+#' this is the best we can do. It may be that the user will want to alter this definition manually.
+#' @param verbose Logical should detailed trip counting be displayed, defaults to TRUE.
+#'
+#' @return An objects of class \code{\link{Trip}}. The output
+#' is in the form of a \code{tibble} per listed level, with one dataset per animal.
+#' In each, the layout is the same with the following variables for: The trip number of the animal
+#' \code{"tripNo"}, the maximum distance reached (km) per trip \code{DistMax}, the total distance travelled
+#' (km) per trip \code{DistTotal}, the bearing at the distal point  \code{BearMax}, the DateTime UTC
+#' start time \code{Start}, the UTC end time \code{End}, the 'total' duration of the trip (hours),
+#' \code{TripDur}, the duration of monitoring from start to end of min and max trips \code{TotalMon} in hours,
+#' the 'active' monitoring of the trips in hours i.e. without "gaps" as determined by the users gapsec
+#' selection \code{ActiveMon}, the nest location longitude \code{nestlong} and latitude \code{nestlat} used
+#' for start points of distance calculations, whether the trip was flagged as "incomplete" by containing
+#' changes in gapsections \code{incompl}, and the \code{TagID} of the animal.
+#' Further optional columns can be returned for distance to colony offshore - see \code{distcolOff} argument, and
+#' distance to coast selection - see \code{dist2Coast} argument. These options return up to a a further
+#' 17 extra columns for the maximum distance (km), mean distance (km) standard deviation and number of fixes for each
+#' trip. For offshore distance per trip for example, columns of \code{DistMaxOff}, \code{DistMeanOff},
+#' \code{DistSDOff} and \code{distNOff} are returned, with NAs if no points in the trip were noted as offshore, and
+#' \code{DistalPointOff} indicates if the distal point was onshore or offshore as a binary 1 or 0.
+#' For distance to coast, returned columns are first grouped by distance to coast for ALL telemetry fixes
+#' i.e. onshore and offshore, using the column in the data \emph{"dist2coast"}, giving \code{DistCoastMaxOff},
+#' and so forth in similar format to offshore above for mean, SD and N. Further split is then made for points onshore and offshore
+#' for distance reached from the coast using either column \code{Dist2coast} as above, or should the user JUST
+#' want offshore information, then the variable \code{dist2coast_off} is only used, as per choice made in
+#' the \code{dist2coast} function - naming of the columns again follows the same max, mean, SD and N format as above.
+#' Additional columns are also added if \code{max_pnt} is set to TRUE giving
+#' \code{max_x}, \code{max_y}, and \code{n_max_xy} for xy long and lat for the distal point (first if more
+#' than one per trip recorded at same distance) and indication
+#' if more than one point per trip had the same max distance recorded.
+#'
+#' The function \code{trip_stats} can also process additional \emph{distance (km)} metrics of trips for the maximum,
+#' mean, SD and number of fixes per trip that are offshore, using the \code{"offshore"} column but only if it exists.
+#' The offshore column can be added through the \code{\link{offshore}} function, and a warning is given if this is
+#' requested to be processed (dist2colOff = TRUE) yet the column isn't found. Similarly, the
+#' \code{trip_stats} also processes information on distance to coast, and again depends on an earlier function being run, this time
+#' \code{\link{dist2coast}} being run in advance, to provide columns \code{"dist2coast_off"} or \code{"dist2coast"} depending
+#' if only offshore distance to coast or both onshore and offshore are requested. As with offshore, the distance to coast
+#' elements add additional columns to the outputted dataset for distance, including the max, mean, SD and number of fixes; for the variable
+#' \code{"dist2coast"} complexity is also added by summarising max, mean, SD and N for all distances,
+#' onshore AND offshore, thus adding 12 further columns to the Trip outputs. These options of offshore and
+#' coast can be requested not to be processed even if they exist in the dataset by setting the
+#' \code{dist2Coast} and \code{dist2colOff} arguments to FALSE.
+#'
+#' @seealso [MoveRakeR::define_trips], [MoveRakeR::dist2coast], [MoveRakeR::offshore]
+#'
+#' @examples
+#'
+#' # Initial set up - requires initial cleaning steps run and define_trips for numbered trips
+#' # based on central place
+#'
+#' ColLon = -3.185
+#' ColLat = 54.045
+#' p4 <- sf::st_crs((paste("+proj=laea +lon_0=", ColLon," +lat_0=", ColLat, " +units=m", sep="")))
+#' library(dplyr)
+#' data <- get(load("Y:/R packages/BTOTTdata/data/LBBGWalB201416.RData"))
+#' data <- TrackMultiStack2Track(data, rename = FALSE)
+#' indata <- data %>% clean_GPS(speed_filt = TRUE, drop = FALSE) %>%
+#'   define_trips(method="rect", lls = c(-3.2, 54.0553,-3.1689, 54.0437), p4s = p4)
+#'
+#' ######################
+#' # OPTIONS DEPENDING ON HOW CP DEFINED
+#' # 1 = Nestfile, overrides all else                                            nestfile not null
+#' # 2 = nest_lls > 2 - individual TagID nest locations provided as data.frame   nest_lls = length > 2
+#' # 3 = nest_lls == 2, i.e. one lat long across all nests                       nest_lls == length 2
+#' # 4 = shape centroid calculated from storage in the define_trips function     shape = TRUE
+#' # 5 = start point location of individual trips (DEFAULT)                      nestfile = NULL, nes_lls = NULL, even if shape = TRUE
+#'
+#' # --------------------- #
+#' # OPTION 1 and 2 - apologies these are the same
+#' # --------------------- #
+#' nest_df = get(load("Y:/R packages/BTOTTdata/data/GullNestLongLat.RData"))
+#' # nest_df must be a data.frame() with TagID (any format), latitude (numeric) and longitude (numeric), and optionally year (integer),
+#' # which will be looked for in data, e.g. different nest locations in different years
+#'
+#' # this gives the same output
+#' trip_test_1 <- trip_stats(indata, nestfile = nest_df)
+#' trip_test_2 <- trip_stats(indata, nestfile = NULL, nest_lls=nest_df)
+#'
+#' # another option providing listed formats if needed (year can be included too)
+#' trip_test_2 <- trip_stats(indata, nestfile = NULL, nest_lls=list(TagID = c('1','2','3'), longitude = c(-3.188,-3.182,-3.182,-3.172,-3.172,-3.185), latitude =c(54.0466,54.0473,54.04723,54.05155,54.05189,54.06200)))
+#'
+#' # --------------------- #
+#' # OPTION 3
+#' # --------------------- #
+#' nest_lls = c(-3.18275, 54.04732)
+#' trip_test_3 <- trip_stats(indata, nestfile = NULL, nest_lls=nest_lls)
+#'
+#' # --------------------- #
+#' # OPTION 4
+#' # --------------------- #
+#' # If a shape was used, the define_trips function also stores the central place in:
+#' shape_used = attr(attr(indata, "define_trips"), "shape_used")
+#'
+#' # this can be used for assessing the centroid automatically and working out trip_stats without further work
+#' trip_test_4 <- trip_stats(indata, nestfile = NULL, nest_lls=NULL, use_shape = TRUE)
+#'
+#' # --------------------- #
+#' # OPTION 5
+#' # --------------------- #
+#' # It is also possible to supply NULL arguments to nestfile and nest_lls and shape = FALSE, and in that case the
+#' # start point of individual trips is used as the geographic start point to measure foraging range per individual trip.
+#' # This is important should the central place be large and precise start points be needed.
+#'
+#' trip_test_5 <- trip_stats(indata, nestfile = NULL, nest_lls=NULL, use_shape = FALSE)
+#'
+#' plot_leaflet_trips(data)
+#'
+#'
+#' ##### END EXAMPLES
+#'
+#' @importFrom adehabitatLT as.ltraj
+#' @import dplyr
+#' @import tidyr
+#' @import tibble
+#' @import lubridate
+#' @import sf
+#' @import purrr
+#' @import units
+#' @export
+trip_stats <- function(data,
+                             Phase = "br",
+                             use_current_by = FALSE,
+                             by = NULL,
+                             nestfile = NULL,
+                             nest_lls = NULL,
+                             use_shape = FALSE,
+                             dist2Coast = TRUE,
+                             dist2colOff = TRUE,
+                             incompl_meth = "all",
+                             simple_output = TRUE,
+                             verbose = TRUE,
+                             p4s = 3035){
+
+  data_dp <- tibble(data)
+  # --------------------------------------- #
+  # assessment of relevant minimum namings in data
+  cond <- ifelse(all(c("TagID","DateTime", "longitude", "latitude") %in% names(data_dp)), TRUE, FALSE) # required columns
+  if(!cond){
+    stop("Missing column names! Check input data for named columns: 'TagID','DateTime','longitude','latitude'")
+  }
+
+  # get attributes from previous function runs
+  attr_list <- get_attributes(data)
+  # --------------------------------------- #
+
+  # detailed messaging
+  if(!is.null(nestfile)){
+    # expect a format of TagID, longitude, latitude
+    if(verbose){message("trip_stats: Using a supplied control file")}
+
+    if(!any(names(nestfile) %in% c("TagID","longitude","latitude"))){
+      stop("Names in nestfile need to be: TagID, longitude, latitude")
+    }
+
+  }
+  if(is.null(nestfile)){
+
+    if(verbose){message("Building control file from supplied lat longs")}
+
+    if(is.null(nest_lls)){message("Using the start point of the trip for the longitude and latitude")}
+
+    if(!is.null(nest_lls)){
+
+      if(length(nest_lls) == 2 & !is.list(nest_lls)){
+        if(verbose){
+          message("Using one centre point for all animals")
+        }
+
+        # then expect a single vector of two for long and lat denoting a single start point wanted for the entire central place
+        #nestfile <- nest_lls
+
+      } else{
+
+        lcheck <- unique(do.call('rbind',lapply(nest_lls,function(x){length(x)}))[,1])
+        if(length(lcheck) > 1){stop("Unbalanced control file arguments: check length of TagID, latitude and longitude supplied in nest_lls")}
+
+        # then make follow the same process as nestfile - also allows years to be specific in the list
+        nestfile <- data.frame(nest_lls)
+      }
+    }
+
+  }
+
+  if(dist2Coast){
+
+    if(!exists("dist2coast",where=data)){
+      if(verbose){
+        message("Field: 'dist2coast' not found in data: run dist2coast function first if this is needed")
+      }
+    }
+
+  }
+  if(dist2colOff){
+
+    if(!exists("offshore",where=data)){
+      if(verbose){
+        message("Field: 'offshore' does not exist: run function 'offshore' if this is needed")
+      }
+    }
+  }
+
+  if(!exists("tripNo",where=data)){stop("Function 'trip_stats' needs trips to have been assigned: run 'define_trips' function first ")}
+
+
+  # -------------------- #
+  # check for extra rows for trips that may share a start and end
+  extra_rows <- attr(attr(data_dp, "define_trips"), "extra_rows")
+
+  # these will need binding for the trip duration and total distance, but note that should not be retained as it distorts the original data
+  if(nrow(extra_rows) > 0){
+    if(verbose){message("Extra rows for 'come-an-go' trips detected; including for correct start-end trip durtation calcs") }
+    extra_rows$extra_row = 1
+    data_dp = data_dp %>% mutate(extra_row = 0) %>% bind_rows(.,extra_rows) %>% arrange(TagID,DateTime)
+  }
+
+
+  # --------------------- #
+  # If dist not existing, calculate using adehabitat
+  if(!exists("dist", data_dp)){
+
+    data_dp_sf2 <- sf::st_as_sf(data_dp, coords = c("longitude", "latitude"), crs = 4326)
+    data_dp_sf2 <- sf::st_transform(data_dp_sf2, p4s)
+    coords = sf::st_coordinates(data_dp_sf2)
+    data_dp_sf2$XX <- coords[,1]
+    data_dp_sf2$YY <- coords[,2]
+
+    # need to take out the additional rows that may be added for come and go trips
+    data_dp_sf2 <- data_dp_sf2 %>% filter(extra_row == 0) %>% ungroup()
+
+    #if(any(duplicated(data_dp_sf2$DateTime))){
+    #  stop("There are duplicate DateTimes in your data - please check")
+    #}
+    #data <- data[!duplicated(data$DateTime),]
+
+    ade_dat = data.frame(data_dp_sf2)
+    dataXa <- adehabitatLT::as.ltraj(subset(ade_dat, select=c(XX,YY)), ade_dat$DateTime,id=ade_dat$TagID)
+    ade_dat2 = tibble(do.call('rbind',dataXa)) %>% mutate(TagID = ade_dat$TagID) %>% rename(DateTime = "date") %>% arrange(TagID, DateTime)
+
+    # checks
+    #all(ade_dat2$TagID == data_dp_sf2$TagID)
+    #all(ade_dat2$DateTime == data_dp_sf2$DateTime)
+    # all(ade_dat2$dist == data_dp_sf2$dist) # likely slightly different projection
+    #plot(ade_dat2$dist ~ data_dp_sf2$dist)
+
+    # add distances
+    data_dp_sf2$dist <- ade_dat2$dist
+
+    # could add speed on here maybe
+    #dataXa  <- dataXa[[1]]
+    #data$dist <- dataXa$dist
+    #data$dt <- dataXa$dt
+    #data$traj.speed <- data$dist / data$dt # in m/s
+    # add duplicated rows back in again
+    # only a single dist column would be added to the end, if not existing add it as NA
+
+    extra_rows <- attr(attr(data_dp, "define_trips"), "extra_rows")
+
+    # these will need binding for the trip duration and total distance, but note that should not be retained as it distorts the original data
+    if(nrow(extra_rows) > 0){
+      extra_rows <- extra_rows %>% mutate(extra_row = 1, dist = NA)
+
+      data_dp_sf2 = sf::st_drop_geometry(data_dp_sf2) %>% mutate(extra_row = 0) %>% bind_rows(.,extra_rows) %>% arrange(TagID, DateTime)
+
+    }
+
+    data_dp = data_dp_sf2
+    rm(data_dp_sf2)
+
+  }
+
+  # ----------------------- #
+  # Now onto trip stats
+  # These have been computed so many times in other packages such as move, trip, track2KBA, AMT etc and ExMove takes an open code approach
+  # Why the are you creating yet ANOTHER version and not going with existing code.
+  # The answer is simple. The version here is adding a bit more flexibility, and also does not go so afar as to
+  # say produce sinuosity etc. The distance from the central place is the main issue along with incompleteness of trips
+  # and here we have flexibility for instance in where the start f the CPF location is vs total distance travelled.
+  # This can all be run in open code too, but is provided here as a wrapped op version to allow an efficient one-liner in scripts, if wanted.
+
+  #data_dp$TagID
+
+  # modified this after running breeding season trip stats so hope it still works! Trying to accommodate wintering
+  if(Phase == "wi"){
+    data_dp$tripNo <- 1
+    #ntrips <- 1
+  }
+
+  # year is needed
+  data_dp$year <- lubridate::year(data_dp$DateTime)
+
+  ######################
+  # SET UP SIMPLE OPTIONS FOR HOW CP defined
+  #
+  # 1 = Nestfile, overrides all else                                            nestfile not null
+  # 2 = nest_lls > 2 - individual tagID nest locations provided as data.frame   nest_lls = length > 2
+  # 3 = nest_lls == 2, i.e. one lat long across all nests                       nest_lls == length 2
+  # 4 = shape centroid calculated from storage in the define_trips function     shape = TRUE
+  # 5 = start point location of individual trips (DEFAULT)                      nestfile = NULL, nes_lls = NULL, even if shape = TRUE
+
+  ################ Code to test each option:
+
+  ## 1.
+  #nestfile = BTOTTdata::GullNestLongLat
+
+  ## 2. a vector form in argument nest_lls in form: list(TagID = c(a,b,c), longitude = c(a,b,c), latitude =c(a,b,c))
+  #nestfile = BTOTTdata::GullNestLongLat
+  #nest_lls = data.frame(TagID = c(nestfile$TagID), longitude = c(nestfile$longitude), latitude = c(nestfile$latitude))
+  #nestfile <- NULL # note nestfile made from nest_lls in the FIRST STAGES, so option 2 is moot
+  #shape <- NULL
+
+  ## 3. a single vector across all in nest_lls (one central place) form: c(longitude,latitude)
+  #nest_lls = c(-3.182442, 54.04723)
+  #nestfile <- NULL
+  #shape <- NULL
+
+  ## 4 shape
+  #shape = attr(attr(data_dp, "define_trips"), "shape_used")
+  #use_shape = TRUE
+  #nestfile <- NULL
+  #nest_lls <- NULL
+
+  ## 5
+  #use_shape = FALSE
+  #nestfile <- NULL
+  #nest_lls <- NULL
+
+  # ------------------------------------------------------------------- #
+  # 1
+  if(!is.null(nestfile)){
+
+    message("Option 1: Using supplied nestfile, lat longs specific for animals")
+
+    CP_option = 1
+
+  }
+
+  # 2.
+#  if(!is.null(nest_lls) & use_shape == FALSE & length(nest_lls) > 2 & is.null(nestfile)){
+#
+#    message("Option 2: Using supplied nest_lls, lat longs specific for animals")
+#
+#    CP_option = 1
+#
+#  }
+
+  # 3.
+  if(!is.null(nest_lls) & use_shape == FALSE & length(nest_lls) == 2){
+
+    message("Option 3: Using supplied nest_lls, length == 2 detected, single lat long for all animals")
+
+    CP_option = 3
+
+  }
+
+  # 4.
+  if(use_shape & is.null(nestfile)){
+
+    message("Option 4: Shape centroid from define_trips")
+
+    CP_option = 4
+
+  }
+
+  # 5.
+  if(is.null(nest_lls) & use_shape == FALSE & is.null(nestfile)){
+
+    message("Option 5: No nest_lls or nestfile supplied, and use_shape = FALSE, taking location of first point per trip for CPF calculations")
+    # Default then this uses the start location of each trip to execute distance to central place calculations
+    ## 5. NULLs in nestfile and nest_lls == measurement from the geo location at the last point in the central place.
+    ## personal preference as this is used in our gull foraging range work since the bird could move quite a bit
+    ## inside large defined polygons, meaning high probablity of total distance vs straight line distance errors
+
+    CP_option = 5
+
+  }
+  #############################################################################################################
+  #############################################################################################################
+  #############################################################################################################
+  # assess by grouping
+
+
+
+
+
+  #############################################################################################################
+  #############################################################################################################
+  #############################################################################################################
+  #############################################################################################################
+  #############################################################################################################
+  #############################################################################################################
+  # note on the nestfile - regardless of grouping above this is TagID and possibly year specific...
+  # so this is a separate process to the overall tripstats carried out on the data at the groupings required...
+
+  # ------------------------------------------------------------- #
+  if(CP_option == 1){
+
+    nestfile = nestfile[nestfile$TagID %in% data_dp$TagID,]
+
+    if(nrow(nestfile) == 0){
+      stop("No matching nestfile TagIDs in data supplied")
+    }
+
+    # get the TagID / year count value(s) in the GPS data
+    tid_yr = data_dp %>% group_by(TagID, year) %>% summarise(n = n(), .groups="keep")
+    tid = unique(tid_yr$TagID)
+
+    if(exists('year', nestfile)){
+
+      message("Using year-specific nest lat longs provided for TagIDs")
+
+      nestfile <- tibble(nestfile) %>% rename(col_lat = "latitude", col_lon = "longitude") %>%
+        mutate(TagID = as.character(TagID)) %>%  dplyr::select(TagID,year,col_lat,col_lon)
+
+      #nestfile <- nestfile[!nestfile$TagID %in% "202",]
+
+      if(any(!tid %in% nestfile$TagID)){
+
+        # are there any missing nest locations for TagIDs in the dataset? Take the mean of others
+
+        tid_match = tid[which(!tid %in% nestfile$TagID)]
+        year = tid_yr %>% group_by(TagID) %>% filter(TagID == tid_match) %>% .$year
+
+        # add that to the nest data with mean lat long
+        mns = nestfile %>% summarise(col_lat = mean(col_lat), col_lon = mean(col_lon))
+
+        nestfile = bind_rows(nestfile, cross_join(tibble(TagID,year), mns))
+
+        warning("TagID(s) ", paste(TagID, collapse = ", "), " not found in nestdata supplied, using the mean lat long of other TagIDs")
+
+      }
+
+      # if some nests have years and others don't that needs sorting
+      nestfile = full_join(tid_yr, nestfile, by = c("TagID", "year")) %>% ungroup() %>% fill(col_lat, col_lon)
+
+      # ungroup here given by variable choices!?
+      data_dp  <- data_dp %>% ungroup() %>% left_join(., nestfile, by = c("TagID","year")) %>% arrange(TagID, DateTime)
+
+      data_dp_sf <- data_dp  %>% mutate(Lon = longitude, Lat = latitude) %>%  filter(!is.na(longitude) & !is.na(latitude)) %>%
+        sf::st_as_sf(., coords = c("Lon","Lat"), crs = 4326) %>% sf::st_transform(.,p4s) %>%
+        group_by(TagID, year)
+
+    } else{
+
+      # no year present
+      nestfile <- tibble(nestfile) %>% rename(col_lat = "latitude", col_lon = "longitude") %>%
+        mutate(TagID = as.character(TagID)) %>%  dplyr::select(TagID,col_lat,col_lon)
+
+      # multiple tags still? Have to take means of available values? Or should we take first?
+      if(any(table(nestfile$TagID) > 1)){
+        nestfile <- nestfile %>% group_by(TagID) %>% summarise(col_lat = mean(col_lat), col_lon = mean(col_lon))
+      }
+
+      # any missing TagIDs in the GPS data but not in the nest file? (note the previous filter checking for animals not in nestfile but in GPS data already performed above)
+      tid_match = tid[which(!tid %in% nestfile$TagID)]
+
+      if(length(tid_match) > 0){
+        mns = nestfile %>% summarise(col_lat = mean(col_lat), col_lon = mean(col_lon))
+        nestfile = bind_rows(nestfile, cross_join(tibble(tid_match), mns))
+      }
+
+      # left join
+      data_dp  <- data_dp %>% ungroup() %>% left_join(., nestfile, by = "TagID") %>% arrange(TagID, DateTime)
+
+      data_dp_sf <- data_dp  %>% mutate(Lon = longitude, Lat = latitude) %>%  filter(!is.na(longitude) & !is.na(latitude)) %>%
+        sf::st_as_sf(., coords = c("Lon","Lat"), crs = 4326) %>% sf::st_transform(.,p4s) %>%
+        group_by(TagID)
+    }
+
+
+
+  }
+
+  # ------------------------------------------------------------- #
+#  if(CP_option == 2){
+#
+#    # DOES NOT ACCEPT YEARS - really this is the same as option1!
+#
+#    nest_lls = nest_lls[nest_lls$TagID %in% data_dp$TagID,]
+#
+#    # unique this so will take the frst if multiple are erroneously supplied
+#    nest_lls <- tibble(nest_lls[!duplicated(nest_lls$TagID),]) %>% mutate(TagID = as.character(TagID)) %>%
+#      rename(col_lat = "latitude", col_lon = "longitude")
+#
+#    if(!all(nest_lls$TagID %in% data_dp$TagID)){
+#      stop("Missing TagIDs in nest_lls")
+#    }
+#
+#    # left join
+#    data_dp  <- data_dp %>% left_join(., nest_lls, by = "TagID") %>% arrange(TagID, DateTime)
+#
+#    # set as an sf object
+#    data_dp_sf <- data_dp  %>% mutate(Lon = longitude, Lat = latitude) %>%  filter(!is.na(longitude) & !is.na(latitude)) %>%
+#      sf::st_as_sf(., coords = c("Lon","Lat"), crs = 4326) %>% sf::st_transform(.,p4s) %>%
+#      group_by(TagID) #  group by id
+#
+#    # then skip to the same process as if using first fixes on trips for the distance....
+#
+#  }
+
+  # ------------------------------------------------------------- #
+  if(CP_option == 3){
+
+    # simple single lat long for nest_lls
+    cp_sf <- sf::st_as_sf(data.frame(lon = nest_lls[1],lat = nest_lls[2]), coords = c("lon","lat"),crs = 4326) %>% sf::st_transform(.,p4s)
+    data_dp$col_lon <- nest_lls[1]
+    data_dp$col_lat <- nest_lls[2]
+
+  }
+
+  # ------------------------------------------------------------- #
+  if(CP_option == 4){
+
+    shape = attr(attr(data, "define_trips"), "shape_used")
+
+    if(!is.null(shape)){
+      cp_sf <- sf::st_transform(shape, p4s) %>% sf::st_centroid()
+
+      # add back into the data.frame as WGS84
+      cp_sf_wgs84 <- sf::st_transform(cp_sf, 4326) %>% sf::st_centroid() %>% sf::st_coordinates() %>% as.data.frame()
+      data_dp$col_lon <- cp_sf_wgs84$X
+      data_dp$col_lat <- cp_sf_wgs84$Y
+
+    } else{
+      stop("No shape found in supplied data; have you run define_trips() specifying method = rect, circ or shape?")
+    }
+
+  }
+
+  # ------------------------------------------------------------- #
+  if(CP_option == 5){
+
+    # get the first points of each tripNo per bird year
+    # this has to be strictly TagID and year?
+    first_points = data_dp %>% group_by(TagID, year, tripNo) %>% arrange(TagID,DateTime) %>%
+      filter(row_number() == 1) %>%  dplyr::select(TagID,year,tripNo,latitude,longitude) %>%
+      rename(col_lat = "latitude", col_lon = "longitude")
+
+    # left join
+    data_dp  <- data_dp %>% left_join(., first_points, by = c("TagID", "year", "tripNo"))
+
+    # set as an sf object first
+    data_dp_sf <- data_dp  %>% mutate(Lon = longitude, Lat = latitude) %>%  filter(!is.na(longitude) & !is.na(latitude)) %>%
+      sf::st_as_sf(., coords = c("Lon","Lat"), crs = 4326) %>% sf::st_transform(.,p4s) %>%
+      group_by(TagID, year, tripNo) # group by id year and trip no
+
+  }
+
+
+  #############################################################################################################
+  #############################################################################################################
+  #############################################################################################################
+  #############################################################################################################
+  #############################################################################################################
+  #############################################################################################################
+  # we had previously used geosphere or fossil in base R version of this code, however st_distance uses geosphere if WGS84
+  # we could project it and then recalculate distance, but in keeping with previous approach....
+  # CURRENTLY ALL GREAT CIRCLE DISTANCE
+
+  if(CP_option == 1 | CP_option == 2 | CP_option == 5){
+
+    #start_time <- Sys.time()
+    data_dp_sf <- data_dp_sf %>% sf::st_drop_geometry(.) %>% ungroup() %>% mutate(
+      sf_col = sf::st_as_sf(.,coords=c("col_lon", "col_lat"), crs = 4326), # actually creating the sf object at this point inside the dplyr expression, otherwise position is always defined at the outset
+      sf_dat = sf::st_as_sf(.,coords=c("longitude", "latitude"), crs = 4326), # same as above for the colony/central place
+      d = sf::st_distance(sf_dat$geometry, sf_col$geometry, by_element = TRUE) ) %>% # then an easy vectorised calculation between the columns for distance
+      group_by(TagID, year, tripNo)
+    #end_time <- Sys.time()
+    #time_taken <- round(end_time - start_time,2); time_taken #Time difference of 3.06 secs FASTER than other examples tried below
+
+    #data_dp_sf$sf_col$geometry
+    #data_dp_sf$sf_dat$geometry
+
+
+  }
+
+  if(CP_option == 3 | CP_option == 4){
+
+    # make the data sf and calculate the CP distance
+    # (note avoiding any left joining here)
+
+    data_dp_sf <- data_dp %>% arrange(TagID, DateTime) %>% mutate(Lon = longitude, Lat = latitude) %>%
+      filter(!is.na(longitude) & !is.na(latitude)) %>%
+      sf::st_as_sf(., coords = c("Lon","Lat"), crs = 4326) %>%
+      sf::st_transform(.,p4s) %>% ungroup()
+
+    #print(sf::st_crs(cp_sf) == sf::st_crs(data_dp_sf))
+
+    data_dp_sf <- data_dp_sf %>%
+      mutate(d = sf::st_distance(data_dp_sf, cp_sf, by_element = FALSE))
+
+
+  }
+
+  ################
+  #paste("Happy Christmas",paste(rep("eve", as.vector(difftime(as.Date(paste0(strsplit(as.character(Sys.Date()),"-")[[1]][1],"-12-24")), Sys.Date() )) ),collapse=", "))
+
+  # ------------------------------------ #
+  # Summarise for tripstats
+  message("Summarising trip statistics")
+
+  # Max distance, total distance and trip duration
+  # drop tripNo = zero
+  trips1 <- data_dp_sf %>% filter(tripNo != 0)
+
+  # this function is stricter than others in requiring TagID, year regardless....
+  # but say you had another level in between as well - that has to be fed in.
+  # using the by variable....
+  #by = "something"
+  if(use_current_by){
+
+    grps <- data_dp_sf %>% summarise(data = list(cur_group()), .groups = "keep") %>% names()
+    grps <- grps[grps != "data"]
+
+    if(length(grps) == 0){
+      by = NULL
+    } else{
+      by = grps
+    }
+
+    by <- c("year", by, "tripNo")
+    by <- unique(by)
+  } else{
+    # supplied by the user
+    by <- unique(by)
+
+    if(!is.null(by)){
+
+      if(any(!by %in% names(data_dp_sf))){
+
+        badvars <- by[!by %in% names(data_dp_sf)]
+        if(verbose){
+          warning("Variables: ", paste(paste0("'",badvars,"'"), collapse = ", ") ," were not found in data, so will be removed from tbl 'by' grouping!")
+        }
+        by <- by[by %in% names(data_dp_sf)]
+        if(length(by) == 0){
+          by <- NULL
+        }
+      }
+    }
+
+    by <- c("year", by, "tripNo")
+  }
+
+  if(verbose){message("Grouping data by: TagID, ", paste(by, collapse = ", "))}
+
+  # ---------------------------------------- #
+
+  if(verbose){message("-o-o-o-o- Running standard trip statistics -o-o-o-o-")}
+
+  trips1$dist <- units::set_units(trips1$dist, "m", mode = "standard")
+
+  tripstat1 <- trips1 %>% group_by(TagID, !!!syms(by)) %>%
+    sf::st_drop_geometry() %>%
+    mutate(max_lon = if_else(d == max(d), longitude, NA),
+           max_lat = if_else(d == max(d), latitude, NA)
+           ) %>%
+    summarise(Start = min(DateTime),
+              End = max(DateTime),
+              DistMax = max(d, na.rm=TRUE),
+              #DistMean = mean(d, na.rm=TRUE),  ############# <- I don't think these are informative! I think it is dist not d that should be being averaged...
+              #DistSD = sd(d, na.rm=TRUE),
+              DistN = length(d),
+              DistTotal = sum(dist, na.rm=TRUE),
+              min_d = min(DateTime),
+              max_d = max(DateTime),
+              TripDur = as.vector(difftime(max_d, min_d, units = 'hours')),
+              #mutate(new_value = value[which.max(age)]) %>%
+              max_lon = na.omit(max_lon),
+              max_lat = na.omit(max_lat),
+              col_lat = unique(col_lat),
+              col_lon = unique(col_lon),
+              MaxBear = atan2(max_lon-col_lon, max_lat-col_lat)*180/pi + (max_lon-col_lon < 0)*360,
+              .groups = "keep"
+    ) %>%
+    # adjust units
+    #mutate(DistMax = as.vector(DistMax / 1000), DistTotal = as.vector(DistTotal / 1000)) %>%
+    dplyr::select(-c(min_d,max_d))
+
+  # set units as km
+  tripstat1[names(tripstat1) %in% c("DistMax","DistTotal")] <-
+    tripstat1[names(tripstat1) %in% c("DistMax","DistTotal")] %>%
+    purrr::map2_dfc("km",  ~units::set_units(.x, .y, mode = "standard"))
+
+  # # # # # #
+  ### dist offshore / onshore
+  # DEV NOTE note yet updated code to assess incomplete and complete offshore/onshore trips
+
+  # ------------------------------------- #
+  if(dist2colOff){
+
+    if(exists("offshore", where=data)){
+
+      # requires distance to coast or offshore metrics to be within the main track dataset
+
+      if(verbose){message("~~~ Calculating distance to colony offshore and onshore ~~~")}
+
+      # trips1$Col # if a fix is in the colony, then DON'T use for offshore onshore calculation
+      # this is because the fix may be say onshore, then all fixes offshore, but it will still register an
+      # onshore 'range' which should not be used.
+      #
+      # needs max distance in offshore or offshore env (d)
+      # but also total distance in each env?? (dist)
+      tripstat1_off <- trips1 %>% group_by(TagID, !!!syms(by), offshore) %>%
+        sf::st_drop_geometry() %>%
+        filter(Col == 0) %>% # remove all colony fixes
+        mutate(max_lon = if_else(d == max(d), longitude, NA),
+               max_lat = if_else(d == max(d), latitude, NA),
+               DistalPointOff = if_else(d == max(d) & offshore == 1, 1, NA),
+               DistalPointOff = if_else(d == max(d) & offshore == 0, 0, DistalPointOff)  #### is the distal point offshore?
+        ) %>%
+        summarise(DistMax = max(d, na.rm=TRUE),
+                  #DistMean = mean(d, na.rm=TRUE),
+                  #DistSD = sd(d, na.rm=TRUE),
+                  DistN = length(d),
+
+                  #DistTotal = sum(dist, na.rm=TRUE),
+                  #DistTotalMean = mean(dist, na.rm=TRUE),
+                  #DistTotalSD = sd(dist, na.rm=TRUE),
+                  #DistTotalN = length(dist),
+
+                  #min_d = min(DateTime),
+                  #max_d = max(DateTime),
+                  #TripDur = as.vector(difftime(max_d, min_d, units = 'hours')),
+                  #mutate(new_value = value[which.max(age)]) %>%
+
+                  max_lon = na.omit(max_lon), # max lat and long for the offshore or onshore point
+                  max_lat = na.omit(max_lat),
+                  DistalPointOff = na.omit(DistalPointOff),
+                  #MaxBear = atan2(max_lon-col_lon, max_lat-col_lat)*180/pi + (max_lon-col_lon < 0)*360,
+                  .groups = "keep"
+        )
+
+      # then need to make columns for DistMaxOn, DistMaxOff
+      nms <- names(tripstat1_off)[!names(tripstat1_off) %in% c("TagID", by, "offshore")]
+      nms_off <- paste0(nms, "_off")
+      nms_on <- paste0(nms, "_on")
+
+      # set units as km
+      tripstat1_off[names(tripstat1_off) %in% c("DistMax","DistMean","DistSD")] <-
+        tripstat1_off[names(tripstat1_off) %in% c("DistMax","DistMean","DistSD")] %>%
+        purrr::map2_dfc("km",  ~units::set_units(.x, .y, mode = "standard"))
+
+      # split the data
+      on = tripstat1_off[tripstat1_off$offshore == 0,]
+      off = tripstat1_off[tripstat1_off$offshore == 1,]
+
+      # append 'off' and 'on' to all columns except the group_by columns
+      names(off)[!names(off) %in% c("TagID", by, "offshore")] <- nms_off
+      names(on)[!names(on) %in% c("TagID", by, "offshore")] <- nms_on
+      off = subset(off, select = -offshore)
+      on = subset(on, select = -offshore)
+
+      # merge each back into the full trip data
+      tripstat1 <- tripstat1 %>% group_by(TagID, !!!syms(by)) %>% # already grouped but retaining anyway
+        left_join(. ,off , by = c("TagID", by)) %>%
+        left_join(. ,on , by = c("TagID", by))
+
+    }
+  }
+
+  # ------------------------------------- #
+
+  if(dist2Coast){
+
+    if(exists("dist2coast", where=data)){
+
+      # requires distance to coast or offshore metrics to be within the main track dataset
+
+      if(verbose){message("-o-o-o-o- Adding distance to coast -o-o-o-o-")}
+
+      # check if offshore present, can then work out distance offshore / inland
+      if(exists("offshore", where=data)){
+
+        if(verbose){message("~~~ Calculating distance to coast offshore and onshore ~~~")}
+
+        by_adj <- c(by, "offshore")
+
+      } else{
+        by_adj <- by
+      }
+
+      tripstat1_d2c <- trips1 %>% group_by(TagID, !!!syms(by_adj)) %>%
+        sf::st_drop_geometry() %>%
+        filter(Col == 0) %>% # remove all colony fixes
+        mutate(max_lon_d2c = if_else(dist2coast == max(dist2coast), longitude, NA),
+               max_lat_d2c = if_else(dist2coast == max(dist2coast), latitude, NA)
+        ) %>%
+        summarise(DistCoastMax = max(dist2coast, na.rm=TRUE),
+                  #DistCoastMean = mean(dist2coast, na.rm=TRUE),
+                  #DistCoastSD = sd(dist2coast, na.rm=TRUE),
+                  DistCoastN = length(dist2coast),
+
+                  max_lon_d2c = na.omit(max_lon_d2c), # max lat and long for the offshore or onshore point
+                  max_lat_d2c = na.omit(max_lat_d2c),
+
+                  #MaxBear = atan2(max_lon-col_lon, max_lat-col_lat)*180/pi + (max_lon-col_lon < 0)*360,
+                  .groups = "keep"
+        )
+
+      # set units as km
+      tripstat1_d2c[names(tripstat1_d2c) %in% c("DistCoastMax","DistCoastMean","DistCoastN")] <-
+        tripstat1_d2c[names(tripstat1_d2c) %in% c("DistCoastMax","DistCoastMean","DistCoastN")] %>%
+        purrr::map2_dfc("km",  ~units::set_units(.x, .y, mode = "standard"))
+
+      # as with dist to colony offshore/onshore, need to make columns for DistMaxOn, DistMaxOff
+      nms <- names(tripstat1_d2c)[!names(tripstat1_d2c) %in% c("TagID", by_adj)]
+
+      if(exists("offshore",where=data)){
+
+        nms_off <- paste0(nms, "_off")
+        nms_on <- paste0(nms, "_on")
+
+        # split the data
+        on = tripstat1_d2c[tripstat1_d2c$offshore == 0,]
+        off = tripstat1_d2c[tripstat1_d2c$offshore == 1,]
+
+        # append 'off' and 'on' to all columns except the group_by columns
+        names(off)[!names(off) %in% c("TagID", by, "offshore")] <- nms_off
+        names(on)[!names(on) %in% c("TagID", by, "offshore")] <- nms_on
+        off = subset(off, select = -offshore)
+        on = subset(on, select = -offshore)
+
+        # merge each back into the full trip data
+        tripstat1 <- tripstat1 %>% group_by(TagID, !!!syms(by)) %>% # already grouped but retaining anyway
+          left_join(. ,off , by = c("TagID", by)) %>%
+          left_join(. ,on , by = c("TagID", by))
+
+        # and.... if offshore exists we still want the dist2coast across both onshore and offshore environments
+
+        tripstat1 = tripstat1 %>% mutate(
+          DistCoastMax = if_else(DistCoastMax_off > DistCoastMax_on, DistCoastMax_off, DistCoastMax_on)
+        )
+
+      } else{
+        # just merge in dist2coast (not offshore/onshore specific)
+        tripstat1 <- tripstat1 %>% group_by(TagID, !!!syms(by)) %>% # already grouped but retaining anyway
+          left_join(. ,tripstat1_d2c , by = c("TagID", by))
+      }
+
+
+
+
+
+    }
+
+  }
+
+
+  # removing potentially unwanted columns of mean SD and N points used in calcs of distance
+  if(simple_output){
+
+    nm_rm <- c(
+      "DistMean_off", "DistSD_off", "max_lon_off", "max_lat_off", #, "DistN_off"
+      "DistMean_on", "DistSD_on", "max_lon_on", "max_lat_on", #"DistN_on"
+      "DistCoastMean_off", "DistCoastSD_off", "DistCoastN_off", "max_lon_d2c_off", "max_lat_d2c_off",
+      "DistCoastMean_on", "DistCoastSD_on", "DistCoastN_on", "max_lon_d2c_on", "max_lat_d2c_on"
+    )
+
+    tripstat1 <- tripstat1[, !names(tripstat1) %in% nm_rm]
+  }
+
+  # # # # # #
+
+
+
+  #### Not attempting to reproduce other package metrics:
+  #### see other R packages for more detailed trip metrics i.e. adehabitat for abs and rel turning angles,
+  #### TrajSinuosity2 for sinuosity - best switching to those workflows instead
+
+  # -------------------------------------------- #
+  # TRIP COMPLETENESS
+  #
+  #### Add whether the trip is incomplete
+  # was not happy with previous method for doing this
+  # can we not just see if gapsections are > unique() 1 per trip?
+  # OK old version looked for if a trip had "gap" == 1 labelled i.e. last point of a trip
+  # could then be a gap and then next fix not on a trip is a different gap section.
+  # That means the trip has just one gap section BUT it may still be incomplete
+  # followed by a gap until whatever the bird did next.....so perhaps old version
+  # gaps = right??
+  #
+  # NOTE - this requires cleaning and gap_sections to have DROP = FALSE SPECIFIED FOR THIS TO WORK!
+
+  # (a) Incomplete trips defined by number of gapsections per trip > 1
+  if(incompl_meth == "part"){
+
+    # count gapsections per trip
+    mg = trips1 %>% group_by(TagID, !!!syms(by), gapsec) %>% sf::st_drop_geometry() %>%
+      summarise(n = n(), .groups="keep") %>%
+      mutate(incompl = if_else(gapsec > 1,1,0)) %>% ungroup() %>%
+      dplyr::select(-c(gapsec,n))
+
+    tripstat1 = left_join(tripstat1, mg, by = c("TagID", by))
+
+  }
+
+  # (b) Incomplete trips defined as if it contains a "gap" == 1, i.e. next point = a gap AFTER a trip
+  if(incompl_meth == "all"){
+
+    mg2 = trips1 %>% group_by(TagID, !!!syms(by)) %>% sf::st_drop_geometry() %>%
+      summarise(n = sum(gap), .groups="keep") %>%
+      mutate(incompl = if_else(n > 0,1,0)) %>% ungroup() %>%
+      dplyr::select(-n)
+
+    tripstat1 = left_join(tripstat1, mg2, by = c("TagID", by))
+
+  }
+
+  if(Phase == "wi"){ # kind of a moot point for "winter" as we have the days monitored value
+    tripstat1$incompl <- NA
+  }
+
+  #### DURATION OF ACTIVE MONITORING
+
+  # dong this differently - we can't use start and ends of gaps as single points can be gaps so
+  # makes no sense. Instead use the threshold gap criteria and the consecutive dt between fixes
+  # i.e. any gaps flagged as a 1 in the trip, minus that from the total trip duration
+  # then merge back into the trips, and subtract from total trip time
+  # note must discount the last dt in the trip as it is lagged from current to next row for dt
+  # but I think this needs to be at the bird level! It is too messy at the trip level
+
+  by2 = by[by != "tripNo"]
+
+  monit = trips1 %>% group_by(TagID, !!!syms(by2)) %>%
+    mutate(
+      #rn = row_number(),
+      #dt_est = if_else(rn == max(rn), 0, dt),
+      dt_gap = if_else(gap == 1, dt, 0)
+      ) %>%
+    summarise(TotalMon = as.vector(difftime(max(DateTime),min(DateTime),units = 'hours')),
+              ActiveMon = TotalMon - (sum(dt_gap, na.rm=TRUE) / 60 / 60),
+              .groups = "keep"
+              )
+  tripstat1 = left_join(tripstat1, monit, by = c("TagID", by2))
+
+  # ------------------------------------------------ #
+  # tidy up units of time
+
+  tripstat1[names(tripstat1) %in% c("TripDur","TotalMon","ActiveMon")] <-
+    tripstat1[names(tripstat1) %in% c("TripDur","TotalMon","ActiveMon")] %>%
+    purrr::map2_dfc("h",  ~units::set_units(.x, .y, mode = "standard"))
+
+  # convert monitoring to days
+  tripstat1[names(tripstat1) %in% c("TotalMon","ActiveMon")] <-
+    tripstat1[names(tripstat1) %in% c("TotalMon","ActiveMon")] %>%
+    purrr::map2_dfc("d",  ~units::set_units(.x, .y, mode = "standard"))
+
+  # ------------------------------------------------ #
+
+  tripstat1 <- structure(.Data = tripstat1, class = c("Trip","grouped_df","tbl_df","tbl","data.frame"))
+
+  # --------------------------------------------------------- #
+  # assign attributes that may have been present at the start
+  tripstat1 <- give_attributes(tripstat1, attr_list)
+
+  # --------------------------------------------------------- #
+  #### retain attributes of the choices made
+  if(is.null(attr(tripstat1, "trip_stats") )){
+    attr(tripstat1, "trip_stats") <- "trip_stats"
+  }
+
+  # sub_attributes for arguments
+  attr(attr(tripstat1, "trip_stats"), "Phase") <- Phase
+  attr(attr(tripstat1, "trip_stats"), "nestfile") <- nestfile
+  attr(attr(tripstat1, "trip_stats"), "nest_lls") <- nest_lls
+  attr(attr(tripstat1, "trip_stats"), "dist2Coast") <- dist2Coast
+  attr(attr(tripstat1, "trip_stats"), "use_shape") <- use_shape
+  attr(attr(tripstat1, "trip_stats"), "dist2colOff") <- dist2colOff
+  attr(attr(tripstat1, "trip_stats"), "incompl_meth") <- incompl_meth
+  attr(attr(tripstat1, "trip_stats"), "verbose") <- verbose
+  attr(attr(tripstat1, "trip_stats"), "p4s") <- p4s
+
+  # --------------------------------------------------------- #
+
+  return(tripstat1)
+
+  ############# OTHER LESS EFFICIENT OPTIONS TESTED FOR ABOVE EFFICIENCY:
+  ############# OPTION 1 map in purrr:
+  # inspired by this approach
+  # https://stackoverflow.com/questions/54887209/compute-pointwise-distance-by-group-in-r-with-sf-dplyr
+  #
+  #start_time <- Sys.time()
+  ## this I think works but is way slower than expected, and this is only a small number of birds!
+  ## all we are doing here is the distance back to the CP and still more calcs to do ...
+  #test = data_dp_sf %>% group_by(TagID, year, tripNo) %>% group_split() %>%
+  #  purrr::map_df(~.x %>% ungroup() %>% mutate(distCP  = sf::st_distance(., first(.x), by_element = FALSE))
+  #  )
+  #end_time <- Sys.time()
+  #time_taken <- round(end_time - start_time,2); time_taken
+  ##time_taken #Time difference of 42.71 secs
+  #
+  ##plot(test$distCP ~ test$DistCP)
+  #
+  ############## OPTION 2: as a function purrred:
+  ## more or less what the above is doing
+  #dist_calc <- function(.x){
+  #  fp = first(.x)
+  #   .x = .x %>% ungroup() %>% mutate(DistCP = sf::st_distance(.x, fp, by_element = FALSE))
+  #  return(.x)
+  #}
+  #
+  #.x = data_dp_sf[data_dp_sf$TagID == 202 & data_dp_sf$year == 2016 & data_dp_sf$tripNo %in% c(1),] # .y == 1129
+  #
+  #start_time <- Sys.time()
+  #test2 = data_dp_sf %>% group_by(TagID, year, tripNo) %>% group_split() %>% purrr::map_df(~dist_calc(.x))
+  #end_time <- Sys.time()
+  #time_taken <- round(end_time - start_time,2); time_taken #Time difference of 39 secs
+  #############
+
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
