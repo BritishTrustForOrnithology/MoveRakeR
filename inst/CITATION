@@ -1,0 +1,17 @@
+citHeader("To cite MoveRakeR in publications use:")
+
+citEntry(
+  entry = "Manual",
+  title = "MoveRakeR: An R package to source, clean and visualise tracking data",
+  author = c(
+       person("Thaxter", "Chris, B.", 
+       email = "chris.thaxter@bto.org")
+     ),
+  year = 2025,
+  note = "R package version 1.0.0",
+  url      = "https://github.com/BritishTrustForOrnithology/MoveRakeR",
+  key = "MoveRakeR-package",
+  textVersion = "Thaxter, C.B. (2025) MoveRakeR: An R package to source, clean and visualise tracking data. https://github.com/BritishTrustForOrnithology/MoveRakeR"
+)
+
+citFooter("Additions and modifications to MoveRakeR will occur so treat this package as still in development")
