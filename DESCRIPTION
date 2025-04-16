@@ -1,0 +1,47 @@
+Package: MoveRakeR
+Type: Package
+Title: An R package to source, clean and visualise tracking data.
+Version: 1.0.0
+Authors@R: 
+    person(given = "Chris",
+           family = "Thaxter",
+           role = c("aut", "cre"),
+           email = "chris.thaxter@bto.org",
+           comment = c(ORCID = "0000-0003-0341-4199"))
+Maintainer: Chris Thaxter <chris.thaxter@bto.org>
+Description: Load, clean and visualise tracking data.
+License: MIT
+Depends: R (>= 3.5.0)
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Suggests: knitr,
+    rmarkdown,
+	R.rsp
+Imports: 
+	adehabitatLT,
+	dplyr,
+	tibble,
+	lubridate,
+	tidyr,
+	purrr,
+	data.table,
+	move,
+	RODBC,
+	suncalc,
+	geosphere,	
+    DT,
+	leaflet,
+	shiny,
+    shinyWidgets,
+	suncalc,
+    htmltools,
+    sf,
+	sfheaders,
+	sp,
+	ggplot2,
+    R.rsp,
+    readr,
+	units,
+	
