@@ -4,6 +4,23 @@
 #' \code{plot_leaflet} subsets a Track or TrackStack object for TagIDs and feeds this through to
 #' a ui and server plotting an interactive shiny app.
 #'
+#' @details
+#' The map works using an R Shiny App, and makes use of efficient processing to update
+#' the base map rather than plotting afresh and as a preferCanvas option to increase speed.
+#' However, the function is still slow for lots of data. Three different basemaps are
+#' also implemented being GoogleEarth, OSM and ESRI. Note, currently no saving still grabs
+#' of images are coded. The plot appears in a tab in the shiny app, and more tabs are planned
+#' to summarise the the data etc in other views. Points of multiple birds are also coloured
+#' automatically using a simple colour palette, but no custom coloration is yet coded. A save
+#' option is also now available beneath the leaflet map so the user can take a snapshot of the
+#' map to be saved to the global working directory as in \code{getwd()}.
+#'
+#' To avoid complications with coding classes, \code{plot_leaflet} is only available for the Track-family
+#' of classes. So any \code{tibble::tibble} outputs if that's the way data were processed up to this
+#' function, then use the conversion to the \code{Track} class before feeding into this function.
+#'
+#' It is anticipated this app will be updated to make use of R Shiny Bootstrap.
+#'
 #' @param data A \code{Track} or \code{TrackStack} object; note TrackMultiStack objects not currently handled.
 #' @param TagID Whether to subset TagIDs for the data fed in. It is advisable to
 #' consider this for large datasets, or reduce the time span of the data used, as very large
@@ -39,22 +56,8 @@
 #' Ideally this should be another button in the shiny app to toggle but it is not yet implemented that way.
 #' @param fixes Another logical as to displaying options, TRUE/FALSE, for the telemetry fixes, defaulting to TRUE.
 #'
-#' @details
-#' The map works using R's Shiny App utilities, an makes use of efficient processing to update
-#' the base map rather than plotting afresh and as a preferCanvas option to increase speed.
-#' However, the function is still slow for lots of data. Three different basemaps are
-#' also implemented being GoogleEarth, OSM and ESRI. Note, currently no saving still grabs
-#' of images are coded. The plot appears in a tab in the shiny app, and more tabs are planned
-#' to summarise the the data etc in other views. Points of multiple birds are also coloured
-#' automatically using a simple colour palette, but no custom coloration is yet coded. A save
-#' option is also now available beneath the leaflet map so the user can take a snapshot of the
-#' map to be saved to the global working directory as in \code{getwd()}.
-#'
-#' To avoid complications with coding classes, \code{plot_leaflet} is only available for the Track-family
-#' of classes. So any \code{tibble::tibble} outputs if that's the way data were processed up to this
-#' function, then use the conversion to the \code{Track} class before feeding into this function.
-#'
-#' # NOTE: It is anticipated this app will be updated to make use of R Shiny Bootstrap.
+#' @return
+#' A local browser window with the Shiny app deployed.
 #'
 #' @seealso @seealso [MoveRakeR::plot_leaflet_trips]
 #'

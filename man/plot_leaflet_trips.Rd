@@ -37,16 +37,37 @@ returned in the Shiny output. If trips is not NULL in this argument, then three 
 are returned (see below).}
 
 \item{shapes}{Option to add shapes to the leaflet map, as a \code{sf} POLYGON or MULTIPOLGON geometry object.
-Defaults to NULL. This must be specified as list(shape1, shape2, ...), including  for single
+Defaults to NULL. This must be specified as list(shape1, shape2, etc), including  for single
 shapes too, i.e. list(shape1).}
 
 \item{points}{A \code{data.frame} of \emph{additional} xy points to be plotted on the map, i.e. this does
 not mean whether to plot the animal telemetry points, but if separate points of another sort are needed (e.g. wind turbine locations.}
 
 \item{radius}{Numeric integer of the radius of the points to plot, defaulting to 4. Note, limited
-flexibility is currently available for colours of points (leaflet::colorFactor) and lines (grey).}
+flexibility is currently available for colours of points using \code{leaflet::colorFactor} and lines (grey).}
 }
 \value{
+A local browser window with the Shiny app deployed.
+}
+\description{
+An Shiny R interactive map to view trips of animals, with some basic summaries and plots based on
+the \code{leaflet} R package.
+}
+\details{
+Function \code{plot_leaflet_trips} is aimed at providing visual summaries of telemetry
+data after "trips" having been identified in the data, for example through function \code{define_trips}.
+The function uses the JavaScript \code{leaflet} R package to plot base map tiles of OSM, Google Earth and ESRI,
+over which movements of animals are overlain. It is hoped that this interactive experience will
+serve both initial data checking and further investigating potential patterns in the data.
+
+To avoid complications with coding classes, \code{plot_leaflet_trips} is only available for the Track-family
+of classes. So any \code{tibble::tibble} outputs if that's the way data were processed up to this
+function, then use the conversion to the \code{Track} class before feeding into this function. The same
+is also true for generation of trip statistics, so before to convert to the \code{Trip} class before
+using \code{plot_leaflet_trips}. Since this current function is likely dealing with multiple animals
+it is assumed the user would not ever want to use \code{plot_leaflet_trips} with the \code{Track2}
+class directed at lapplying functions in open session base R.
+
 Up to six tabs are currently available in the output. First, \strong{"Leaflet visualisation"} is the geographic
 view of the data for animals selected, with interaction available for selecting individual
 animals, and individual trips via their trip ID "tripNo"; a timeslide is also provided; trip
@@ -76,26 +97,9 @@ final tab \strong{"Trip stats"} then summarises the metrics across all trips for
 \code{tabulate_trips}, as can also be used in open code. For bird-level information in tables,
 choices selected in the leaflet map carry through to yellow highlights of that individual in
 the other linked tables. Note \code{plot_leaflet_trips} works animal by animal and doesn't
-view all animals together on a plot - see the simpler \code{plot_leaflet} function for that.NOTE: It is anticipated this app will be updated to make use of R Shiny Bootstrap.
-}
-\description{
-An Shiny R interactive map to view trips of animals, with some basic summaries and plots based on
-the \code{leaflet} R package.
-}
-\details{
-Function \code{plot_leaflet_trips} is aimed at providing visual summaries of telemetry
-data after "trips" having been identified in the data, for example through function \code{\link{define_trips}}.
-The function uses the JavaScript \code{leaflet} R package to plot base map tiles of OSM, Google Earth and ESRI,
-over which movements of animals are overlain. It is hoped that this interactive experience will
-serve both initial data checking and further investigating potential patterns in the data.
+view all animals together on a plot - see the simpler \code{plot_leaflet} function for that.
 
-To avoid complications with coding classes, \code{plot_leaflet_trips} is only available for the Track-family
-of classes. So any \code{tibble::tibble} outputs if that's the way data were processed up to this
-function, then use the conversion to the \code{Track} class before feeding into this function. The same
-is also true for generation of trip statistics, so before to convert to the \code{Trip} class before
-using \code{plot_leaflet_trips}. Since this current function is likely dealing with multiple animals
-it is assumed the user would not ever want to use \code{plot_leaflet_trips} with the \code{Track2}
-class directed at lapplying functions in open session base R.
+It is anticipated this app will be updated to make use of R Shiny Bootstrap.
 }
 \examples{
 

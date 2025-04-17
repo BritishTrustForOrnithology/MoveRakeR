@@ -72,12 +72,15 @@ Ideally this should be another button in the shiny app to toggle but it is not y
 
 \item{fixes}{Another logical as to displaying options, TRUE/FALSE, for the telemetry fixes, defaulting to TRUE.}
 }
+\value{
+A local browser window with the Shiny app deployed.
+}
 \description{
 \code{plot_leaflet} subsets a Track or TrackStack object for TagIDs and feeds this through to
 a ui and server plotting an interactive shiny app.
 }
 \details{
-The map works using R's Shiny App utilities, an makes use of efficient processing to update
+The map works using an R Shiny App, and makes use of efficient processing to update
 the base map rather than plotting afresh and as a preferCanvas option to increase speed.
 However, the function is still slow for lots of data. Three different basemaps are
 also implemented being GoogleEarth, OSM and ESRI. Note, currently no saving still grabs
@@ -91,7 +94,7 @@ To avoid complications with coding classes, \code{plot_leaflet} is only availabl
 of classes. So any \code{tibble::tibble} outputs if that's the way data were processed up to this
 function, then use the conversion to the \code{Track} class before feeding into this function.
 
-# NOTE: It is anticipated this app will be updated to make use of R Shiny Bootstrap.
+It is anticipated this app will be updated to make use of R Shiny Bootstrap.
 }
 \examples{
 

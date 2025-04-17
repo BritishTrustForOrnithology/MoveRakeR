@@ -6,7 +6,7 @@
 #'
 #' @details
 #' Function \code{plot_leaflet_trips} is aimed at providing visual summaries of telemetry
-#' data after "trips" having been identified in the data, for example through function \code{\link{define_trips}}.
+#' data after "trips" having been identified in the data, for example through function \code{define_trips}.
 #' The function uses the JavaScript \code{leaflet} R package to plot base map tiles of OSM, Google Earth and ESRI,
 #' over which movements of animals are overlain. It is hoped that this interactive experience will
 #' serve both initial data checking and further investigating potential patterns in the data.
@@ -19,28 +19,6 @@
 #' it is assumed the user would not ever want to use \code{plot_leaflet_trips} with the \code{Track2}
 #' class directed at lapplying functions in open session base R.
 #'
-#' @param data A \code{Track} or \code{TrackStack} object; note \code{TrackMultiStack} objects not currently handled.
-#' @param TagID Option for a concatenated list of TagID numbers to be subsetted from the data.
-#' @param trips A \code{Trip} or \code{TripStack} object (note \code{TripMultStack}) objects not currently handled.
-#' This is a dataset output from the function \code{trip_stats} function that should be run in the R session first
-#' to be fed into this argument. If NULL, then the trip stats are bypassed and only one tab (a leaflet visualisation) is
-#' returned in the Shiny output. If trips is not NULL in this argument, then three additional summary tabs
-#' are returned (see below).
-#' @param plotby A character string that must match a desired column name in the Track-family
-#' object data, indicating how to label points across all animals. If NULL (default), this i
-#' bypassed and colouring of points is done by TagID and a colour palette.
-#' @param col A vector of colours than can be hard-coded in this argument for plotting; if
-#' "col" is not equal to the length of the factor levels of plotting in argument "plotby", then an error
-#' is returned; if "plotby" is NULL and "col" is also NULL, then an automatic colour palette is used for TagID.
-#' @param shapes Option to add shapes to the leaflet map, as a \code{sf} POLYGON or MULTIPOLGON geometry object.
-#' Defaults to NULL. This must be specified as list(shape1, shape2, ...), including  for single
-#' shapes too, i.e. list(shape1).
-#' @param points A \code{data.frame} of \emph{additional} xy points to be plotted on the map, i.e. this does
-#' not mean whether to plot the animal telemetry points, but if separate points of another sort are needed (e.g. wind turbine locations.
-#' @param radius Numeric integer of the radius of the points to plot, defaulting to 4. Note, limited
-#' flexibility is currently available for colours of points (leaflet::colorFactor) and lines (grey).
-#'
-#' @return
 #' Up to six tabs are currently available in the output. First, \strong{"Leaflet visualisation"} is the geographic
 #' view of the data for animals selected, with interaction available for selecting individual
 #' animals, and individual trips via their trip ID "tripNo"; a timeslide is also provided; trip
@@ -72,7 +50,31 @@
 #' the other linked tables. Note \code{plot_leaflet_trips} works animal by animal and doesn't
 #' view all animals together on a plot - see the simpler \code{plot_leaflet} function for that.
 #'
-#' # NOTE: It is anticipated this app will be updated to make use of R Shiny Bootstrap.
+#' It is anticipated this app will be updated to make use of R Shiny Bootstrap.
+#'
+#' @param data A \code{Track} or \code{TrackStack} object; note \code{TrackMultiStack} objects not currently handled.
+#' @param TagID Option for a concatenated list of TagID numbers to be subsetted from the data.
+#' @param trips A \code{Trip} or \code{TripStack} object (note \code{TripMultStack}) objects not currently handled.
+#' This is a dataset output from the function \code{trip_stats} function that should be run in the R session first
+#' to be fed into this argument. If NULL, then the trip stats are bypassed and only one tab (a leaflet visualisation) is
+#' returned in the Shiny output. If trips is not NULL in this argument, then three additional summary tabs
+#' are returned (see below).
+#' @param plotby A character string that must match a desired column name in the Track-family
+#' object data, indicating how to label points across all animals. If NULL (default), this i
+#' bypassed and colouring of points is done by TagID and a colour palette.
+#' @param col A vector of colours than can be hard-coded in this argument for plotting; if
+#' "col" is not equal to the length of the factor levels of plotting in argument "plotby", then an error
+#' is returned; if "plotby" is NULL and "col" is also NULL, then an automatic colour palette is used for TagID.
+#' @param shapes Option to add shapes to the leaflet map, as a \code{sf} POLYGON or MULTIPOLGON geometry object.
+#' Defaults to NULL. This must be specified as list(shape1, shape2, etc), including  for single
+#' shapes too, i.e. list(shape1).
+#' @param points A \code{data.frame} of \emph{additional} xy points to be plotted on the map, i.e. this does
+#' not mean whether to plot the animal telemetry points, but if separate points of another sort are needed (e.g. wind turbine locations.
+#' @param radius Numeric integer of the radius of the points to plot, defaulting to 4. Note, limited
+#' flexibility is currently available for colours of points using \code{leaflet::colorFactor} and lines (grey).
+#'
+#' @return
+#' A local browser window with the Shiny app deployed.
 #'
 #' @seealso [MoveRakeR::plot_leaflet], [MoveRakeR::tabulate_trips], [MoveRakeR::tabulate_history], [MoveRakeR::assign_rates]
 #'

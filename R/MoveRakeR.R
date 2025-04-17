@@ -2,7 +2,7 @@
 #'
 #' The \code{MoveRakeR} package ('Move' = animal movement; 'Rake' = cleaning data) provides several categories of functions:
 #' (1) reading in tracking data, carrying out (2) basic cleaning, (3) manipulation,
-#' summary, trip-level simple analyses and (4) plotting tracks, pruior to further analytical
+#' summary, trip-level simple analyses and (4) plotting tracks, prior to further analytical
 #' adventures. The package is not aiming to replace existing workflows in other packages, such as
 #' \code{move} and \code{move2} but aim to provide some initial tools to address common manipulations of data routinely
 #' encountered that often require a degree of subjectivity in decision making.
@@ -20,7 +20,7 @@
 #' considerations to the data that go beyond this package, and so we also suggest the reader to
 #' check out \code{ExMove}, \code{move}, \code{trip}, and \code{AMT} for further analyses and approaches.
 #'
-#' @section 'Cleaning' the data:
+#' @section Cleaning the data:
 #'
 #' When a GPS dataset is obtained, as with any data, requires scrutiny and assessment prior to further analyses
 #' being conducted to address the research question at hand. That goes without saying, however specifically for telemetry data
@@ -70,7 +70,7 @@
 #' provide a sub-sampling approach to randomise this process; this is particularly useful to make maximal use of the data and important when an animal is traversing a
 #' unit of space only once, such as on migration (Schwemmer et al. 2021). The function \code{\link{sub_samp}} provides these additional capabilities.
 #'
-#' @section Central place foraging 'trips':
+#' @section Central place foraging trips:
 #'
 #' Beyond the basic cleaning and filtering stages above, further annotation of the data is often required for central place foraging consideration. As mentioned above,
 #' metrics for an animal or population may be needed to assess how far typically animals move from their central place, how long trips are, and other metrics
