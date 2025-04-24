@@ -772,9 +772,7 @@ trip_stats <- function(data,
         sf::st_drop_geometry() %>%
         filter(Col == 0) %>% # remove all colony fixes
         mutate(max_lon = if_else(d == max(d), longitude, NA),
-               max_lat = if_else(d == max(d), latitude, NA),
-               DistalPointOff = if_else(d == max(d) & offshore == 1, 1, NA),
-               DistalPointOff = if_else(d == max(d) & offshore == 0, 0, DistalPointOff)  #### is the distal point offshore?
+               max_lat = if_else(d == max(d), latitude, NA)
         ) %>%
         summarise(DistMax = max(d, na.rm=TRUE),
                   #DistMean = mean(d, na.rm=TRUE),
@@ -793,7 +791,6 @@ trip_stats <- function(data,
 
                   max_lon = na.omit(max_lon), # max lat and long for the offshore or onshore point
                   max_lat = na.omit(max_lat),
-                  DistalPointOff = na.omit(DistalPointOff),
                   #MaxBear = atan2(max_lon-col_lon, max_lat-col_lat)*180/pi + (max_lon-col_lon < 0)*360,
                   .groups = "keep"
         )
@@ -822,6 +819,25 @@ trip_stats <- function(data,
       tripstat1 <- tripstat1 %>% group_by(TagID, !!!syms(by)) %>% # already grouped but retaining anyway
         left_join(. ,off , by = c("TagID", by)) %>%
         left_join(. ,on , by = c("TagID", by))
+
+
+      # ---------------------------------------------------------------------------------- #
+      ### is the distal point offshore? needs to be done at the higher trip only level
+      tripstat1_distal <- trips1 %>% group_by(TagID, !!!syms(by)) %>%
+        sf::st_drop_geometry() %>%
+        filter(Col == 0) %>% # remove all colony fixes
+        mutate(DistalPointOff = if_else(d == max(d) & offshore == 1, 1, NA),
+               DistalPointOff = if_else(d == max(d) & offshore == 0, 0, DistalPointOff)  #### is the distal point offshore?
+
+        ) %>%
+        summarise(
+                  DistalPointOff = na.omit(DistalPointOff),
+                  .groups = "keep"
+        )
+
+      # merge into the trips
+      tripstat1 <- tripstat1 %>% group_by(TagID, !!!syms(by)) %>%
+        left_join(. ,tripstat1_distal , by = c("TagID", by))
 
     }
   }
