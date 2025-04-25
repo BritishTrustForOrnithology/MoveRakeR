@@ -9,23 +9,18 @@
 The \code{MoveRakeR} package ('Move' = animal movement; 'Rake' = cleaning data) provides several categories of functions:
 (1) reading in tracking data, carrying out (2) basic cleaning, (3) manipulation,
 summary, trip-level simple analyses and (4) plotting tracks, prior to further analytical
-adventures. The package is not aiming to replace existing workflows in other packages, such as
-\code{move} and \code{move2} but aim to provide some initial tools to address common manipulations of data routinely
-encountered that often require a degree of subjectivity in decision making.
+adventures.
 }
 \details{
-The \code{MoveRakeR} package aims to be used primarily in the first stage of data manipulation and has been
-borne out of application of regular processing of tracking data on seabirds.
-However, the processes contained in this package should be relevant to many other species. The package is also
-aimed at GPS data collected from bird-borne devices rather than other positional telemetry systems such as Argos or geolocator tags.
-
-The thought may occur: "Oh no, here's yet another tracking data manipulation package!". That is true, there are many out there already,
-and cover some similar ground to \code{MoveRakeR}. However, we would say the
-\code{MoveRakeR} package aims to wrap up some complex, frequently-encountered issues and pitfalls that can come
-with a 'starting from scratch' approach using first principles. This is borne out of many years of wrangling
-such data on different bird species and the devil is in the detail. There will always be things to add to the workflow or bespoke
-considerations to the data that go beyond this package, and so we also suggest the reader to
-check out \code{ExMove}, \code{move}, \code{trip}, and \code{AMT} for further analyses and approaches.
+The \code{MoveRakeR} package is primarily focused at the first stages of data manipulation and cleaning and has been
+borne out of application of regular processing of tracking data on a variety of bird species. The \code{MoveRakeR} package is intended to support
+the other existing workflows in other R packages, such as
+\code{move} (Kranstauber et al. 2018) and \code{move2} (Kranstauber et al. 2024) and provides some further
+tools to address common manipulations of data routinely
+encountered that often require a degree of subjectivity in decision making. We also direct the reader to
+check out \code{ExMove}, (Langley et al. 2024), \code{trip}, (Sumner 2009, Sumner et al. 2011)
+and \code{AMT} (Signer et al. 2019) for further analyses and data manipulation. Of note, is that the \code{MoveRakeR} package is also
+currently aimed at GPS data collected from bird-borne devices, rather than other positional telemetry systems such as Argos or geolocator tags.
 }
 \section{Cleaning the data}{
 
@@ -33,18 +28,22 @@ check out \code{ExMove}, \code{move}, \code{trip}, and \code{AMT} for further an
 When a GPS dataset is obtained, as with any data, requires scrutiny and assessment prior to further analyses
 being conducted to address the research question at hand. That goes without saying, however specifically for telemetry data
 and even more specifically for GPS data, there are certain 'cleaning' steps of the data that are typically undertaken. These mainly
-relate to measurement errors of the GPS data, perhaps not unlike other telemetry platforms. A first step is therefore understanding the
-degree of error and potential bias present in the data. These biases without treatment/consideration could have an impact on further
+relate to measurement errors of the GPS data, perhaps not unlike other telemetry platforms.
+
+Early steps in processing include dealing with duplicate records and constraining data per animal for
+a certain number of records and time periods. These are not covered here but instead we direct the user to the
+\code{move2} package liaising directly with MoveBank (Kranstauber et al. 2024). A further data preparation step is understanding the
+degree of location error and potential bias present in the data. These biases without treatment/consideration could have an impact on further
 data processing and analyses further down the line. This of course is highly dependent on the research question or intended use of data
 as the error in GPS may be of key interest in itself, and thus a fully 'raw' dataset may be what is needed for example to model such sources of error and understand why they occur.
-Some error can also be modelled/incorporated in other workflows such as continuous-time or behavioural movement modelling (e.g. R package momentuHMM, Michelot et al ****). However, a case in point is a more basic
+Some error can also be modelled/incorporated in other workflows such as continuous-time or behavioural movement modelling (e.g. R package \code{momentuHMM}, McClintock & Michelot 2018). However, a case in point is a more basic
 summary of movement of animals, such as migration or central place movement where it may not be the task to model such measurement errors, but
 instead filter the data to remove or 'clean' the data for less accurate/precise information. For example, a summary of 'foraging trips' of animals
 or time spent away from a central place may be all that is required, that benefits from removing GPS locations that may be clearly incorrect and their
 retention would inflate movement metrics. Basic area utilisation methods may also benefit from such treatment.
 
 GPS locations (in the xy horizontal dimension) may be subject to positional errors that arise from a number of sources, and thus this subject is highlight complex; for example signal interference,
-obstruction (e.g. buildings, trees), neighbouring interference signals, configuration and number of satellites in the sky,
+obstruction (e.g. buildings, trees), interference signals, configuration and number of satellites in the sky,
 communication with the satellites, atmospheric conditions, and the 'start' of the tag i.e. cold-start/warm start,
 potentially linked also to sampling rate of the GPS. The \code{MoveRakeR} does not unpick all of these drivers specifically, but
 draws attention to these errors that may impact the data collected. Questions therefore arise as to how suitable the
@@ -66,16 +65,17 @@ travelled are concerned. The function \code{\link{gap_section}} specifies the ga
 such as consideration of what to do with 'orphaned' fixes resulting from placement as a single gapsection are also provided.
 
 Another common task is to filter (or downgrade) the data from a finer temporal sampling rate to a coarser one. This has many applications such as
-aligning data within and among animals across varying sampling rates (), dealing with statistical issues such as temporal autocorrelation (e.g. Davies et al. 2024), or perhaps simply
+aligning data within and among animals across varying sampling rates, dealing with statistical issues such as temporal autocorrelation (e.g. Davies et al. 2024), or perhaps simply
 one fix every x time unit is required for a particular reason. data can of course be interpolated and there are many great R packages now available to
-consider continuous time movement modelling process such as \code{ctmm} (), \code{crawl} (), \code{foieGras} (), \code{aniMotum} (), or simple linear interpolation over space and time \code{adehabitatLT} (Calenge 2006).
-In fact \code{adehabitatLT} is used within \code{MoveRakeR} for some simple computations using the \code{adehabitatLT::as.ltraj} function.
+consider continuous time movement modelling process such as \code{crawl} (Johnson et al. 2008), \code{ctmm} (Fleming & Calabrese 2023) and \code{aniMotum} (Jonsen et al. 2023)
+or simple linear interpolation over space and time \code{adehabitatLT} (Calenge 2006).
+The \code{adehabitatLT} package is used within \code{MoveRakeR} for some simple computations using the \code{adehabitatLT::as.ltraj} function.
 Where estimation of presence in space via a modelled approach is not desired however, filtering steps are commonly used. other R packages are available
-for this as well such as: \code{move}, \code{trip}, \code{ExMove}. However, here we build on these to consider some quirks encountered in
-conducting filtering. In particular, a fundamental consideration is how to perform the filtering, which could be rounding the DateTimes to a regular
+for this as well such as: \code{move}, (Kranstauber et al. 2018) \code{trip} (Sumner et al. 2009, Sumner 2011), \code{ExMove} (Langley et al. 2024). However, here we build on these to consider some quirks encountered in
+conducting filtering. A fundamental consideration is how to perform the filtering, which could be rounding the DateTimes to a regular
 time unit, such as every minute, hour etc, or whether this should be conducted from the start time of the animal(s) rather than by the clock as such. More
 importantly however, the sampling process can be considered quite reductionist and selective for specific fixes at the same rounding units. We therefore also
-provide a sub-sampling approach to randomise this process; this is particularly useful to make maximal use of the data and important when an animal is traversing a
+provide a novel sub-sampling approach to randomise this process; this is particularly useful to make maximal use of the data and important when an animal is traversing a
 unit of space only once, such as on migration (Schwemmer et al. 2021). The function \code{\link{sub_samp}} provides these additional capabilities.
 }
 
@@ -84,8 +84,8 @@ unit of space only once, such as on migration (Schwemmer et al. 2021). The funct
 
 Beyond the basic cleaning and filtering stages above, further annotation of the data is often required for central place foraging consideration. As mentioned above,
 metrics for an animal or population may be needed to assess how far typically animals move from their central place, how long trips are, and other metrics
-such as tortuosity, bearing, total distance and probably many others. To do this, trips ideally need annotation in the data directly, which builds on
-internal work streams conducted at the British trust for Ornithology, and uses a tidy approach as recommended by the \code{ExMove} toolkit. These processes
+such as tortuosity, bearing, total distance and probably many others. To do this, trips ideally need annotation in the data directly and \code{MoveRakeR}
+uses a tidy approach as recommended by the \code{ExMove} toolkit. These processes
 are provided as a function \code{\link{define_trips}} to remove repetition of code and permitting definitions of a central place such as a radius, rectangle or polygon around a central colony point,
 or use of specific nest locations for individual animals; on the latter, nest locations may be known directly or perhaps where not, estimates from other
 approaches such as nestR (Picardi et al. 2020) or recurse (Bracis et al. 2019) may be informative, or alternatively a single colony location may be provided. These locations are needed by the function
@@ -103,7 +103,7 @@ overlap in the way data may be assessed at the outset.
 \section{Reading in data}{
 
 
-We provide a specific set of functions to source data from the University of Amsterdam Bird-tracking system (UvA-BiTS) - see \url{https://www.uva-bits.nl/};
+We provide a specific set of functions to source data from the University of Amsterdam Bird-tracking system (UvA-BiTS, Bouten et al. 2013) - see \url{https://www.uva-bits.nl/};
 the primary function is \code{\link{read_track_UvA}} which links directly with the postGreSQL online database. This requires initial set up of the R ODBC database connection (see function help for information).
 Further queries of that database are also made via functions to read in accelerometry data \code{\link{read_accn_UvA}} and
 data from pressure sensors \code{\link{read_pressure_UvA}} and voltage information \code{\link{read_voltage_UvA}}; a specific function is also required for
@@ -158,6 +158,50 @@ having ingested a shapefile to make the determination. These, however, are broad
 pipeline. This is also perhaps more specific to certain taxa, with this task being borne out
 of gull-specific work where birds were moving over terrestrial and marine environments, requiring distinction in foraging trips. In the present package
 release these functions are note dovetailed into the trip process but this is being updated.
+}
+
+\section{References}{
+
+
+Bouten, W., Baaij, E.W., Shamoun-Baranes, J. & Camphuysen, K.C.J. (2013) A flexible GPS tracking system for studying bird behaviour at
+multiple scales. Journal of Ornithology, 54, 571–580.
+
+Bracis, C., Bildstein, K.L. & Mueller, T. (2018) Revisitation analysis uncovers spatio-temporal patterns in
+animal movement data. Ecography, doi: 10.1111/ ecog.03618.
+
+Calenge, C. (2006) The package adehabitat for the R software: tool for the analysis of space and habitat use by animals. Ecological Modelling,
+197, 516-519
+
+Davies, J.G., Boersch-Supan, P.H., Clewley, G.D., Humphreys, E.M., O’Hanlon, N.J., Shamoun-Baranes, J., Thaxter, C.B., Weston, E. & Cook, A.S.C.P. (2024)
+Influence of wind on kittiwake Rissa tridactyla flight and offshore wind turbine collision risk. Marine Biology, 171, DOI: 10.1007/s00227-024-04508-0
+
+Fleming, C.H. & Calabrese, J.M. (2023). ctmm: Continuous-Time Movement Modeling. R package version
+1.2.0. https://CRAN.R-project.org/package=ctmm
+
+Kranstauber, B., Smolla, M., & Scharf, A. K. (2018). move: Visualizing and analyzing animal track data. R package version 3.1.0. https://CRAN.R-project.org/package=move
+
+Kranstauber, B., Safi, S. & Scharf, A.K. (2024) move2: R package for processing movement data. Methods in Ecology  and Evolution, 15(9), 1561-1567.
+
+Langley, L.P., Lang, S.D.J., Ozsanlav-Harris, L. & Trevail, A.M. (2024) ExMove: An open-source toolkit for processing and exploring animal-tracking data in R.
+Journal of Animal Ecology, 93(7), 784-795.
+
+McClintock, B.T. & Michelot, T. (2018) momentuHMM: R package for generalized hidden Markov models of animal movement. Methods in
+Ecology and Evolution 9(6): 1518-1530.
+
+Picardi, S., Smith, B.J., Boone, M.E., Frederick, P.C., Cecere, J.G., Rubolini, D., Serra, L., Pirrello, S., Borkhataria, R.R. & Basille, M. (2020)
+Analysis of movement recursions to detect reproductive events and estimate their fate in central place foragers.
+Movement Ecology, 8, 24 https://doi.org/10.1186/s40462-020-00201-1
+
+Schwemmer, P., Pederson, P., Haecker, K., Bocher, P., Fort, J., Mercker, M., Jiguet, F., Elts, J., Marja, R., Piha, M., Rousseau, P. & Garthe S, (2023)
+Assessing potential conflicts between offshore wind farms and migration patterns of a threatened shorebird species. Animal Conservation, 26(3), 303-316.
+
+Signer, J. Fieberg, J. & Avgar, T. (2019) Animal movement tools (AMT): R package for managing tracking data and conducting habitat selection
+analysis. Ecology and Evolution, 9, 880-890.
+
+Sumner, M.D. (2011). The Tag Location Problem. Ph.D. thesis, University of Tasmania. \url{https://eprints.utas.edu.au/12273/3/sumner.pdf}.
+
+Sumner, M.D., Wotherspoon, S.J. & Hindell, M.A. (2009). Bayesian estimation of animal movement from archival and satellite tags.
+PLoS ONE, 4(10). \url{http://dx.plos.org/10.1371/journal.pone.0007324}.
 }
 
 \author{
