@@ -276,8 +276,35 @@ trip_stats <- function(data,
 
   # these will need binding for the trip duration and total distance, but note that should not be retained as it distorts the original data
   if(nrow(extra_rows) > 0){
-    if(verbose){message("Extra rows for 'come-an-go' trips detected; including for correct start-end trip durtation calcs") }
+    if(verbose){message("Extra rows for 'come-an-go' trips detected; including for correct start-end trip duration calcs") }
     extra_rows$extra_row = 1
+
+    # make sure only rows that match the data fed in are used; this is prone to mishaps I expect!
+    # and probably needs a rethink - i.e. if the data are subsequently subsetted from define_trips
+    # run, then trip_stats are re-run, it will still have the original full data, I think.
+
+    # for each animal, we need to only select rows that are within the time period of the Tag
+    # this would get very messy if particular start and ends are used WITHIN a calendar year though
+    # so will need further thought...may even need a subset method for the Track object to deal with this!
+
+    # initial check of TagIDs
+    extra_rows <- extra_rows[extra_rows$TagID %in% data_dp$TagID,]
+
+    # if the data have been subsetted then only take extra rows from start to end of animal DateTime
+    # base R coding this for now
+    #tid = unique(data_dp$TagID)
+
+    data_ = data_dp %>% split(.$TagID)
+    DTrange = lapply(data_, function(x){
+      #c(range(x$DateTime),unique(x$TagID))
+      data.frame(mindate = min(x$DateTime), maxdate = max(x$DateTime), TagID = unique(x$TagID))
+      })
+
+    extra_rows_red = lapply(DTrange, function(x){
+      extra_rows[extra_rows$TagID %in% x$TagID & extra_rows$DateTime >= x$mindate & extra_rows$DateTime <= x$maxdate,]
+      })
+    extra_rows = do.call('rbind',extra_rows_red)
+
     data_dp = data_dp %>% mutate(extra_row = 0) %>% bind_rows(.,extra_rows) %>% arrange(TagID,DateTime)
   }
 
@@ -664,7 +691,7 @@ trip_stats <- function(data,
 
   # ------------------------------------ #
   # Summarise for tripstats
-  message("Summarising trip statistics")
+  #if(verbose){message("Summarising trip statistics")}
 
   # Max distance, total distance and trip duration
   # drop tripNo = zero
@@ -722,27 +749,35 @@ trip_stats <- function(data,
     mutate(max_lon = if_else(d == max(d), longitude, NA),
            max_lat = if_else(d == max(d), latitude, NA)
            ) %>%
-    summarise(Start = min(DateTime),
+    reframe(Start = min(DateTime),
               End = max(DateTime),
               DistMax = max(d, na.rm=TRUE),
-              #DistMean = mean(d, na.rm=TRUE),  ############# <- I don't think these are informative! I think it is dist not d that should be being averaged...
-              #DistSD = sd(d, na.rm=TRUE),
+              ####DistMean = mean(d, na.rm=TRUE),  ############# <- I don't think these are informative! I think it is dist not d that should be being averaged...
+              ####DistSD = sd(d, na.rm=TRUE),
               DistN = length(d),
               DistTotal = sum(dist, na.rm=TRUE),
               min_d = min(DateTime),
               max_d = max(DateTime),
               TripDur = as.vector(difftime(max_d, min_d, units = 'hours')),
-              #mutate(new_value = value[which.max(age)]) %>%
+              #####mutate(new_value = value[which.max(age)]) %>%
+
               max_lon = na.omit(max_lon),
               max_lat = na.omit(max_lat),
               col_lat = unique(col_lat),
               col_lon = unique(col_lon),
-              MaxBear = atan2(max_lon-col_lon, max_lat-col_lat)*180/pi + (max_lon-col_lon < 0)*360,
-              .groups = "keep"
+              MaxBear = atan2(max_lon-col_lon, max_lat-col_lat)*180/pi + (max_lon-col_lon < 0)*360
+            #,
+              #.groups = "keep"
     ) %>%
     # adjust units
     #mutate(DistMax = as.vector(DistMax / 1000), DistTotal = as.vector(DistTotal / 1000)) %>%
     dplyr::select(-c(min_d,max_d))
+
+  tripstat1 <- unique(tripstat1)
+  #test3 = tripstat1[tripstat1$TagID == "May_1617_T:0H4" & tripstat1$year == 2021 & tripstat1$tripNo == 86,]
+  #test3
+
+  #tripstat1[tripstat1$TagID == "May_1624_T:0H9" ,]$tripNo
 
   # set units as km
   tripstat1[names(tripstat1) %in% c("DistMax","DistTotal")] <-
@@ -774,27 +809,14 @@ trip_stats <- function(data,
         mutate(max_lon = if_else(d == max(d), longitude, NA),
                max_lat = if_else(d == max(d), latitude, NA)
         ) %>%
-        summarise(DistMax = max(d, na.rm=TRUE),
-                  #DistMean = mean(d, na.rm=TRUE),
-                  #DistSD = sd(d, na.rm=TRUE),
+        reframe(DistMax = max(d, na.rm=TRUE),
                   DistN = length(d),
-
-                  #DistTotal = sum(dist, na.rm=TRUE),
-                  #DistTotalMean = mean(dist, na.rm=TRUE),
-                  #DistTotalSD = sd(dist, na.rm=TRUE),
-                  #DistTotalN = length(dist),
-
-                  #min_d = min(DateTime),
-                  #max_d = max(DateTime),
-                  #TripDur = as.vector(difftime(max_d, min_d, units = 'hours')),
-                  #mutate(new_value = value[which.max(age)]) %>%
-
                   max_lon = na.omit(max_lon), # max lat and long for the offshore or onshore point
-                  max_lat = na.omit(max_lat),
+                  max_lat = na.omit(max_lat) #,
                   #MaxBear = atan2(max_lon-col_lon, max_lat-col_lat)*180/pi + (max_lon-col_lon < 0)*360,
-                  .groups = "keep"
+                  #.groups = "keep"
         )
-
+      tripstat1_off <- unique(tripstat1_off)
       # then need to make columns for DistMaxOn, DistMaxOff
       nms <- names(tripstat1_off)[!names(tripstat1_off) %in% c("TagID", by, "offshore")]
       nms_off <- paste0(nms, "_off")
@@ -820,7 +842,6 @@ trip_stats <- function(data,
         left_join(. ,off , by = c("TagID", by)) %>%
         left_join(. ,on , by = c("TagID", by))
 
-
       # ---------------------------------------------------------------------------------- #
       ### is the distal point offshore? needs to be done at the higher trip only level
       tripstat1_distal <- trips1 %>% group_by(TagID, !!!syms(by)) %>%
@@ -830,11 +851,12 @@ trip_stats <- function(data,
                DistalPointOff = if_else(d == max(d) & offshore == 0, 0, DistalPointOff)  #### is the distal point offshore?
 
         ) %>%
-        summarise(
-                  DistalPointOff = na.omit(DistalPointOff),
-                  .groups = "keep"
+        reframe(
+                  DistalPointOff = na.omit(DistalPointOff)
+                  #,
+                  #.groups = "keep"
         )
-
+      tripstat1_distal <- unique(tripstat1_distal)
       # merge into the trips
       tripstat1 <- tripstat1 %>% group_by(TagID, !!!syms(by)) %>%
         left_join(. ,tripstat1_distal , by = c("TagID", by))
@@ -869,18 +891,18 @@ trip_stats <- function(data,
         mutate(max_lon_d2c = if_else(dist2coast == max(dist2coast), longitude, NA),
                max_lat_d2c = if_else(dist2coast == max(dist2coast), latitude, NA)
         ) %>%
-        summarise(DistCoastMax = max(dist2coast, na.rm=TRUE),
+        reframe(DistCoastMax = max(dist2coast, na.rm=TRUE),
                   #DistCoastMean = mean(dist2coast, na.rm=TRUE),
                   #DistCoastSD = sd(dist2coast, na.rm=TRUE),
                   DistCoastN = length(dist2coast),
 
                   max_lon_d2c = na.omit(max_lon_d2c), # max lat and long for the offshore or onshore point
-                  max_lat_d2c = na.omit(max_lat_d2c),
+                  max_lat_d2c = na.omit(max_lat_d2c) #,
 
                   #MaxBear = atan2(max_lon-col_lon, max_lat-col_lat)*180/pi + (max_lon-col_lon < 0)*360,
-                  .groups = "keep"
+                  #.groups = "keep"
         )
-
+      tripstat1_d2c <- unique(tripstat1_d2c)
       # set units as km
       tripstat1_d2c[names(tripstat1_d2c) %in% c("DistCoastMax","DistCoastMean","DistCoastN")] <-
         tripstat1_d2c[names(tripstat1_d2c) %in% c("DistCoastMax","DistCoastMean","DistCoastN")] %>%
