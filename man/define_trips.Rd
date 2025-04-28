@@ -164,23 +164,25 @@ including \code{trip} (Sumner et al. 2009, Sumner 2011),
 \code{recurse} (Bracis et al. 2018), and \code{nestR} (Picardi et al. 2020) - see also \code{ExMove} for
 a similar workflow.
 
-Finally, a small but very important detail about the \code{define_trips} function. Animals may
-have a tendency to arrive back from a trip, and then potentially immediately depart again, thus sharing a start and end time,
-resulting in complications downstream when defining trip metrics. This also depends on how the central
-place is defined and sampling intervals of the tag.
-To make sure all tripNos have a start and end, where that arrive-re-depart situation above arises,
-\code{define_trips} adds in an extra row for the trip with all other data NA'd so that all trips have start and end times.
-So a WARNING here - many analyses require date-times for individual animals to have unique DateTimes.
-So they should be removed again should further analyses be needed, e.g. KDEs, HMMs etc. Further functions. They can also
-be dropped again here through the argument \code{keep_extra_row}.
-
-A note of caution. This function has wider appeal e.g. in wanting to label
-a set of fixes in time as a "trip" or whatever really using the "Flag" method. But
-the function here is essentially looking for what the user calls the "colony".
-So labelled results may be different to what you expect if colony based for example on
-a sampling rate threshold. In which case \code{gap_section} is probably what you want. An
-example of this is if you JUST have trips and no colony info in a file, and you want to segreate trips
-based on gaps between them being more than your tag sampling rate. It's a simple enough data.table task anyway!
+A small but important detail about the \code{define_trips} function: animals may
+have a tendency to arrive back from a trip, and then potentially immediately depart again, thus sharing a start and end time.
+This may be due to how the central place is defined, and/or the sampling rate of the tags.
+Thus, for further estimation of trip statistics through the further function \code{trip_stats},
+the process in \code{MoveRakeR} is to ensure all tripNos have a start and end, and where that
+arrive-re-depart situation above arises, \code{define_trips} creates duplicate extra rows for the trip with
+all other data (other than TagID, DateTime, longitude and latitude) set to NA. This allows all trips
+have start and end times even those that share a DateTime at a start or end.
+These duplicate rows are not stored in the main Track dataset the function ingests. Instead, the
+extra rows are stored as an attribute to the output: as \code{attr(attr(data, 'define_trips'), 'extra_rows')}.
+This avoids potential issues for analyses downstream that require unique datetimes, such as KDEs, HMMs etc.
+They can also be dropped again here through the argument \code{keep_extra_row}. There is a catch here though, as
+\strong{some base R operations will remove data object attributes}. This means there is a risk that \code{trip_stats} will not find such extra rows causing an
+error to be returned from that function. To avoid this, if you are are planning on manipulating the Track data returned from
+\code{define_trips}, e.g. sub-setting, converting to data.frames, cbinding, manipulating data to and from \code{sf} classes, etc, it
+is best to \strong{bring the extra rows directly into the Track dataset} after \code{define_trips} has been run,
+i.e. rather than rely on the attribute returned from \code{define_trips}. This is achieved through
+further convenience functions: \code{add_cag_trips}, standing for add 'come-and-go' duplicate trip row data. See information there
+for how to use those functions.
 
 A separate function \code{make_shape} can be used to replicate the circle or rectangle
 as a separate shape for further use, for example in plotting with \code{plot_leaflet} using
@@ -249,6 +251,26 @@ data_2nd <- data_1st \%>\% define_trips(by = "boot", GIS = FALSE, definetrips = 
                                       birdyear = TRUE,
                                        method="rect", lls = c(-3.2, 54.0553,-3.1689, 54.0437), p4s = p4) # add trips
 
+### Should you wish to substantially manipulate the output from define_trips() prior to using trip_stats(),
+### it is recommended to append the potential come-and-go trip duplicate records. Beware though, this
+### adds duplicate row data to the Track object and so may need to be removed again prior to further analysis.
+
+LLS <- c(-3.2, 54.0553)
+data_circ <- define_trips(data = indata, method="circ", lls = LLS, p4s = p4) \%>\%
+  add_cag_trips() # this will add duplicate rows using  column "extra_row" 1 or 0.
+
+### other potential data manipulation e.g.
+data_circ <- data.frame(data_circ) # removes any attributes!
+
+# Then run trip_stats()
+eg <- trip_stats(data_circ)
+
+# put the extra rows back as an attribute
+data_circ <- Track(data_circ)
+data_circ <- reset_cag_trips(data_circ)
+
+################### END EXAMPLES ##################
+
 }
 \references{
 Bracis, C., Bildstein, K.L. & Mueller, T. (2018) recurse Revisitation analysis uncovers
@@ -269,5 +291,5 @@ movement from archival and satellite tags. \emph{PLoS ONE}, \strong{4}(10).
 \url{http://dx.plos.org/10.1371/journal.pone.0007324}.
 }
 \seealso{
-\link{clean_GPS}, \link{trip_stats}
+\link{clean_GPS}, \link{trip_stats}, \link{add_cag_trips}
 }

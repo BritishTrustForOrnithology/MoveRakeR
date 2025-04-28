@@ -16,6 +16,13 @@
 #' maximum point are also taken, and the mean bearing per trip is also provided. Further tortuosity measures are
 #' not directly provided here but can be evaluated as the distal point lat long per trip is also provided.
 #'
+#' The \code{trip_stats} function also looks for the presence of 'extra_row' data for trips that are defined
+#' with a shared start and end point in the central place - see \code{define_trips} and \code{add_cag_trips} for more information.
+#' Note, it is up to the user to have appropriately considered these conditions before \code{trip_stats} is run and whether
+#' any manipulation of the code{Track} data object has resulted in a loss of the extra_row attributes. By default if
+#' no duplicate row attributes are found in the data at: \code{attr(attr(data, 'define_trips'), 'extra_rows')}, then
+#' \code{trip_stats} will estimate trip statistics assuming all trips have a defined start and end DateTime.
+#'
 #' @param data Input data object, with required columns: TagID, DateTime, longitude, latitude.
 #' @param Phase A two-letter character of wither \code{"br"} or \code{"wi"} for breeding or winter; essentially the code
 #' is meant for breeding season usage, but should maximum distance (for example) be needed for
@@ -109,7 +116,7 @@
 #' coast can be requested not to be processed even if they exist in the dataset by setting the
 #' \code{dist2Coast} and \code{dist2colOff} arguments to FALSE.
 #'
-#' @seealso [MoveRakeR::define_trips], [MoveRakeR::dist2coast], [MoveRakeR::offshore]
+#' @seealso [MoveRakeR::define_trips], [MoveRakeR::dist2coast], [MoveRakeR::offshore], [MoveRakeR::add_cag_trips]
 #'
 #' @examples
 #'
@@ -275,37 +282,42 @@ trip_stats <- function(data,
   extra_rows <- attr(attr(data_dp, "define_trips"), "extra_rows")
 
   # these will need binding for the trip duration and total distance, but note that should not be retained as it distorts the original data
-  if(nrow(extra_rows) > 0){
-    if(verbose){message("Extra rows for 'come-an-go' trips detected; including for correct start-end trip duration calcs") }
-    extra_rows$extra_row = 1
 
-    # make sure only rows that match the data fed in are used; this is prone to mishaps I expect!
-    # and probably needs a rethink - i.e. if the data are subsequently subsetted from define_trips
-    # run, then trip_stats are re-run, it will still have the original full data, I think.
+  if(!is.null(extra_rows)){
+    if(nrow(extra_rows) > 0){
+      if(verbose){message("Extra rows for 'come-an-go' trips detected; including for correct start-end trip duration calcs") }
+      extra_rows$extra_row = 1
 
-    # for each animal, we need to only select rows that are within the time period of the Tag
-    # this would get very messy if particular start and ends are used WITHIN a calendar year though
-    # so will need further thought...may even need a subset method for the Track object to deal with this!
+      # make sure only rows that match the data fed in are used; this is prone to mishaps I expect!
+      # and probably needs a rethink - i.e. if the data are subsequently subsetted from define_trips
+      # run, then trip_stats are re-run, it will still have the original full data, I think.
 
-    # initial check of TagIDs
-    extra_rows <- extra_rows[extra_rows$TagID %in% data_dp$TagID,]
+      # for each animal, we need to only select rows that are within the time period of the Tag
+      # this would get very messy if particular start and ends are used WITHIN a calendar year though
+      # so will need further thought...may even need a subset method for the Track object to deal with this!
 
-    # if the data have been subsetted then only take extra rows from start to end of animal DateTime
-    # base R coding this for now
-    #tid = unique(data_dp$TagID)
+      # initial check of TagIDs
+      extra_rows <- extra_rows[extra_rows$TagID %in% data_dp$TagID,]
 
-    data_ = data_dp %>% split(.$TagID)
-    DTrange = lapply(data_, function(x){
-      #c(range(x$DateTime),unique(x$TagID))
-      data.frame(mindate = min(x$DateTime), maxdate = max(x$DateTime), TagID = unique(x$TagID))
+      # if the data have been subsetted then only take extra rows from start to end of animal DateTime
+      # base R coding this for now
+      #tid = unique(data_dp$TagID)
+
+      data_ = data_dp %>% split(.$TagID)
+      DTrange = lapply(data_, function(x){
+        #c(range(x$DateTime),unique(x$TagID))
+        data.frame(mindate = min(x$DateTime), maxdate = max(x$DateTime), TagID = unique(x$TagID))
       })
 
-    extra_rows_red = lapply(DTrange, function(x){
-      extra_rows[extra_rows$TagID %in% x$TagID & extra_rows$DateTime >= x$mindate & extra_rows$DateTime <= x$maxdate,]
+      extra_rows_red = lapply(DTrange, function(x){
+        extra_rows[extra_rows$TagID %in% x$TagID & extra_rows$DateTime >= x$mindate & extra_rows$DateTime <= x$maxdate,]
       })
-    extra_rows = do.call('rbind',extra_rows_red)
+      extra_rows = do.call('rbind',extra_rows_red)
 
-    data_dp = data_dp %>% mutate(extra_row = 0) %>% bind_rows(.,extra_rows) %>% arrange(TagID,DateTime)
+      data_dp = data_dp %>% mutate(extra_row = 0) %>% bind_rows(.,extra_rows) %>% arrange(TagID,DateTime)
+    }
+
+
   }
 
 
@@ -1052,6 +1064,7 @@ trip_stats <- function(data,
     purrr::map2_dfc("d",  ~units::set_units(.x, .y, mode = "standard"))
 
   # ------------------------------------------------ #
+  tripstat1 <- tripstat1 %>% group_by(TagID, !!!syms(by))
 
   tripstat1 <- structure(.Data = tripstat1, class = c("Trip","grouped_df","tbl_df","tbl","data.frame"))
 

@@ -9,7 +9,7 @@ output: github_document
   
 # MoveRakeR
 
-### Current version: 1.0.2
+### Current version: 1.0.3
 
 [![DOI](https://zenodo.org/badge/948019784.svg)](https://doi.org/10.5281/zenodo.15275175)
 
@@ -155,9 +155,8 @@ The function `tspeed_jit` acknowledges that trajectory speed as used in the `cle
 A common task is to sub-sample GPS data to a common rate; this may be needed for further analytical steps
 or to align data in some way. As with all these tasks, modelling solutions may exist to not require this step. However,`MoveRakeR` provides a sub-sampling algorithm `sub_samp` that builds upon existing tools available in some other packages such as `AMT` (Signer et al. 2019) and `move` (Kranstauber et al. 2018), in particular including a bootstrap method to sub-sample data and maximise data availability, useful for animals traversing space for only a limited time such as on migration. Other approaches using interpolation and simulation are not provided in `MoveRakeR` for which other R packages are available to provide those operations, such as `adehabitatLT`, `move` and continuous-time movement modelling approaches such as `crawl` (Johnson et al. 2008) `ctmm` (Fleming & Calabrese 2023) and `aniMotum` (Jonsen et al. 2023).
 
-Further annotation of the data is often required for central place foraging consideration. Metrics for an animal or population may be needed to assess how far typically animals move from their central place, how long trips are, and other metrics such as tortuosity, bearing, total distance and probably many others. The trips are first identified provided using function `define_trips` using user-specified definitions of the central place such as a radius around a centre point, a rectangle or polygon to define the central place, or alternatively use of specific nest locations for individual animals; on the latter, nest locations may be known directly or perhaps where not, estimates from other approaches such as `nestR` (Picardi et al. 2020)
-or `recurse` (Bracis et al. 2019) may be informative; see also the `trip` package (Sumner et al. 2009, Sumner 2011). These locations are needed by the function to estimate where to measure the trip start/end point in space and time. The function `trip_stats` can then be used to generate movement metric summaries of trips for each animal and the group of animals. Further tabulation functions are provided such as `tabulate_trips` which takes the output from `trip_stats` and summarise the information neatly. The
-`trip_stats` function will return a new object of class `Trip`. The default of the `trip_stats` function is to use the first and last fix of the animal within the central place boundary to compute trip duration and distances.
+Further annotation of the data is often required for central place foraging consideration. Metrics for an animal or population may be needed to assess how far typically animals move from their central place, how long trips are, and other metrics such as tortuosity, bearing, total distance and probably many others. The trips are first identified provided using function `define_trips` using user-specified definitions of the central place such as a radius around a centre point, a rectangle or polygon to define the central place, or alternatively use of specific nest locations for individual animals; on the latter, nest locations may be known directly or perhaps where not, estimates from other approaches such as `nestR` (Picardi et al. 2020) or `recurse` (Bracis et al. 2019) may be informative; see also the `trip` package (Sumner et al. 2009, Sumner 2011). These locations are needed by the function to estimate where to measure the trip start/end point in space and time. The function `trip_stats` can then be used to generate movement metric summaries of trips for each animal and the group of animals. Further tabulation functions are provided such as `tabulate_trips` which takes the output from `trip_stats` and summarise the information neatly. The `trip_stats` function will return a new object of class `Trip`. The default of the `trip_stats` function is to use the first and last fix of the animal within the central place boundary to compute trip duration and distances. 
+
 
 ``` r
 newdata <- data %>% 
@@ -174,6 +173,27 @@ tabulate_trips(trips) # neater tabulation
 plot_leaflet_trips(newdata, trips = trips)
 
 ```
+
+Note that complexities can arise for trips that are determined as arriving and then
+departing again from the central place with a single shared GPS fix for starts and ends of trips. These are handled in `MoveRakeR` through duplicate row records, stored as an attribute from the `define_trips` function. However should substantial data manipulation, such as base R processing, be carried out between these two functions being run, it is best to add these duplicate data directly into the data before such manipulation and ahead of `trip_stats` being run; beware that this data will likely need removing again ahead of downstream analyses.
+
+``` r
+
+LLS <- c(-3.2, 54.0553)
+newdata <- define_trips(data = data, method="circ", lls = LLS) %>%
+   add_cag_trips() # this will add duplicate rows directly to the Track using  column "extra_row" 1 or 0.
+
+### other potential data manipulation e.g.
+newdata <- data.frame(newdata) # removes any attributes and Track data class
+
+# trip_stats() can still be run given pseudo duplicate data directly included demarcate start/ends for all trips
+trips <- trip_stats(newdata)
+
+# but then best put the extra rows back as an attribute, removing them from the main Track data
+newdata <- Track(newdata) %>% reset_cag_trips()
+
+```
+
 ## Track-style layout of datasets
 
 The `MoveRakeR` seeks to employ 'tidy' principles at heart, although further `data.table` and base R operations are also well-utilised. The use of `tibble` and `dplyr` ensured that operations were carried out at very least at the grouping of the animal level. However, in case further listed formats of data are wanted, the user can convert the `Track` data to a list of animals `TrackStack` or a further multi-list `TrackMultiStack` e.g. for separate stacks of years. These are just convenience functions to convert to base R operations.

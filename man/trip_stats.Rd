@@ -143,6 +143,13 @@ Trip duration is simply taken as the end time of the trip minus the start time, 
 \emph{end} also included as a date-time output for each trip. Further, the \strong{bearings} of the
 maximum point are also taken, and the mean bearing per trip is also provided. Further tortuosity measures are
 not directly provided here but can be evaluated as the distal point lat long per trip is also provided.
+
+The \code{trip_stats} function also looks for the presence of 'extra_row' data for trips that are defined
+with a shared start and end point in the central place - see \code{define_trips} and \code{add_cag_trips} for more information.
+Note, it is up to the user to have appropriately considered these conditions before \code{trip_stats} is run and whether
+any manipulation of the code{Track} data object has resulted in a loss of the extra_row attributes. By default if
+no duplicate row attributes are found in the data at: \code{attr(attr(data, 'define_trips'), 'extra_rows')}, then
+\code{trip_stats} will estimate trip statistics assuming all trips have a defined start and end DateTime.
 }
 \examples{
 
@@ -211,5 +218,5 @@ plot_leaflet_trips(data)
 
 }
 \seealso{
-\link{define_trips}, \link{dist2coast}, \link{offshore}
+\link{define_trips}, \link{dist2coast}, \link{offshore}, \link{add_cag_trips}
 }

@@ -7,7 +7,7 @@ Chris Thaxter
 
 # MoveRakeR
 
-### Current version: 1.0.2
+### Current version: 1.0.3
 
 [![DOI](https://zenodo.org/badge/948019784.svg)](https://doi.org/10.5281/zenodo.15275175)
 
@@ -285,6 +285,33 @@ tabulate_trips(trips) # neater tabulation
 
 # visualising individual trips
 plot_leaflet_trips(newdata, trips = trips)
+```
+
+Note that complexities can arise for trips that are determined as
+arriving and then departing again from the central place with a single
+shared GPS fix for starts and ends of trips. These are handled in
+`MoveRakeR` through duplicate row records, stored as an attribute from
+the `define_trips` function. However should substantial data
+manipulation, such as base R processing, be carried out between these
+two functions being run, it is best to add these duplicate data directly
+into the data before such manipulation and ahead of `trip_stats` being
+run; beware that this data will likely need removing again ahead of
+downstream analyses.
+
+``` r
+
+LLS <- c(-3.2, 54.0553)
+newdata <- define_trips(data = data, method="circ", lls = LLS) %>%
+   add_cag_trips() # this will add duplicate rows directly to the Track using  column "extra_row" 1 or 0.
+
+### other potential data manipulation e.g.
+newdata <- data.frame(newdata) # removes any attributes and Track data class
+
+# trip_stats() can still be run given pseudo duplicate data directly included demarcate start/ends for all trips
+trips <- trip_stats(newdata)
+
+# but then best put the extra rows back as an attribute, removing them from the main Track data
+newdata <- Track(newdata) %>% reset_cag_trips()
 ```
 
 ## Track-style layout of datasets

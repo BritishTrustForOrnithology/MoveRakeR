@@ -91,7 +91,10 @@ or use of specific nest locations for individual animals; on the latter, nest lo
 approaches such as nestR (Picardi et al. 2020) or recurse (Bracis et al. 2019) may be informative, or alternatively a single colony location may be provided. These locations are needed by the function
 to estimate where to measure the trip start/end point in space and time. The function \code{\link{trip_stats}} can then be used to generate movement metric summaries
 of trips for each animal and the group of animals. Further tabulation functions are provided such as \code{tabulate_trips} which takes
-the output from \code{trip_stats} and summarise the information neatly, such as for reporting purposes.
+the output from \code{trip_stats} and summarise the information neatly, such as for reporting purposes. Please note
+that complexities can arise when manipulating data between the use of \code{define_trips} and \code{trip_stats} functions that could result
+in a loss of a required attribute relating to trips that share a common start and end DateTime, which can be handled through adding
+needed data rows using \code{add_cag_trips} back into the data.
 
 The sampling 'rate' of GPS tags may be known of course by the user, but if not, these can be estimated by simple binning of the data. This is a typically
 trivial task, but a separate function \code{\link{assign_rates}} is provided to assist.
