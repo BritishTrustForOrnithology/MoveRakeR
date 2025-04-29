@@ -331,8 +331,20 @@ trip_stats <- function(data,
     data_dp_sf2$XX <- coords[,1]
     data_dp_sf2$YY <- coords[,2]
 
-    # need to take out the additional rows that may be added for come and go trips
-    data_dp_sf2 <- data_dp_sf2 %>% filter(extra_row == 0) %>% ungroup()
+    # does extra_rows exist in the data??
+    if(exists("extra_row", data_dp)){
+
+      # remember any extra_row 1 data
+      data_dp_sf2_extra = data_dp %>% filter(extra_row == 1) %>% ungroup()
+
+      if(nrow(data_dp_sf2_extra) == 0){
+        data_dp_sf2_extra <- NULL
+      }
+
+      # need to take out the additional rows that may be added for come and go trips
+      data_dp_sf2 <- data_dp_sf2 %>% filter(extra_row == 0) %>% ungroup()
+
+    }
 
     #if(any(duplicated(data_dp_sf2$DateTime))){
     #  stop("There are duplicate DateTimes in your data - please check")
@@ -360,19 +372,31 @@ trip_stats <- function(data,
     # add duplicated rows back in again
     # only a single dist column would be added to the end, if not existing add it as NA
 
+    # --------------------------------------------- #
+    # THERE SHOULDN'T BE ANY EXTRA ROWS AND 1,0 DATA in the extra_row column! Best unique the data just in case...
+
+    if(!is.null(data_dp_sf2_extra)){
+
+      data_dp_sf2_extra <- data_dp_sf2_extra %>% mutate(data_dp_sf2_extra = 1, dist = NA)
+      data_dp_sf2 = sf::st_drop_geometry(data_dp_sf2) %>% mutate(extra_row = 0) %>% bind_rows(.,data_dp_sf2_extra) %>% arrange(TagID, DateTime)
+    }
+
+    # --------------------------------------------- #
+    # OR LOOK FOR EXTRA ROWS IN ATTRIBUTE
     extra_rows <- attr(attr(data_dp, "define_trips"), "extra_rows")
 
     # these will need binding for the trip duration and total distance, but note that should not be retained as it distorts the original data
-    if(nrow(extra_rows) > 0){
-      extra_rows <- extra_rows %>% mutate(extra_row = 1, dist = NA)
+    if(!is.null(extra_rows)){
+      if(nrow(extra_rows) > 0){
+        extra_rows <- extra_rows %>% mutate(extra_row = 1, dist = NA)
 
-      data_dp_sf2 = sf::st_drop_geometry(data_dp_sf2) %>% mutate(extra_row = 0) %>% bind_rows(.,extra_rows) %>% arrange(TagID, DateTime)
+        data_dp_sf2 = sf::st_drop_geometry(data_dp_sf2) %>% mutate(extra_row = 0) %>% bind_rows(.,extra_rows) %>% arrange(TagID, DateTime)
 
+      }
     }
 
-    data_dp = data_dp_sf2
-    rm(data_dp_sf2)
-
+    if(verbose){message("Safety net unique(data), may slow the function down for large data: dev to re-consider")}
+    data_dp = unique(data_dp_sf2) # this could really slow it down!
   }
 
   # ----------------------- #

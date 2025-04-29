@@ -4,7 +4,7 @@
 \alias{Track2move}
 \title{Convert a Track object to a move or moveStack object}
 \usage{
-Track2move(data, group_anims = TRUE)
+Track2move(data)
 }
 \arguments{
 \item{data}{A \code{Track} family object (no S3 methods are coded).}
@@ -16,9 +16,8 @@ object will first be created for the single animal prior to combining into the \
 if false, they will be treated as separate "TagIDs" in the the resulting move:: object.}
 }
 \value{
-A \code{move::moveStack} object for further use with the the \code{move} package. See
-package documentation and \url{https://cran.r-project.org/web/packages/move/vignettes/move.html#dynamic-brownian-bridge-movement-model-dbbmm}
-for more detailed usage. In many ways, \code{Track2move} is the opposite of \code{Movebank2Track} that
+A \code{move::moveStack} or \code{move::Move} object for further use with the the \code{move} package.
+In many ways, \code{Track2move} is the opposite of \code{Movebank2Track} that
 reads in a static Movebank-downloaded csv to convert to a \code{Track} object.
 }
 \description{
@@ -27,12 +26,9 @@ R package (Kranstauber et al. 2021), converting \emph{Track} objects into
 a \emph{move:move} or emph{move:moveStack} object.
 }
 \details{
-The \code{MoveRakeR} workflow may only take the user so far in their analytical journey. Function
-\code{Track2move} takes the class back to \code{move} for further use of that R package.
-Note that \code{Track2move} first converts datasets first to a \code{TrackStack} to apply an internal function
-to further convert each \code{Track} object element to a \code{move} object for each animal (TagID). Also note,
-that if only one animal (TagID) is to be translated to \code{move} format, then a \code{move::move} object will
-be returned rather than a \code{moveStack} object. This still uses \code{sp::CRS()}, so apologies, this
+Function \code{Track2move} takes the Track class back to \code{move} for further use of that R package.
+Note that \code{Track2move} will return a \code{moveStack} object for multiple animals and
+a \code{Move} object for one animal. This still uses \code{sp::CRS()}, so apologies, this
 is not dovetailed with \code{move2} and \code{sf}.
 }
 \examples{
@@ -70,5 +66,5 @@ Bart Kranstauber, Marco Smolla and Anne K Scharf (2021). move: Visualizing and A
 Animal Track Data. R package version 4.0.6. \url{https://bartk.gitlab.io/move/}
 }
 \seealso{
-\link{sub_samp}
+\link{sub_samp}, \link{Movebank2Track}
 }
