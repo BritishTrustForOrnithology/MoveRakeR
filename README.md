@@ -16,9 +16,9 @@ updates.
 
 ## Overview
 
-The R package `MoveRakeR` contains a collection of functions to help
-streamline data processing and common data wrangling tasks that often
-occurs with GPS tracking data. `MoveRakeR` operates at the initial
+The R package `MoveRakeR` contains a collection of simple functions to
+help streamline data processing and common data wrangling tasks that
+often occurs with GPS tracking data. `MoveRakeR` operates at the initial
 stages after data acquisition. Although a number of R packages are now
 available for analysis of animal movement data (Joo et al. 2020),
 `MoveRakeR` tackles some fundamental data processing steps that are
@@ -28,7 +28,10 @@ other existing workflows in other R packages, such as `move`
 (Kranstauber et al. 2018) and `move2` (Kranstauber et al. 2024) and
 provides some further tools to address common manipulations of data
 routinely encountered that often require a degree of subjectivity in
-decision making.
+decision making. Should the user be interested in exploring location
+error in GPS devices in more detail, we would recommend the approach of
+Flemming et al. (2020) and the `ctmm` R package (Fleming & Calabrese
+2023).
 
 ## Dependencies
 
@@ -175,31 +178,53 @@ of sampling protocols, and plotted alongside GPS data. Further options
 also exist to source acceleration and pressure data from UvA-BiTS
 directly into R.
 
-## Cleaning data
+## Cleaning and identifying spurious data
 
-The function `clean_GPS` can be used to remove data rows in the Track
-dataset that are determined to be incorrect by the user. This process is
-a blunt instrument in that currently this is done at the user’s
-discretion and requires an understanding of the likely error processes
-that may be operating. The removal of data itself could be replaced by
-other analytical processes that seek to model spatial error in some way
-to account for it circumventing the need for removal. However, there are
-many instances where the user may be confronted with data with no clear,
-or available data, to understand the reason for an erroneous GPS fix.
+The `MoveRakeR` package provides some functionality to examine the GPS
+data to try and deduce likely reasoning behind erroneous points.
+However, the functions supplied in `MoveRakeR` are mostly aimed at
+filtering rather than modelling underlying error processes. It may
+therefore be worth first investigating outliers in the data using the
+`ctmm` package (Fleming & Calabrese 2023) through `ctmm::outlie()` that
+uses available information on location error such as DOP values if
+present, or if not number of satellites as well as trajectory speed
+estimates (Flemming et al. 2020) in potential error generation.
 
-It may be the case that the GPS jumped to a clearly incorrect position,
-that may be obvious from visual plots of the data. in that instance, a
-trajectory speed filter is available in `clean_GPS` that sequentially
-removes fixes that are beyond a pre-determined travel speed (‘Thres’)
-for the animal.
+``` r
+# first converting back to a move object (only if if already using MoveRakeR, see move::move() function)
+indata <- Track2move(indata)
 
-Fixes with only a small number of satellites may be determined initially
-to be less reliable, and so the option exists to remove fixes less than
-a certain number of satellites, although that is itself a trivial step.
-Further, if dilution of precision information is available, similarly
-this can be used to filter the data. A further option exists to filter
-data based on the quality of fix column (“flt_switch”) that may be
-available for your data from MoveBank.
+library(ctmm)
+
+indata_ctmm <- ctmm::as.telemetry(indata)
+OUT <- ctmm::outlie(indata_ctmm)
+
+plot(OUT,units=FALSE)
+```
+
+Alternatively, the user may deem fixes directly unsuitable by virtue of
+a deemed poor quality measurement in these underlying measurement
+parameters, for example through too few satellites or DOP values. These
+can be examined and then filtered out using `MoveRakeR`. The function
+`clean_GPS` can be used to remove data rows in the Track dataset that
+are determined to be incorrect by the user. This process is a rather
+blunt instrument in that currently this is done at the user’s
+discretion. A further option exists to filter data based on the quality
+of fix column (“flt_switch”) that may be available for your data from
+MoveBank.
+
+The function `clean_GPS` can also be used to filter by a trajectory
+speed to remove clear jumps in the GPS that may be obvious from visual
+inspection of the data. The `clean_GPS` function uses a trajectory speed
+filter to sequentially removes fixes that are beyond a pre-determined
+travel speed (‘Thres’) for the animal. However, within `MoveRakeR`, the
+function `tspeed_jit` acknowledges that trajectory speed as used in the
+`clean_GPS` function is dependent on sampling rate of tags, and small
+changes in positional xy error will have a proportionally greater
+influence on whether fixes collected at very fine scales, e.g. 60s or
+less may be deemed incorrect by `clean_GPS`. The `tspeed_jit` function
+helps understand this pattern through introducing bootstrapped error
+jitter in the fixes allowing assessment of the error curve.
 
 Finally, `clean_GPS` can label sections of GPS recording where the tag
 was recording at the rate as programmed; as GPS data collection is
@@ -217,20 +242,13 @@ clean_GPS(data = data, dropsats = 3, Thres = 30, GAP = 28800)
 gap_section(data, GAP = 28800*2)
 ```
 
-## Quantifying potential errors in the data
-
-The `MoveRakeR` package provides some functionality to examine the GPS
-data to try and deduce likely reasoning behind erroneous points. These
-are currently being updated, with a further function `rake` expected to
-provide an initial assessment of the data and outlier leverage.
-
-The function `tspeed_jit` acknowledges that trajectory speed as used in
-the `clean_GPS` function is dependent on sampling rate of tags, and
-small changes in positional xy error will have a proportionally greater
-influence on whether fixes collected at very fine scales, e.g. 60s or
-less may be deemed incorrect by `clean_GPS`. The `tspeed_jit` function
-helps understand this pattern through introducing bootstrapped error
-jitter in the fixes allowing assessment of the error curve.
+Among other packages, the `ExMove` toolkit (Langley et al. 2024)
+provides a Shiny App to investigate the effect of filter effects of
+speed and net displacement based on prior knowledge of the study system.
+Within `MoveRakeR` a Shiny application *is planned for future releases*
+to investigate distributions of parameters and leverage plots of
+available location error data, and highlight potential gaps in the
+DateTime GPS data record (see below).
 
 ## Further data manipulation
 
@@ -377,6 +395,17 @@ fuscus*) related to offshore renewable developments. Bird Study, 70,
 
 Cullen, J. (2020) R package ‘bayesmove’ v 0.1.0.
 <https://github.com/joshcullen/bayesmove>
+
+Fleming, C.H., Drescher-Lehman, J., Noonan, M.J., Akre, T.S.B., Brown,
+D.J., Cochrane, M.M., Dejid, N., DeNicola, V., DePerno, C.S., Dunlop,
+J.N., Gould, N.P., Harrison, A.-L., Hollins, J., Ishii, H., Kaneko, Y.,
+Kays, R., Killen, S.S., Koeck, B., Lambertucci, S.A., LaPoint, S.D.,
+Medici, E.P., Meyburg, B.-U., Miller, T.A., Moen, R.A., Mueller, T.,
+Pfeiffer, T., Pike, K.N., Roulin, A., Safi, K., Séchaud, R., Scharf,
+A.K., Shephard, J.M., Stabach, J.A., Stein, K., Tonra, C.M., Yamazaki,
+K., Fagan, W.F. & Calabrese, J.M. (2020) A comprehensive framework for
+handling location error in animal tracking data. bioRxiv
+2020.06.12.130195; doi: <https://doi.org/10.1101/2020.06.12.130195>
 
 Fleming, C.H. & Calabrese, J.M. (2023). ctmm: Continuous-Time Movement
 Modeling. R package version 1.2.0.

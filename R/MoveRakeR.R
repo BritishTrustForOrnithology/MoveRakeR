@@ -49,6 +49,11 @@
 #' function \code{\link{clean_GPS}} is provided. The speed filter used is a trajectory speed filter between consecutive fixes in date and time per animal,
 #' however, the sensitivity of the filter at finer temporal scales e.g. less than 60s, requires consideration, provided in the \code{\link{tspeed_jit}} function.
 #'
+#' The methods used in \code{MoveRakeR} being simple metrics to consider that may carry bias, are by no means all that can be done.
+#' We recommend the R package \code{ctmm} to consider location error as well as trajectory speed estimates (Flemming et al. 2020), particularly the
+#' function ctmm::outlie() that can suggest outlying locations using distance calculations using longitude & latitude,
+#' and speeds over the timesteps, accounting for telemetry error.
+#'
 #' Another key aspect of tracking data is that data collected may be interrupted, for example due to battery depletion, causing hiatuses in the
 #' recording. Through visual assessment of the data 'gaps' between GPS locations in date-time per animal can be identified and data
 #' can be labelled to flag up 'gapiness'. Having these strings of fixes identified id useful; for example, it is perhaps unwise to consider movement between two locations of
