@@ -293,7 +293,7 @@ boundary to compute trip duration and distances.
 ``` r
 newdata <- data %>% 
   clean_GPS(GAP = 3600*8, speedfilt = TRUE, drop = FALSE) %>% 
-  subs_samp(dt=300, tol = 0.2, method = "sequencer") %>% # sub-sample data
+  sub_samp(dt=300, tol = 0.2, method = "sequencer") %>% # sub-sample data
   define_trips(method = "rect", lls = LLS, plot = TRUE, verbose = TRUE) # (e.g. LLS = c(-3.2, 54.0553,-3.1689, 54.0437))
   
 plot_leaflet(newdata)
