@@ -4,7 +4,7 @@
 \alias{Track2move}
 \title{Convert a Track object to a move or moveStack object}
 \usage{
-Track2move(data)
+Track2move(data, rename_pdop = TRUE, rename_hdop = TRUE, rename_fixtime = TRUE)
 }
 \arguments{
 \item{data}{A \code{Track} family object (no S3 methods are coded).}

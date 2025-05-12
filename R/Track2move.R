@@ -60,10 +60,20 @@
 #' @import sp
 #' @import move
 #' @export
-Track2move <- function(data){
+Track2move <- function(data, rename_pdop = TRUE, rename_hdop = TRUE, rename_fixtime = TRUE){
 
   tids = unique(data$TagID)
 
+  # alter columns to capitalise gps.hdop and gps.pdop for use in ctmm; keeping as base R here
+  # rename dop columns to capitals for use in ctmm
+  # note these will need to be one of (from ctmm package: https://rdrr.io/cran/ctmm/src/R/telemetry.R): e.g. for pdop:
+  # c("GPS.PDOP","PDOP","Position.DOP","GPS.Position.Dilution","Position.Dilution","Pos.Dil","Pos.DOP")
+  # this if pdop or gps.pdop are present these will be capitalised; do same for hdop
+  # however, should the number of satellites be wanted in ctmm, perhaps we should rename away from this
+  # to allow that to happen? Not too sure.
+
+
+  #i = 1
   out_list <- list()
   for(i in 1:length(tids)){
     x <- data[data$TagID %in% tids[i],]
@@ -73,6 +83,54 @@ Track2move <- function(data){
     out_list[[i]] <- move::move(x = x$longitude, y = x$latitude, time = x$DateTime,
                                 proj=sp::CRS("+proj=longlat +ellps=WGS84"),
                                 data = x, animal = x$TagID, sensor = "GPS")
+
+    if(rename_pdop){
+
+      check1 = names(out_list[[i]])[which(names(out_list[[i]]) %in% c("gps.pdop", "gps_pdop"))] # assuming both of these would not be present
+      if(length(check1) >= 1){
+
+        nm_use <- names(out_list[[i]])[which(names(out_list[[i]]) %in% c("gps.pdop", "gps_pdop"))][1]
+        names(out_list[[i]])[which(names(out_list[[i]]) %in% nm_use)] <- "GPS.PDOP"
+
+        #message("Renaming ", nm_use, " to GPS.PDOP")
+
+      } else{
+        #message("Neither gps.pdop or gps_pdop found in named data")
+      }
+
+    }
+
+    if(rename_hdop){
+
+      check2 = names(out_list[[i]])[which(names(out_list[[i]]) %in% c("gps.hdop", "gps_hdop"))]
+      if(length(check2) >= 1){
+
+        nm_use <- names(out_list[[i]])[which(names(out_list[[i]]) %in% c("gps.hdop", "gps_hdop"))][1]
+        names(out_list[[i]])[which(names(out_list[[i]]) %in% nm_use)] <- "GPS.HDOP"
+
+        #message("Renaming ", nm_use, " to GPS.HDOP")
+
+      } else{
+        #message("Neither gps.hdop or gps_hdop found in named data")
+      }
+    }
+
+    if(rename_fixtime){
+
+      # Needs to be from ctmm: c("GPS.time.to.fix","time.to.fix","time.to.GPS.fix","time.to.GPS.fix.s","GPS.TTF","TTF","GPS.fix.time","fix.time","time.to.get.fix","used.time.to.get.fix","e.obs.used.time.to.get.fix","Duration","GPS.navigation.time","navigation.time","Time.On","Searching.Time")
+
+      check3 = names(out_list[[i]])[which(names(out_list[[i]]) %in% c("gps.fixtime", "gps_fixtime"))]
+      if(length(check3) >= 1){
+
+        nm_use <- names(out_list[[i]])[which(names(out_list[[i]]) %in% c("gps.fixtime", "gps_fixtime"))][1]
+        names(out_list[[i]])[which(names(out_list[[i]]) %in% nm_use)] <- "GPS.fix.time"
+
+        #message("Renaming ", nm_use, " to GPS.fix.time")
+
+      } else{
+        #message("Neither gps.fixtime or gps_fixtime found in named data")
+      }
+    }
 
   }
 
