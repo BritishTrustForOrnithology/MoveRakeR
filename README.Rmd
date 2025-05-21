@@ -9,7 +9,7 @@ output: github_document
   
 # MoveRakeR
 
-### Current version: 1.0.4
+### Current version: 1.0.5
 
 [![DOI](https://zenodo.org/badge/948019784.svg)](https://doi.org/10.5281/zenodo.15275175)
 
@@ -17,8 +17,7 @@ This is an initial release of `MoveRakeR`  and is subject to some ongoing update
 
 ## Overview
 
-The R package `MoveRakeR` contains a collection of simple functions to help streamline data processing and common data wrangling tasks that often occurs with GPS tracking data. `MoveRakeR` operates at the initial stages after data acquisition. Although a number of R packages are now available for analysis of animal movement data (Joo et al. 2020), `MoveRakeR` tackles some fundamental data processing steps that are often encountered to help streamline data preparation ahead of further analytical steps. The `MoveRakeR` package is intended to support the other existing workflows in other R packages, such as `move` (Kranstauber et al. 2018) and `move2` (Kranstauber et al. 2024) and provides some further tools to address common manipulations of data routinely encountered that often require a degree of subjectivity in decision making. Should the user be interested in exploring location error in GPS devices in more detail, we would recommend the approach of Flemming et al. (2020) and the
-`ctmm` R package (Fleming & Calabrese 2023).
+The R package `MoveRakeR` contains a collection of simple functions to help streamline data processing and common data wrangling tasks that often occurs with GPS tracking data. `MoveRakeR` operates at the initial stages after data acquisition. Although a number of R packages are now available for analysis of animal movement data (Joo et al. 2020), `MoveRakeR` tackles some fundamental data processing steps that are often encountered to help streamline data preparation ahead of further analytical steps. The `MoveRakeR` package is intended to support the other existing workflows in other R packages, such as `move` (Kranstauber et al. 2018) and `move2` (Kranstauber et al. 2024) and provides some further tools to address common manipulations of data routinely encountered that often require a degree of subjectivity in decision making. Should the user be interested in exploring location error in GPS devices in more detail, we would recommend the approach of Flemming et al. (2020) and the `ctmm` R package (Fleming & Calabrese 2023).
 
 ## Dependencies
 
