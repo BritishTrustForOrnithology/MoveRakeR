@@ -46,7 +46,7 @@ htmltools, sf, sfheaders, sp, ggplot2, R.rsp, readr, and units.
 Please install `MoveRakeR` by using:
 
 ``` r
-devtools::install_github('BritishTrustForOrnithology/BTOTrackingTools', build_vignettes = TRUE)
+devtools::install_github('BritishTrustForOrnithology/MoveRakeR', build_vignettes = TRUE)
 ```
 
 ## Vignettes
