@@ -123,11 +123,18 @@ details of such filtering.
 
 ## Initial visualisation
 
-Although this is of course up to the user, `MoveRakeR` provides leaflet
-mapping options as two R `shiny` apps. This will be updated in the near
-future to the `Bootstrap` layout with further functionality. In this
-initial release, the first of these functions is called: `plot_leaflet`
-and can simply allow visualisation of tracked animals, via:
+A further R package is also available alongside `MoveRakeR` called
+`RakeRvis`, which is a `Shiny` app with detailed plotting functionality
+for neater visualisation using `leaflet`, `leafgl` and `mapdeck`, with
+further option to either load data or download data from MoveBank or
+UvA-BiTS.
+
+Although this is of course up to the user, `MoveRakeR` also provides
+`leaflet` mapping options as two simpler R `Shiny` standalone apps that
+can be called upon. These will hopefully be updated in the near future
+to the `Bootstrap` layout more aligned with `RakeRvis`. The first of
+these, `plot_leaflet` and can simply allow visualisation of tracked
+animals, via:
 
 ``` r
 plot_leaflet(data)
