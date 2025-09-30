@@ -193,10 +193,6 @@
 #'
 #' ############################ END ###########################
 #'
-#' @rawNamespace import(data.table, except = c(month, hour, quarter, week, year, wday, second, minute, mday, yday, isoweek))
-#' @importFrom sfheaders sf_linestring
-#' @importFrom geosphere distRhumb
-#' @import sf
 #' @export
 #' @method plot Track
 plot.Track <- function(data, gap = FALSE,

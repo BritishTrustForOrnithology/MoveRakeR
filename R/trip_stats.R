@@ -183,14 +183,6 @@
 #'
 #' ##### END EXAMPLES
 #'
-#' @importFrom adehabitatLT as.ltraj
-#' @import dplyr
-#' @import tidyr
-#' @import tibble
-#' @import lubridate
-#' @import sf
-#' @import purrr
-#' @import units
 #' @export
 trip_stats <- function(data,
                              Phase = "br",

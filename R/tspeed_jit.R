@@ -74,11 +74,6 @@
 #' summary(model)
 #' plot(model)
 #'
-#' @import dplyr
-#' @import tidyr
-#' @import tibble
-#' @rawNamespace import(data.table, except = c(month, hour, quarter, week, year, wday, second, minute, mday, yday, isoweek))
-#'
 #' @export
 tspeed_jit <- function(data, nsim = 50, j = 0.0005, GAP = 28800,
                        breaks = c(1, 5, 10, 20, 60, 100, 120, 300, 600, 900, 1200, 1800, 3600, 7200, 10800),

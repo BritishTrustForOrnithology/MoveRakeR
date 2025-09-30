@@ -34,7 +34,6 @@
 #'
 #' print(data)
 #'
-#' @rawNamespace import(data.table, except = c(month, hour, quarter, week, year, wday, second, minute, mday, yday, isoweek))
 #' @export
 #' @method print Track
 print.Track <- function(x, len = 6, ...){

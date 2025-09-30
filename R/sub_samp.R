@@ -258,9 +258,6 @@
 #' correlated random walk models to animal movement data. Zenodo.
 #' \url{https://doi.org/10.5281/zenodo.596464}
 #'
-#' @import dplyr
-#' @import tibble
-#' @rawNamespace import(data.table, except = c(month, hour, quarter, week, year, wday, second, minute, mday, yday, isoweek))
 #' @export
 sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL, l_tol = NULL, rateU=dt+(dt*tol), rateL = dt-(dt*tol),
                     method = c("sequencer", "rounder", "boot_sequencer"),

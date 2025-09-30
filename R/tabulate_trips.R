@@ -81,9 +81,6 @@
 #'
 #' # This function could easily be better generalised in future if more variables from trip stats were added, e.g. tortuosity etc
 #'
-#' @import dplyr
-#' @import tibble
-#' @import lubridate
 #' @export
 tabulate_trips <- function(data, roundval = 2, TD_unit = 'days', by = NULL,
                            rm_inc = TRUE, option = "means"){

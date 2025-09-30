@@ -19,8 +19,6 @@
 #'
 #' tabulate_history2(data, by = c("year", "gapsec")) # if wanting any number of further levels, note gapsec also used to evaluate "Dur_days_mon" for true monitoring between gaps in the data
 #'
-#' @import dplyr
-#' @import tibble
 #' @export
 tabulate_history <- function(data, by = NULL){
 
