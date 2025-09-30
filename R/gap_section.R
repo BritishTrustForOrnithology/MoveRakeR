@@ -23,15 +23,16 @@
 #' This is a subjective choice for the user, and will depend also on GPS sampling
 #' resolution. \code{GAP} is also used to defined \strong{gapsections} in the data,
 #' that are sequentially labelled. Also note that in \code{\link{clean_GPS}}
-#' gap sections (bursts) of fixes of length = 1 are by default EXCLUDED, by the \code{drop} argument,
-#' see below, but this can be overridden with \code{drop = FALSE}. If a precise GAP is needed with no tolerance,
+#' gap sections (bursts) of fixes of length = 1 are by default EXCLUDED, by the \code{drop_single_gap} argument,
+#' see below, but this can be overridden with \code{drop_single_gap = FALSE}. If a precise GAP is needed with no tolerance,
 #' set tol to 0. Units are in seconds.
 #' @param tol A tolerance is also applied to the GAP vaue, useful for example to give lee-way around
 #' the gap criteria relating to imprecision of sampling rate in GPS deviating from the initial rate specified.
 #' By default this is set as 0.2, i.e. to give a true value used in delineation as: GAP +/- (GAP*0.2).
-#' @param drop As above a logical argument as to whether or not to drop gapsections of length 1,
+#' @param drop_single_gap As above a logical argument as to whether or not to drop gapsections of length 1,
 #' and thus retain strings of consecutive strings of points >= 2; i.e. this serving also as a partial
-#' temporal filter.
+#' temporal filter. This replaces the previous 'drop' argument in MoveRakeR <1.0.2.
+#' @param attr If TRUE gives attributes to the data output for arguments used; this is set to FALSE when used inside clean_GPS().
 #' @param verbose logical argument as to whether detailed information processing of the function
 #' should be displayed, defaults to TRUE.
 #'
@@ -53,23 +54,26 @@
 #'
 #' ## One bird
 #' dataUvA_one <- read_track_UvA('1', "2016-06-01 13:53:50","2016-07-15 09:17:14") %>% # replace '1' with TagID real name
-#'   clean_GPS(GAP = 28800, tol = 0) %>% gap_section(GAP = 300, tol = 0.4, drop = TRUE)
+#'   clean_GPS(GAP = 28800, tol = 0) %>% gap_section(GAP = 300, tol = 0.4, drop_single_gap = TRUE)
 #'
 #' TagIDUvA = c('1', '2', '3')
 #' start = c("2016-06-01 13:53:50", "2016-06-15 12:22:13", "2016-06-05 08:07:23")
 #' end = c("2016-07-15 09:17:14", "2016-07-20 01:08:58", "2016-07-18 14:22:45")
 #' dataUvA_many <- read_track_UvA(TagIDUvA, start=start, end=end)
 #'
-#' dataUvA_2 <- clean_GPS(dataUvA, GAP = 450, tol = 0, Thres = 30, drop = TRUE)
-#' dataUvA_3 <- gap_section(dataUvA, GAP = 450, tol = 0, drop = TRUE)
+#' dataUvA_2 <- clean_GPS(dataUvA, GAP = 450, tol = 0, Thres = 30, drop_single_gap = TRUE)
+#' dataUvA_3 <- gap_section(dataUvA, GAP = 450, tol = 0, drop_single_gap = TRUE)
 #'
-#' @import dplyr
-#' @import tibble
-#' @import tidyr
 #' @export
-gap_section <- function(data, GAP=28800, tol = 0.2, drop=FALSE, verbose = TRUE){
+gap_section <- function(data, GAP=28800, tol = 0.2, drop_single_gap = FALSE, verbose = TRUE, attr = TRUE, ...){
 
   data_dp <- tibble(data)
+
+  if(exists("drop", inherits = FALSE)){
+    drop_single_gap = drop # legacy code of drop from previous funcion version retained
+    message("Newer version of gap_section() in MoveRakeR v 1.02+ uses 'drop_single_gap' instead of 'drop'")
+    cat(rep(" ",  getOption("width")), "\n", sep = "")
+  }
 
   # --------------------------------------- #
   # assessment of relevant minimum namings in data
@@ -124,8 +128,8 @@ gap_section <- function(data, GAP=28800, tol = 0.2, drop=FALSE, verbose = TRUE){
   }
 
   ############
-  # 5. if drop = TRUE then drop OUT single gapsection fixes as cannot be assessed in the speed filter
-  if(drop){
+  # 5. if drop_single_gap = TRUE then drop OUT single gapsection fixes as cannot be assessed in the speed filter
+  if(drop_single_gap){
 
     if(verbose){message("Keeping only consecutive fixes within gap sections")}
 
@@ -140,25 +144,29 @@ gap_section <- function(data, GAP=28800, tol = 0.2, drop=FALSE, verbose = TRUE){
 
   # --------------------------------------------------------- #
   # assign attributes that may have been present at the start
-  data_dp <- give_attributes(data_dp, attr_list)
 
-  # --------------------------------------------------------- #
-  #### retain attributes of the choices made
-  # main attribute entry for the function
-  # this only modifies general attributes alongside clean_gps
-  if(is.null(attr(data_dp, "general") )){
-    attr(data_dp, "general") <- "general"
+  if(attr){
+    data_dp <- give_attributes(data_dp, attr_list)
+
+    # --------------------------------------------------------- #
+    #### retain attributes of the choices made
+    # main attribute entry for the function
+    # this only modifies general attributes alongside clean_gps
+    if(is.null(attr(data_dp, "general") )){
+      attr(data_dp, "general") <- "general"
+    }
+    # sub_attributes for arguments
+    attr(attr(data_dp, "general"), "GAP") <- get("GAP")
+    attr(attr(attr(data_dp, "general"), "GAP"),"function") <- "gap_section"
+
+    attr(attr(data_dp, "general"), "unit") <- "secs"
+    attr(attr(attr(data_dp, "general"), "unit"),"function") <- "gap_section"
+
+    attr(attr(data_dp, "general"), "drop_single_gap") <- get("drop_single_gap")
+    attr(attr(attr(data_dp, "general"), "drop_single_gap"),"function") <- "gap_section"
+
+
   }
-  # sub_attributes for arguments
-  attr(attr(data_dp, "general"), "GAP") <- get("GAP")
-  attr(attr(attr(data_dp, "general"), "GAP"),"function") <- "gap_section"
-
-  attr(attr(data_dp, "general"), "unit") <- "secs"
-  attr(attr(attr(data_dp, "general"), "unit"),"function") <- "gap_section"
-
-  attr(attr(data_dp, "general"), "drop") <- get("drop")
-  attr(attr(attr(data_dp, "general"), "drop"),"function") <- "gap_section"
-
 
 
   data_dp <- structure(.Data = data_dp, class = c("Track", "tbl_df","tbl","data.frame"))

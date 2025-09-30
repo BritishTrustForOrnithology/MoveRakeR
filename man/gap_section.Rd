@@ -4,7 +4,15 @@
 \alias{gap_section}
 \title{Defining gapsections for tracking data}
 \usage{
-gap_section(data, GAP = 28800, tol = 0.2, drop = FALSE, verbose = TRUE)
+gap_section(
+  data,
+  GAP = 28800,
+  tol = 0.2,
+  drop_single_gap = FALSE,
+  verbose = TRUE,
+  attr = TRUE,
+  ...
+)
 }
 \arguments{
 \item{data}{Input data object, with required columns: TagID, DateTime, longitude, latitude.}
@@ -15,20 +23,22 @@ consecutive GPS fixes, which defaults to 28800 seconds, although note the tolera
 This is a subjective choice for the user, and will depend also on GPS sampling
 resolution. \code{GAP} is also used to defined \strong{gapsections} in the data,
 that are sequentially labelled. Also note that in \code{\link{clean_GPS}}
-gap sections (bursts) of fixes of length = 1 are by default EXCLUDED, by the \code{drop} argument,
-see below, but this can be overridden with \code{drop = FALSE}. If a precise GAP is needed with no tolerance,
+gap sections (bursts) of fixes of length = 1 are by default EXCLUDED, by the \code{drop_single_gap} argument,
+see below, but this can be overridden with \code{drop_single_gap = FALSE}. If a precise GAP is needed with no tolerance,
 set tol to 0. Units are in seconds.}
 
 \item{tol}{A tolerance is also applied to the GAP vaue, useful for example to give lee-way around
 the gap criteria relating to imprecision of sampling rate in GPS deviating from the initial rate specified.
 By default this is set as 0.2, i.e. to give a true value used in delineation as: GAP +/- (GAP*0.2).}
 
-\item{drop}{As above a logical argument as to whether or not to drop gapsections of length 1,
+\item{drop_single_gap}{As above a logical argument as to whether or not to drop gapsections of length 1,
 and thus retain strings of consecutive strings of points >= 2; i.e. this serving also as a partial
-temporal filter.}
+temporal filter. This replaces the previous 'drop' argument in MoveRakeR <1.0.2.}
 
 \item{verbose}{logical argument as to whether detailed information processing of the function
 should be displayed, defaults to TRUE.}
+
+\item{attr}{If TRUE gives attributes to the data output for arguments used; this is set to FALSE when used inside clean_GPS().}
 }
 \value{
 The function returns a tibble format with an additional \code{Track} class.
@@ -65,15 +75,15 @@ db <- RODBC::odbcConnect("GPS") # ODBC
 
 ## One bird
 dataUvA_one <- read_track_UvA('1', "2016-06-01 13:53:50","2016-07-15 09:17:14") \%>\% # replace '1' with TagID real name
-  clean_GPS(GAP = 28800, tol = 0) \%>\% gap_section(GAP = 300, tol = 0.4, drop = TRUE)
+  clean_GPS(GAP = 28800, tol = 0) \%>\% gap_section(GAP = 300, tol = 0.4, drop_single_gap = TRUE)
 
 TagIDUvA = c('1', '2', '3')
 start = c("2016-06-01 13:53:50", "2016-06-15 12:22:13", "2016-06-05 08:07:23")
 end = c("2016-07-15 09:17:14", "2016-07-20 01:08:58", "2016-07-18 14:22:45")
 dataUvA_many <- read_track_UvA(TagIDUvA, start=start, end=end)
 
-dataUvA_2 <- clean_GPS(dataUvA, GAP = 450, tol = 0, Thres = 30, drop = TRUE)
-dataUvA_3 <- gap_section(dataUvA, GAP = 450, tol = 0, drop = TRUE)
+dataUvA_2 <- clean_GPS(dataUvA, GAP = 450, tol = 0, Thres = 30, drop_single_gap = TRUE)
+dataUvA_3 <- gap_section(dataUvA, GAP = 450, tol = 0, drop_single_gap = TRUE)
 
 }
 \seealso{
