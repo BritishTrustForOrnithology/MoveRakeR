@@ -8,21 +8,31 @@
 \usage{
 clean_GPS(
   data,
+  min_fix = 0,
+  min_fix_when = c("after_NA", "after_all"),
+  NA_latlong = TRUE,
+  sat_check = TRUE,
   drop_sats = 3,
-  sp_thres = 50,
+  sat_col = "satellites_used",
+  flt_switch = FALSE,
   pdop = 0,
   hdop = 0,
+  hasgaps = FALSE,
   GAP = 28800,
   tol = 0.2,
+  drop_single_gap = FALSE,
+  dup_DT = TRUE,
+  speedFilt = TRUE,
+  sp_thres = 50,
+  turnFilt = NULL,
+  turnFilt_dir = c("less_than", "greater_than"),
+  annotate = FALSE,
   attrib = TRUE,
-  sat_check = TRUE,
-  flt_switch = FALSE,
-  speed_filt = TRUE,
-  drop = FALSE,
   reproject = FALSE,
+  p4s = 3035,
   verbose = TRUE,
   detailed_verbose = FALSE,
-  p4s = 3035
+  ...
 )
 
 get_attributes(data)
@@ -32,78 +42,123 @@ give_attributes(data, attr_list)
 \arguments{
 \item{data}{Input data object, with required columns: TagID, DateTime, longitude, latitude.}
 
+\item{min_fix}{Minimum number of fixes to identify as valid or retain per animal. The default is 0,
+i.e. all fixes are retained. This parameter is used in conjunction with min_fix_when to determine where in the process this is applied.}
+
+\item{min_fix_when}{Where to apply the minimum number of fixes per animal (min_fix) criterion. Two options are
+available: "after_NA" carries out this assessment after initial NA rows and NA lat longs have been removed, and "after_all"
+makes the calculation after all other filters have been applied.}
+
+\item{NA_latlong}{logical condition (default TRUE), whether to annotate or remove NA latitude, longitude records,
+although check if this is compatible with further analyses downstream.}
+
+\item{sat_check}{Logical whether to filter data for satellite count, defaults to TRUE, and if TRUE,
+the data needs a column called matching that supplied under 'sat_col'.}
+
 \item{drop_sats}{Numeric integer value for the minimum number of GPS satellites to drop from the database.
-Defaults to 3, meaning only 4 and above are retained in the data.}
+Defaults to 3, meaning only 4 and above are flagged as suitable, or retained in the data.}
+
+\item{sat_col}{The column to search for satellite counts, defaults to "satellites_used".}
+
+\item{flt_switch}{logical argument, whether to annotate/exclude
+MoveBank data erroneous flt_switch values. Warning though this can remove fixes erroneously if not careful
+so it is suggested if not sure to look at Movebank directly and do this separately. This is set to
+FALSE by default i.e. no flt_switch filtering done.}
+
+\item{pdop}{Default is numeric 0 indicating do nothing, but if greater than zero, the function will
+look for a column named pdop, gps.pdop (or gps_pdop) or PDOP and annotate or keep only data less than that value. Note
+if NAs are present these are retained in the outputs.}
+
+\item{hdop}{Default is numeric 0 indicating do nothing, but if greater than zero, the function will
+look for a column named hdop, gps.hdop (or gps_hdop) or HDOP and annotate or keep only data less than that value. Note
+if NAs are present these are retained in the outputs.}
+
+\item{hasgaps}{A logical vector whether the data being fed in already has gap sections defined from another process.
+If FALSE, \code{clean_GPS} will assign its own gap sections based on the values in GAP and tol.}
+
+\item{GAP}{Numeric integer in seconds. The function can label sections of assumed continuous GPS recording
+for the individual animal, using the \code{\link{gap_section}} function.
+The argument \code{GAP} here is the cut-off i.e. temporal hiatus between two
+consecutive GPS fixes, which defaults to 28800 seconds (eight hours), although note, the tolerance parameter
+will also be incorporated (see tol argument).
+This is a subjective choice for the user, and will depend also on GPS sampling
+resolution. If a precise GAP is needed with no tolerance, set tol to 0. Units are in seconds.}
+
+\item{tol}{A tolerance is also applied to the GAP value, useful for example to give lee-way around
+the gap criteria relating to imprecision of sampling rate in GPS deviating from the initial rate specified.
+By default this is set as 0.2, i.e. to give a true value used in delineation as: GAP +/- (GAP*0.2) s}
+
+\item{drop_single_gap}{logical defaults to FALSE, but user can specify TRUE to annotate/retain single gap sections
+that by default get removed from the speed filter as isolated fixes that are at too coarser rate.
+as determined by the \code{GAP} argument. This replaces the previous 'drop' argument in MoveRakeR <1.0.2.}
+
+\item{dup_DT}{logical defaulting to TRUE to flag/remove duplicate DateTimes, but note that this will flag/remove
+any duplicated rows if you are working with trips that 'come-and-go' from a central place.
+See function: \code{add_cag_trips}. However also note that if you select to flag duplicate DateTimes and not
+remove them i.e. annotate = TRUE, the function will stop because the speed filter requires them to be unique.
+Hence this check is the last one made before the speed filter, so other annotations can be flagged.}
 
 \item{sp_thres}{Numeric value for the minimum threshold (m/s) to be used in the speed filter, which requires
 inspection and will vary by species. This will depend on the sampling resolution
 of your data. The function then uses a while loop to remove all points not
 meeting the threshold level until all offending fixes are removed.}
 
-\item{pdop}{Default is numeric 0 indicating do nothing, but if greater than zero, the function will
-look for a column named pdop, gps.pdop (or gps_pdop) or PDOP and keep only data less than that value.}
+\item{turnFilt}{An optional filter, default set to NULL (no filter applied) to annotate or filter greater or lesser than a certain turning angle of the animal,
+but beware for GPS fixes for a stationary animal, turning angles represent GPS error that can be erratic, so this may
+need further behavioural consideration. If supplied, turn_filt should be a single value with a maximum of pi, that
+represents the modulus of the radian turning angle; note also that if turn_filt_dir = "less_than" and turn_filt = pi, then
+all fixes would be removed; A value of  turn_filt = pi/4 and turn_filt_dir = "less_than" would retain all fixes less_than turn_filt.}
 
-\item{hdop}{Default is numeric 0 indicating do nothing, but if greater than zero, the function will
-look for a column named hdop, gps.hdop (or gps_hdop) or HDOP and keep only data less than that value.}
+\item{turnFilt_dir}{As with turn_filt, a direction indicating greater or lesser than the turn_filt value to annotate/retain values.}
 
-\item{GAP}{Numeric integer in seconds. The function serves another use, that of labeling
-sections of assumed continuous GPS recording for the individual animal.
-The argument \code{GAP} here is the cut-off i.e. temporal hiatus between two
-consecutive GPS fixes, which defaults to 28800 seconds (eight hours), although note, the tolerance parameter
-will also be incorporated (see tol argument).
-This is a subjective choice for the user, and will depend also on GPS sampling
-resolution. \code{GAP} is also used to defined \strong{gapsections} in the data,
-that are sequentially labelled and are used in many further function operations.
-These are perhaps equivalent in name to \strong{bursts} as in other R packages.
-Note, gap sections can also be defined after this function has been run using the seaprate
-standalone function for this purpose: \code{\link{gap_section}}. Also note that in \code{clean_GPS}
-gap sections (bursts) of fixes of length = 1 are by default EXCLUDED in the speed filter, as in \code{\link{gap_section}}
-can be dropped to retain \emph{only} consecutive fixes via the \code{GAP} criteria. If a precise GAP is needed with no tolerance,
-set tol to 0. Units are in seconds.}
+\item{annotate}{Logical defaulting to FALSE, in which case data will be \strong{filtered}, however if TRUE, data
+will be \code{annotated} instead retaining all rows, and different columns will be added for each of the \code{clean_GPS}
+manipulation steps representing rows flagged under each condition (see 'Value' section).}
 
-\item{tol}{A tolerance is also applied to the GAP value, useful for example to give lee-way around
-the gap criteria relating to imprecision of sampling rate in GPS deviating from the initial rate specified.
-By default this is set as 0.2, i.e. to give a true value used in delineation as: GAP +/- (GAP*0.2) s}
-
-\item{attrib}{Logical set to FALSE if detailed attributes should be attached to each
-data.frame per bird for numbers of fixes removed in various stages from \code{clean_GPS}.
-These can be accessed afterwards using: attr(data, "data_summary"), where data for Track-family
-objects is the individual "Track" data.frame per animal.}
-
-\item{sat_check}{Logical whether to filter data for satellite count, defaults to TRUE, and if TRUE,
-the data needs a column called "satellite_used".}
-
-\item{flt_switch}{logical argument, whether to exclude
-MoveBank data erroneous flt_switch values. Warning though this can remove fixes erroneously if not careful
-so it is suggested if not sure to look at Movebank directly and do this separately. This is set to
-FALSE by default i.e. no flt_switch filtering done.}
-
-\item{speed_filt}{logical defaulting to TRUE as to whether to use the speed filter in the cleaning steps.
-Due to potential differences in how users may want to apply this cleaning process, they may want
-to e.g. to their own cleaning, such as using instantaneous speed instead. In which case, \code{clean_GPS}
-can be used to ONLY remove satellites and do flt_switch filtering. Further cleaning such as
-using accuracy of positions, altitude requires bespoke manipulation beyond the scope here.}
-
-\item{drop}{logical defaults to FALSE, but user can specify TRUE to retain single gapsections
-that by default get removed from the speed filter as isolated fixes that are at too coarser rate
-as determined by the \code{GAP} argument}
+\item{attrib}{Logical set to FALSE if detailed attributes should be attached
+for numbers of fixes removed in various stages from \code{clean_GPS}.
+These can be accessed afterwards using: attr(data, "data_summary").}
 
 \item{reproject}{As above, a logical value whether or not to reproject lat-long WGS84
 coordinates to the new desired projection as specified via, \code{p4s}.}
 
-\item{verbose}{Logical argument if runtime messages are wanted}
+\item{p4s}{The coordinate reference system projection, should it be needed, defaults to NW Europe epsg:3035.}
+
+\item{verbose}{Logical argument if run-time messages are wanted.}
 
 \item{detailed_verbose}{Logical argument if the very detailed process of the speed filtering
-part of the function is required. Defaults to TRUE.}
+part of the function is required. Defaults to FALSE.}
 
-\item{p4s}{The coordinate reference system projection, should it be needed, defaults to NW Europe epsg:3035.}
+\item{speed_filt}{logical defaulting to TRUE as to whether to use the speed filter in the cleaning steps.
+Due to potential differences in how users may want to apply this cleaning process, they may want
+to do their own cleaning, such as using instantaneous speed instead. In which case, \code{clean_GPS}
+can be used to ONLY do other parts of the clean_GPS workflow. Further cleaning such as
+using accuracy of positions, altitude may be advisable and are not coded in as options here.}
 }
 \value{
-The function returns a tibble format with an additional \code{Track} class.
-Additional columns in the objects are also returned:
+The function returns a tibble format with a \code{Track} class.
+Resultant output depends on the argument \code{annotate}; if TRUE, then data are filtered for
+the required processing steps selected in \code{clean_GPS}, with additional columns in the objects if not already included:
 including: \strong{dt}, time difference (secs) between consecutive GPS fixes,
 \strong{gap}, a binary (1,0) for fixes where a gap was identified and \strong{gapsec}
-as a numeric integer of sequentially-labelled gapsection strings of telemetry fixes.
+as a numeric integer of sequentially-labelled gapsection strings of telemetry fixes. If the \code{annotate} argument is
+TRUE, then various columns can be added flagging as a 1 or 0 (some with NA conditions) whether a fix
+was labelled as 'incorrect' through the thresholds supplied. These columns are named accordingly for conditions:
+\itemize{
+\item tid_rm (minimum no. animals)
+\item NA_latlong_rm (lat/long point NA)
+\item all_NA_rm (NA rows)
+\item sat_NA (NA of rows without satellites)
+\item sat_rm (number of satellites)
+\item flt_rm (flt_switch)
+\item gps_pdop_rm (pdop)
+\item gps_hdop_rm (hdop)
+\item singlegap_rm ('orphaned' gapsections)
+\item dup_rm (duplicate DateTimes)
+\item speed_rm (speed filter)
+\item angle_rm (angle filter)
+\item combined_rm, A combined remove column using conditions across all annotation rows
+}
 }
 \description{
 \code{clean_GPS} is provided to allow some basic cleaning of the raw tracking data to be
@@ -113,66 +168,125 @@ to take out less certain positional fixes, filter out fixes associated with unre
 define date-time sections (strings of points) where tags were deemed have valid recording in relation to the programmed GPS sampling rate.
 }
 \details{
-The single function \code{clean_GPS} is used to clean the data. There are of course many
-reasons why (here focusing on GPS) animal-borne telemetry loations may have error, such as
+A single function \code{clean_GPS} is provided that cycles through ten main steps to either annotate
+potential 'bad' data rows, or filter such rows, thus 'cleaning' the GPS data.
+
+There many reasons why (here focusing on GPS) animal-borne telemetry locations may have error, such as
 internal firmware settings of tags e.g. connection parameters with satellites, sampling rate
 of tags, number of satellites, satellites position in the sky, along with external factors
 such as temperature, humidity etc. Here, we assume the user is mainly interested in 2D space,
-so we retain all vertical information in columns \code{altitude} and \code{altitude_agl} - that's a story for another time.
-Instead here, we carry out very basic cleaning to remove fixes that may be deemed less reliable
-based on a minimum number of acceptable satellites used for the fix, and for Movebank data, removing inaccurate \code{flt_switch} values.
-Finally the function includes a trajectory (ground) speed filter based on distance traveled divided by time taken
-between consecutive fixes to remove points that are more than an
-unrealistic threshold for the species, that may not have been picked up in the other filters.
-This also depends on \code{adehabitatLT::as.ltraj}
-for efficiently computing distance for trajectory speed estimation
-in the speed filter. Ground speeds will of course vary by species - so it may be best to view
-them as a histogram - the default value is 50 m/s based on Lesser Black-backed Gulls,
-which is actually still large. Ultimately this is a little subjective, and for analysis purposes, it could be argued that
-all error should be retained, but this depends on the purpose of the analysis. This is up to the user's discretion. Also, using trajectory speed has drawbacks
-when it comes to coarser GPS sampling rates sampling, making it harder to discern potentially erroneous
-fixes in this way. Similarly at very fine spatio-temporal scales, i.e. with fast sampling
-less than 60 seconds, a small change in GPS position has a much greater influence on trajectory speed
-than for coarser sampling schedules. This can be solved by increasing the speed filter threshold value
+so we retain all vertical information in columns \code{altitude} and \code{altitude_agl}. Further filters for such
+z-dimension columns may be needed by the user.
+
+Instead here, we carry out basic cleaning to annotate or filter fixes that may be identified less reliable.
+The steps within \code{clean_GPS} are often very simple trivial data manipulations, provided here as a convenience tool.
+The user may wish to break out of the \code{clean_GPS} workflow entirely. Annotation is also at the heart of \code{clean_GPS}
+as it is expected that other functions from neighbouring R packages may come in handy to assess alongside this process.
+
+Within \code{clean_GPS}, there are multiple steps identified. These mainly surround issues of potential measurement error, regarding:
+\enumerate{
+\item Missing location information - any missing latitude/longitude information (NAs) are first identified and flagged/filtered;
+\item Label/drop rows where all columns in the data are NA.
+\item Minimum number of GPS fixes per animal.
+\item A value for the minimum number of satellites can be provided below which data are flagged/filtered;
+\item A Movebank-specific condition based on rows flagged in the database as 'flt_switch' problem rows can be flagged/dropped;
+\item Potential measurement error through satellite position, via the GPS 'hdop' and 'pdop' values if present in the data, with a threshold value above which data are flagged/filtered;
+\item Gap section labeling using the \code{gap_section} function (data annotation only), flagging user-defined gaps in the data and in turn:
+\item Identification of or removal of 'orphaned' GPS fixes that have only one GPS fix per gap section (potentially problematic for further analyses);
+\item Duplicate date time stamps - a rather obvious step but reserved for later in the process here, as if duplicate rows are found and the annotate argument is TRUE, the data are returned early before any speed or tuning filters that requires such non-duplication of DateTimes;
+\item Trajectory (ground) speed filter, that calls both \code{traj_speed} to calculate speeds within identified gap sections, and \code{speed_filt} to carry out labeling/filtering of points beyond unrealistic perceived animal travel speeds; and
+\item A turning angle filter, using function \code{turn_filt} to annotate/filter fixes more ore less than a modulus(radians) turning angle between successive fixes.
+}
+
+The turning filters also depends on \code{adehabitatLT::as.ltraj} for efficiently computing turning angles and
+should be used with a high degree of caution given GPS location of stopped animal movement reflects GPS noise.
+
+Ground speeds will of course vary by species - so it may be best to view
+the distribution, and the function \code{rake_outlie} can be useful to identify outliers through simple numeric statistics.
+Similarly for all perceived biases in the data, viewing of the distribution of the variables that could be driving
+such variation may be useful to view using \code{rake_outlie}, such as the pdop and hdop thresholds, if they are deemed important.
+
+Ultimately these filtering and annotating steps are a little subjective, and depends on the purpose of the analysis.
+It is not the intention of \code{MoveRakeR} however to re-invent existing methods, but add to the tools available that we can assess
+biases, and so the user is urged to consider other packages such as \code{trip}, \code{traise}, \code{move/move2} and \code{AMT}.
+
+The \code{clean_GPS} workflow in \code{MoveRakeR} is not the first of its kind to have dealt with such similar issues.
+There are a number of packages that have functions that may be of use to consider as annotation of the data alongside
+\code{clean_GPS}, such as function \code{trip::sda} and \code{trip::speedfilter} that have methods for speed/turning angle point assessment;
+the function in s \code{MoveRakeR::clean_GPS} differ for trajectory speed in using a while loop to sequentially assess potentially
+erroneous fixes that may be above the maximum speed for the species, as strings of erroneous points can occur, thus being displaced
+from where they likely should have been; hence the  \code{MoveRakeR::speed_filt} by design also considers a displacement effect indirectly.
+
+Trajectory speed filters naturally have drawbacks as they are tied intrinsically to the sampling rate of the tag. Information
+on instantaneous speed may be preferable, although not provided in \code{clean_GPS} as a filtering/annotating option.
+Coarser GPS sampling rates may make it harder to discern potentially erroneous fixes given a wider time elapsed over what the animal could have been doing and
+at very fine spatio-temporal scales, i.e. with fast sampling less than 60 seconds, a small change in GPS position has a greater influence on trajectory speed
+than for coarser sampling schedules. This could be resolved by increasing the speed filter threshold value for particular sampling rates
 but it may be better to investigate the error potential in traj_speed calculations at these finer scale
 and the potential sensitivity of the data to such flat decisions. This relationship can be examined further
 using the \code{tspeed_jit} function.
-
-Further very simple options for removing fixes under a certain value of DOP (e.g. pdop, hdop) are provided
-in the function. Again it is worth investigating the distributions of these variables more fully
-and the relationship they may have with error in the horizontal dimension. It is also worth noting that in the speed filter, the filter stages happen sequentially, i.e. removing
-number of satellites and flt_switch values (for Movebank) and then applying the speed filter.
-So the trajectory speed is recalculated.
-
-on a more detailed note, the speed filter was initially coded in a 'forwards' direction in DateTime
-and so the fix after the current one was always 'blamed' for being incorrect. This may not always
-be the case for data where there are many gapsections defined, i.e. where there is a greater chance the
-first fix in a string could be the one incorrect. So in the current version, both forwards and backward checks are made to
-pick up this issue and correctly identify the errant fix in a string - less of an issue for continuous non gappy data.
 }
 \examples{
 
-## We can use the dplyr \%>\% notation if we wanted to directly with Track objects
 indata <- yourdata # data.frame with a minimum of columns named TagID, DateTime, longitude, latitude
 data <- Track(indata) # optional to convert to in-house class (most functions will still run on non track data but generic S3 methods will not be available for plot and summary)
 data <- data \%>\% clean_GPS() # accepting the defaults of the clean_GPS function
 
-# this also gives warnings that some satellite count data are found to be NA
-# and so these data are retained in the filter of number of satellites.
+# Various examples of uses:
 
-# dropping data with 3 satellites, a speed threshold of 50 m/s and labelling gaps in data at 28800 s
-# with no consideration of hdop or pdop set to 0 for no filtering
-data = clean_GPS(data, drop_sats = 3, sp_thres = 50, GAP = 28800)
+# as an annotation tool, in detail:
+data_an <- clean_GPS(data,
+         min_fix = 5, min_fix_when = "after_NA",       # keep birds with 5 fixes or more, after NA annotation applied
+         NA_latlong = TRUE,                            # drop NA lat-longs
+         sat_check = TRUE, drop_sats=3,                # drop fixes with  3 satellites
+         flt_switch = FALSE,                           # ignored here
+         pdop = 6, hdop = 6,                           # drop any rows above a value of 6
+         hasgaps = FALSE, GAP = 28800, tol = 0,        # no gaps previously defined, use an 8 h gap + zero tolerance
+         drop = FALSE,                                 # keep all gap sections identified with 1 fix (but note these are dropped anyway in speed filter if we are not annotating!)
+         dup_DT = TRUE,                                # remove duplicate DateTimes
+         speedFilt = TRUE, sp_thres = 50,              # speed filter activated with a maximum of 50 m/s
+         turnFilt = NULL, turnFilt_dir = "less_than",  # No angle turning filter used
+         annotate = TRUE, attrib = TRUE,               # no annotation = dropping rows not meeting conditions, attributes of no. rows per stage retained as an attribute in final data
+         reproject = FALSE, p4s = 3035,                # no reprojection of lat longs
+         verbose = TRUE, detailed_verbose = FALSE)     # simple messaging used
 
-# check out where fixes where dropped:
-attr(data,"data_summary")
+#' # check out where fixes where dropped:
+attr(data_an,"data_summary")
 
-## summarise the data, using a further function summary
+# If annotating the data, switching annotate to TRUE above, additional rows flagging conditions would be added
+data_an$combined_rm # the combined row
+
+# Outside of the clean_GPS() function
+# Using the speed filter, outside of clean_GPS() with annotation:
+
+# define gapsections
+data <- gap_section(data,GAP=28800, tol = 0.2)
+
+# use speed filter, with the above gaps, annotating the data
+data_speed_filt <- speed_filt(data, annotate = TRUE, verbose = TRUE, detailed_verbose = TRUE)
+
+# setting that part of clean_GPS to FALSE, to annotate with other elements e.g. nsats
+data_2 <- clean_GPS(data_speed_filt, speed_filt = FALSE, annotate = TRUE, hasgaps = TRUE) # using gaps already present in the data
+
+# Clean_GPS also gives a messge if some satellite count data are found to be NA
+# and these data are retained in the filter of number of satellites.
+
+# can also summarise the data, using a further function summary
 #summary(data)
+
+# see also 'raking' the data to check for potential outliers using a very basic quantile (here annotating)
+data_test <- rake_outlie(data = data, var = "traj.speed", u_max = NULL, q = c(0.01,0.99), method = "quantile",
+    plot = FALSE, annotate = TRUE, summary = TRUE, verbose = FALSE)
+
+data_test$outlier_i_traj.speed_q  # outliers outside individual range
+data_test$outlier_ia_traj.speed_q # outliers outside individual range + outside the all-animal range
+
+# other approaches
+trip::sda()
 
 }
 \seealso{
-\link{clean_GPS}, \link{gap_section}, \link{sub_samp}
+\link{rake}, @seealso \link{gap_section}, \link{sub_samp}, \link{traj_speed}, \link{speed_filt}, \link{turn_filt}
 
 \link{read_track_MB}, \link{tspeed_jit}, \link{read_track_UvA}, \link{gap_section}, \link{summary}
 }
