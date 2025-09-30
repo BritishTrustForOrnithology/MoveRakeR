@@ -48,9 +48,6 @@
 #' data = data %>% clean_GPS() %>% dist2coast(use_crs_shape = TRUE, shape = Europe_sf,
 #'     crop = TRUE, plot = TRUE, buffer_extent = 50000, p4s = 3035)
 #'
-#' @import dplyr
-#' @import tibble
-#' @import sf
 #' @export
 dist2coast <- function(data, use_crs_shape = TRUE, shape = NULL, crop = TRUE, plot = FALSE,
                       buffer_extent = 50000, p4s = 3035, verbose = TRUE){

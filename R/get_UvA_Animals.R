@@ -50,8 +50,6 @@
 #'
 #' @seealso [MoveRakeR::read_track_UvA]
 #'
-#' @importFrom lubridate with_tz
-#' @import RODBC
 #' @export
 get_UvA_Animals <- function(station_name = NULL){
 

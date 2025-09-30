@@ -65,9 +65,6 @@
 #'
 #' plot_leaflet(data)
 #'
-#' @import dplyr
-#' @import tibble
-#' @import sf
 #' @export
 offshore <- function(data, use_crs_shape = TRUE, plot = FALSE, crop = TRUE, buffer_extent = 10000,
                      shape = NULL, verbose = TRUE, p4s = 3035){

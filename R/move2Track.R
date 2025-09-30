@@ -69,8 +69,6 @@
 #'   end = c("2019-09-30 23:59:59","2019-09-30 23:59:59","2020-05-11 09:51:10"),
 #'   TagID = c('1','2','3'))
 #'
-#' @importFrom adehabitatLT as.ltraj
-#' @import move
 #' @export
 move2Track <- function(data, TagID=NULL,start=NULL,end=NULL,TagID_drop=TRUE,
                            dropsat = FALSE, dropsats=3, flt_switch=TRUE, mindata = 5,

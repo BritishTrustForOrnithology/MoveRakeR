@@ -241,11 +241,6 @@
 #' movement from archival and satellite tags. \emph{PLoS ONE}, \strong{4}(10).
 #' \url{http://dx.plos.org/10.1371/journal.pone.0007324}.
 #'
-#' @import dplyr
-#' @import tibble
-#' @import tidyr
-#' @import lubridate
-#' @import sf
 #' @export
 define_trips <- function(data, use_current_by = FALSE, by = NULL, birdyear = TRUE, definetrips = TRUE,
                          GIS = TRUE, method="rect", lls = NULL, radius = 1000, Flag = NULL,

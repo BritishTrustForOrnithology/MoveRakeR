@@ -18,7 +18,6 @@
 #' # run get_bounds function
 #' llyrb = get_bounds(indata, p4s = p4)
 #'
-#' @import sf
 #' @export
 get_bounds <- function(data, p4s = 3035){
 

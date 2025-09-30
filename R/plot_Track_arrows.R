@@ -155,8 +155,6 @@ plot_track_arrows <- function(data, ...){
 #'
 #' ############################## END ###########################
 #'
-#' @importFrom adehabitatLT as.ltraj redisltraj
-#' @import sf
 #' @export
 plot_track_arrows.Track <- function(data, tol = 0.5, u = 100, nnew = 500, r = NULL, N_keep = NULL, col = "black",
                                     corr_no_arr = 0.005, corr_size_arr=0.35, geo_transform = TRUE, verbose = TRUE,

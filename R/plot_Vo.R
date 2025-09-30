@@ -90,10 +90,6 @@
 #' ### voltage data and nearest Track data on merge (roll_gap_thres),
 #' ### and plotting the solar charge instead of vbat default alongside dt using the dt_var variable.
 #'
-#' @importFrom suncalc getSunlightTimes
-#' @importFrom lubridate round_date date
-#' @rawNamespace import(data.table, except = c(month, hour, quarter, week, year, wday, second, minute, mday, yday, isoweek))
-#' @import ggplot2
 #' @export
 #' @method plot Vo
 plot.Vo <- function(data, dataTrack=NULL, start = NULL, end = NULL, roll_gap_thres = 3600, dt = FALSE, max_dt = NULL, dt_var = "vbat"){
