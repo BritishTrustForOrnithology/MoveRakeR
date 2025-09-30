@@ -55,7 +55,6 @@ just does it for you, rather than applying afresh each time with user-specific c
 data <- sun_calc(data, keep = c("sunrise", "sunset"))
 table(data$dnt)
 
-
 }
 \references{
 Thieurmel, B. & Elmarhraoui, A. (2019). suncalc: Compute Sun Position, Sunlight Phases, Moon Position and Lunar Phase. R package version 0.5.0. \url{https://CRAN.R-project.org/package=suncalc}

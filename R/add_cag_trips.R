@@ -91,9 +91,6 @@
 #' # Also note that duplicate rows ONLY relevant information for DateTime, longitude, latitude and TagID;
 #' # all other variables from duplicate fixes are NA for duplicate rows.
 #'
-#' @import dplyr
-#' @import tibble
-#'
 #' @export
 add_cag_trips <- function(data){
 

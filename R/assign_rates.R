@@ -58,8 +58,6 @@
 #' assign_rates(data, by = c("gapsec"), split = FALSE) # same as bove without year
 #' assign_rates(data, by = c("year","gapsec"), split = FALSE, group_after_gap = TRUE) # grouping by year after first assessing by gapsection (i.e. removing large dts between gaps)
 #'
-#'
-#
 #' \dontrun{
 #' ### testing
 #' data1 = data_in[data_in$TagID == "5377",]
@@ -85,10 +83,6 @@
 #' data = data_in
 #' by = c("year", "gapsec")
 #'}
-#' @import dplyr
-#' @import tibble
-#' @import lubridate
-#' @rawNamespace import(data.table, except = c(month, hour, quarter, week, year, wday, second, minute, mday, yday, isoweek))
 #' @export
 assign_rates <- function(data, by = NULL, split = TRUE, group_after_gap = FALSE,
                           breaks = c(1, 60, 100, 300, 600, 900, 1200, 1800, 3600, 7200, 10800),
@@ -171,7 +165,11 @@ assign_rates <- function(data, by = NULL, split = TRUE, group_after_gap = FALSE,
   # final data
   data = left_join(data, df, by = "rate_") %>% dplyr::select(-rate_) %>% group_by(TagID, !!!syms(unique(by))) %>% dplyr::select(-dt_)
 
-
+  #if(verbose){
+    if(breaks[length(breaks)] > max(data_dtmax$dt_,na.rm=TRUE) ){
+      message("Current function quirk in assign_rates() if the upper break is > all timesteps in data: \n- function returns animal-specific upper maximum bounds")
+    }
+  #}
   # --------------------------------------------------------------------------------- #
   # within the data, per animal, replace the maximum category with the upper limit
   # for the specific animal, i.e. upper dt will be that across all animals

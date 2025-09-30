@@ -50,10 +50,6 @@
 #' data <- sun_calc(data, keep = c("sunrise", "sunset"))
 #' table(data$dnt)
 #'
-#'
-#' @import suncalc
-#' @importFrom lubridate date
-#'
 #' @export
 sun_calc <- function(data, keep = c("sunrise", "sunset")){
 

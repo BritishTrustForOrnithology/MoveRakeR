@@ -4,7 +4,15 @@
 \alias{summary.Track}
 \title{Summarise \code{Track}, \code{TrackStack} and \code{TrackMultiStack} class objects}
 \usage{
-\method{summary}{Track}(object, Simplify = TRUE, extra_vars = NULL, simple_view = TRUE)
+\method{summary}{Track}(
+  object,
+  Simplify = TRUE,
+  extra_vars = NULL,
+  simple_view = TRUE,
+  round_out = TRUE,
+  round_val = 2,
+  verbose = TRUE
+)
 }
 \arguments{
 \item{Simplify}{Logical defaulting to TRUE for whether to simplify the data to only
@@ -16,6 +24,12 @@ simplify = TRUE.}
 
 \item{simple_view}{Logical (default = TRUE) for if just a simple table of fixes, datetime range,
 number of fixes and long-lat range is required.}
+
+\item{round_out}{whether to round x and y ranges and durations to nearest 'round_val'.}
+
+\item{round_val}{A numeric value for the precision of rounding for x and y ranges and durations, defaults to 2L.}
+
+\item{verbose}{Boolean defaulting to TRUE for if messaging is desired.}
 
 \item{data}{A \code{Track}, \code{TrackStack}, or \code{TrackMultiStack} object.}
 }
@@ -30,11 +44,12 @@ A function using the S3 \code{summary} method for \code{Track-family} objects,
 that gives a simple summary using \code{base::summary}.
 }
 \details{
-\code{summary} was designed for easy indication as to whether data match
+The \code{summary} gives basic information on the start and end times available for each TagID, the
+number of GPS fixes, and the x and y latitude and longitude WGS84 range of the data.
+\code{summary} provides easy indication as to whether data match
 the user's expectation, such as upon read in from databases, or after manipulation stages,
 e.g. checking the date ranges per animal are as expected if start and end times were specified in
 \code{\link{read_track_MB}} and \code{\link{read_track_UvA}}.
-NOTE: output from \code{summary} is to be incorporated in a shiny viewing of the data.
 }
 \examples{
 indata <- yourdata # data.frame with a minimum of columns named TagID, DateTime, longitude, latitude

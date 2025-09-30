@@ -13,7 +13,7 @@ Track2move(data, rename_pdop = TRUE, rename_hdop = TRUE, rename_fixtime = TRUE)
 the same individual animal (e.g. if previously separated into different TrackStacks
 due to treatment differently across years, etc. defaults to TRUE.If TRUE, ONE \code{move::move}
 object will first be created for the single animal prior to combining into the \code{move::moveStack};
-if false, they will be treated as separate "TagIDs" in the the resulting move:: object.}
+if false, they will be treated as separate "TagIDs" in the the resulting move object.}
 }
 \value{
 A \code{move::moveStack} or \code{move::Move} object for further use with the the \code{move} package.
@@ -23,7 +23,7 @@ reads in a static Movebank-downloaded csv to convert to a \code{Track} object.
 \description{
 \code{Track2move} acts as a bridge between \code{MoveRakeR} and the \code{move}
 R package (Kranstauber et al. 2021), converting \emph{Track} objects into
-a \emph{move:move} or emph{move:moveStack} object.
+a \emph{move::move} or emph{move::moveStack} object.
 }
 \details{
 Function \code{Track2move} takes the Track class back to \code{move} for further use of that R package.
@@ -34,6 +34,7 @@ is not dovetailed with \code{move2} and \code{sf}.
 \examples{
 # -------------------------------------------------------------------- #
 # covert to a move::moveStack object
+library(move) # not fully loaded by MoveRakeR
 myStack = Track2move(data = data)
 
 # opens up the move playbox:
@@ -59,7 +60,6 @@ sp::plot(interp5min, col="red",pch=20, main="By number of locations")
 move::points(myStack[["1"]])
 move::points(interp5min)
 
-######
 }
 \references{
 Bart Kranstauber, Marco Smolla and Anne K Scharf (2021). move: Visualizing and Analyzing

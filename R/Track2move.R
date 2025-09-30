@@ -2,14 +2,14 @@
 #'
 #' \code{Track2move} acts as a bridge between \code{MoveRakeR} and the \code{move}
 #' R package (Kranstauber et al. 2021), converting \emph{Track} objects into
-#' a \emph{move:move} or emph{move:moveStack} object.
+#' a \emph{move::move} or emph{move::moveStack} object.
 #'
 #' @param data A \code{Track} family object (no S3 methods are coded).
 #' @param group_anims whether to treat animals with the same 'TagID' as
 #' the same individual animal (e.g. if previously separated into different TrackStacks
 #' due to treatment differently across years, etc. defaults to TRUE.If TRUE, ONE \code{move::move}
 #' object will first be created for the single animal prior to combining into the \code{move::moveStack};
-#' if false, they will be treated as separate "TagIDs" in the the resulting move:: object.
+#' if false, they will be treated as separate "TagIDs" in the the resulting move object.
 #'
 #' @details
 #' Function \code{Track2move} takes the Track class back to \code{move} for further use of that R package.
@@ -31,6 +31,7 @@
 #' @examples
 #' # -------------------------------------------------------------------- #
 #' # covert to a move::moveStack object
+#' library(move) # not fully loaded by MoveRakeR
 #' myStack = Track2move(data = data)
 #'
 #' # opens up the move playbox:
@@ -56,9 +57,6 @@
 #' move::points(myStack[["1"]])
 #' move::points(interp5min)
 #'
-#' ######
-#' @import sp
-#' @import move
 #' @export
 Track2move <- function(data, rename_pdop = TRUE, rename_hdop = TRUE, rename_fixtime = TRUE){
 

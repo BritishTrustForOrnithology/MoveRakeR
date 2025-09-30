@@ -78,7 +78,6 @@ assign_rates(data, by = c("year","gapsec"), split = FALSE) # use of gapsection, 
 assign_rates(data, by = c("gapsec"), split = FALSE) # same as bove without year
 assign_rates(data, by = c("year","gapsec"), split = FALSE, group_after_gap = TRUE) # grouping by year after first assessing by gapsection (i.e. removing large dts between gaps)
 
-
 \dontrun{
 ### testing
 data1 = data_in[data_in$TagID == "5377",]

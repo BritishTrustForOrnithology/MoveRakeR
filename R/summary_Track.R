@@ -3,11 +3,12 @@
 #' A function using the S3 \code{summary} method for \code{Track-family} objects,
 #' that gives a simple summary using \code{base::summary}.
 #'
-#' \code{summary} was designed for easy indication as to whether data match
+#' The \code{summary} gives basic information on the start and end times available for each TagID, the
+#' number of GPS fixes, and the x and y latitude and longitude WGS84 range of the data.
+#' \code{summary} provides easy indication as to whether data match
 #' the user's expectation, such as upon read in from databases, or after manipulation stages,
 #' e.g. checking the date ranges per animal are as expected if start and end times were specified in
 #' \code{\link{read_track_MB}} and \code{\link{read_track_UvA}}.
-#' NOTE: output from \code{summary} is to be incorporated in a shiny viewing of the data.
 #'
 #' @rdname summary
 #' @param data A \code{Track}, \code{TrackStack}, or \code{TrackMultiStack} object.
@@ -22,6 +23,9 @@
 #' simplify = TRUE.
 #' @param simple_view Logical (default = TRUE) for if just a simple table of fixes, datetime range,
 #' number of fixes and long-lat range is required.
+#' @param round_out whether to round x and y ranges and durations to nearest 'round_val'.
+#' @param round_val A numeric value for the precision of rounding for x and y ranges and durations, defaults to 2L.
+#' @param verbose Boolean defaulting to TRUE for if messaging is desired.
 #'
 #' @examples
 #' indata <- yourdata # data.frame with a minimum of columns named TagID, DateTime, longitude, latitude
@@ -31,7 +35,7 @@
 #'
 #' @export
 #' @method summary Track
-summary.Track <- function(object, Simplify = TRUE, extra_vars = NULL, simple_view = TRUE){
+summary.Track <- function(object, Simplify = TRUE, extra_vars = NULL, simple_view = TRUE, round_out = TRUE, round_val = 2, verbose = TRUE){
 
   data <- object # in keeping with name of first arg in generic summary method
 
@@ -58,13 +62,32 @@ summary.Track <- function(object, Simplify = TRUE, extra_vars = NULL, simple_vie
     ddrange <- data.frame(do.call('rbind',lapply(data,function(x){as.character(range(x$DateTime))})))
     dimdata$start <- datetime(ddrange$X1)
     dimdata$end <- datetime(ddrange$X2)
-    dimdata$dur <- round(difftime(dimdata$end,dimdata$start, unit = 'days'),2)
 
-    xrange <- data.frame(do.call('rbind',lapply(data,function(x){as.character(range(x$longitude))})))
-    yrange <- data.frame(do.call('rbind',lapply(data,function(x){as.character(range(x$latitude))})))
+    if(round_out){
+      dimdata$dur <- round(difftime(dimdata$end,dimdata$start, unit = 'days'),round_val)
+    } else{
+      dimdata$dur <- difftime(dimdata$end,dimdata$start, unit = 'days')
+    }
 
-    dimdata$xrange <- paste0("(",round(as.numeric(xrange$X1),2),", ", round(as.numeric(xrange$X2),2),")")
-    dimdata$yrange <- paste0("(",round(as.numeric(yrange$X1),2),", ", round(as.numeric(yrange$X2),2),")")
+    xrange <- data.frame(do.call('rbind',lapply(data,function(x){as.character(range(x$longitude, na.rm=TRUE))})))
+    yrange <- data.frame(do.call('rbind',lapply(data,function(x){as.character(range(x$latitude, na.rm=TRUE))})))
+
+    #dimdata$xrange <- paste0("(",round(as.numeric(xrange$X1),2),", ", round(as.numeric(xrange$X2),2),")")
+    #dimdata$yrange <- paste0("(",round(as.numeric(yrange$X1),2),", ", round(as.numeric(yrange$X2),2),")")
+
+    if(round_out){
+      dimdata$xmin = round(as.numeric(xrange$X1),round_val)
+      dimdata$xmax = round(as.numeric(xrange$X2),round_val)
+
+      dimdata$ymin = round(as.numeric(yrange$X1),round_val)
+      dimdata$ymax = round(as.numeric(yrange$X2),round_val)
+    } else{
+      dimdata$xmin = as.numeric(xrange$X1)
+      dimdata$xmax = as.numeric(xrange$X2)
+
+      dimdata$ymin = as.numeric(yrange$X1)
+      dimdata$ymax = as.numeric(yrange$X2)
+    }
 
     dimdata$TagID <- do.call('rbind',lapply(data, function(x) as.vector(unique(x$TagID))))[,1]
     dimdata <- dimdata[order(dimdata$TagID),]
@@ -172,8 +195,9 @@ summary.Track <- function(object, Simplify = TRUE, extra_vars = NULL, simple_vie
     for(i in 1:length(unique(data$TagID))){
       data2[i] <- list(subset(data,TagID == unique(data$TagID)[i]))
     }
-    message(paste0("Summary for ", length(data2)," Track objects (animals)"))
-
+    if(verbose){
+      message(paste0("Summary for ", length(data2)," Track objects (animals)"))
+    }
     dataout <- .summary_track(data2)
     class(dataout) <- append("TrackSummary",class(dataout))
 
@@ -181,8 +205,9 @@ summary.Track <- function(object, Simplify = TRUE, extra_vars = NULL, simple_vie
   }
 
   else if(is_TrackStack(data)){
-    message(paste0("Summary for ", length(data)," Track objects (animals)"))
-
+    if(verbose){
+      message(paste0("Summary for ", length(data)," Track objects (animals)"))
+    }
     dataout <- .summary_track(data)
     class(dataout) <- append("TrackSummaryStack",class(dataout))
 
@@ -197,7 +222,9 @@ summary.Track <- function(object, Simplify = TRUE, extra_vars = NULL, simple_vie
       anikeep[[j]] <- length(data[[j]])
     }
 
-    message(paste0("Summary for ", length(data)," TrackStack objects (", paste(unlist(anikeep), collapse = ", "), " animals, repectively)"))
+    if(verbose){
+      message(paste0("Summary for ", length(data)," TrackStack objects (", paste(unlist(anikeep), collapse = ", "), " animals, repectively)"))
+    }
 
     dataout <- lapply(data,.summary_track)
     class(dataout) <- append("TrackSummaryMultiStack",class(dataout))
