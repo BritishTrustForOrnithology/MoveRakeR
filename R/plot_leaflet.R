@@ -82,16 +82,9 @@
 #' vers <- compute_vertices(ud = UD, vertices = c(95,75,50), geo_transform = TRUE)
 #' plot_leaflet(data, shapes = list(ukmap), ud = vers, radius = 1, col = "black", legend = TRUE)
 #'
-#' @import leaflet
-#' @rawNamespace import(shiny, except = c(dataTableOutput, renderDataTable, getQueryString))
-#' @import shinyWidgets
-#' @import readr
-#' @import sf
-#' @importFrom sfheaders sf_multilinestring
-#' @importFrom htmltools tagList
 #' @export
 plot_leaflet <- function(data, TagID = NULL, ud = NULL, plotby = NULL, col = NULL,
-                         plot_w = "100%", plot_h = 600, shapes = NULL,
+                         plot_w = "100%", plot_h = "75vh", shapes = NULL,
                          pcol = "black", scol = "black", points=NULL, radius = 4, legend = TRUE,
                          lines4fixes = TRUE, fixes = TRUE){
 
@@ -162,35 +155,75 @@ plot_leaflet <- function(data, TagID = NULL, ud = NULL, plotby = NULL, col = NUL
   ############ shiny ui ###########
   #################################
 
-  ui <- shiny::navbarPage(
-    title = 'Data visualisation',
-    shiny::tabPanel(title='Leaflet Map',
-        shiny::fluidPage(
-          shiny::titlePanel("Leaflet visualisation"),
-          leaflet::leafletOutput("mymap",width = plot_w, height = plot_h),
-          shiny::hr(),
-          shiny::fluidRow(
-            shiny::column(6,
-              shiny::uiOutput("tid"),
-              shiny::uiOutput("shape"),
-              shiny::uiOutput("UD")
-            ),
-            shiny::column(6,
-             shiny::uiOutput("ltog"),
-             shiny::uiOutput("ptog"),
-             shiny::uiOutput("clear")
-            )
-          ),
-          shiny::column(12,
-                        #shiny::column(12,
-                        shiny::uiOutput("Slider")
-                        #)
-          )
-          #shiny::uiOutput("shapecol"),
-        #Giving an input name and listing out types to choose in the Shiny app
+  #ui <- shiny::navbarPage(
+  #  title = 'Data visualisation',
+  #  shiny::tabPanel(title='Leaflet Map',
+  #      shiny::fluidPage(
+  #        shiny::titlePanel("Leaflet visualisation"),
+  #        leaflet::leafletOutput("mymap",width = plot_w, height = plot_h),
+  #        shiny::hr(),
+  #        shiny::fluidRow(
+  #          shiny::column(6,
+  #            shiny::uiOutput("tid"),
+  #            shiny::uiOutput("shape"),
+  #            shiny::uiOutput("UD")
+  #          ),
+  #          shiny::column(6,
+  #           shiny::uiOutput("ltog"),
+  #           shiny::uiOutput("ptog"),
+  #           shiny::uiOutput("clear")
+  #          )
+  #        ),
+  #        shiny::column(12,
+  #                      #shiny::column(12,
+  #                      shiny::uiOutput("Slider")
+  #                      #)
+  #        )
+  #        #shiny::uiOutput("shapecol"),
+  #      #Giving an input name and listing out types to choose in the Shiny app
+  #    )
+  #  )
+  #)
+
+  ui <- dashboardPage(
+    dashboardHeader(title = "Data visualisation"),
+    dashboardSidebar(
+      sidebarMenu(
+        menuItem("Leaflet Map", tabName = "leaflet_tab", icon = icon("map"))
+      )
+    ),
+    dashboardBody(
+      tabItems(
+        tabItem(tabName = "leaflet_tab",
+                # Map title
+                h3("Leaflet visualisation"),
+                # Map output
+                leafletOutput("mymap", width = plot_w, height = plot_h),
+                hr(),
+                # Controls row
+                fluidRow(
+                  column(6,
+                         uiOutput("tid"),
+                         uiOutput("shape"),
+                         uiOutput("UD")
+                  ),
+                  column(6,
+                         uiOutput("ltog"),
+                         uiOutput("ptog"),
+                         uiOutput("clear")
+                  )
+                ),
+                # Slider full-width
+                fluidRow(
+                  column(12,
+                         uiOutput("Slider")
+                  )
+                )
+        )
       )
     )
   )
+
 
   #################################
   ########## main server ##########
@@ -892,7 +925,7 @@ plot_leaflet <- function(data, TagID = NULL, ud = NULL, plotby = NULL, col = NUL
 
   }
 
-  shiny::shinyApp(ui = ui, server = server)
+  shiny::shinyApp(ui = ui, server = server, options = list(launch.browser = TRUE))
 
 }
 

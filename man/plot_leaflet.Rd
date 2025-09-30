@@ -11,7 +11,7 @@ plot_leaflet(
   plotby = NULL,
   col = NULL,
   plot_w = "100\%",
-  plot_h = 600,
+  plot_h = "75vh",
   shapes = NULL,
   pcol = "black",
   scol = "black",

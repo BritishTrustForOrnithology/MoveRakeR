@@ -98,8 +98,6 @@ final tab \strong{"Trip stats"} then summarises the metrics across all trips for
 choices selected in the leaflet map carry through to yellow highlights of that individual in
 the other linked tables. Note \code{plot_leaflet_trips} works animal by animal and doesn't
 view all animals together on a plot - see the simpler \code{plot_leaflet} function for that.
-
-It is anticipated this app will be updated to make use of R Shiny Bootstrap.
 }
 \examples{
 

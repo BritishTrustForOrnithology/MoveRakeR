@@ -50,8 +50,6 @@
 #' the other linked tables. Note \code{plot_leaflet_trips} works animal by animal and doesn't
 #' view all animals together on a plot - see the simpler \code{plot_leaflet} function for that.
 #'
-#' It is anticipated this app will be updated to make use of R Shiny Bootstrap.
-#'
 #' @param data A \code{Track} or \code{TrackStack} object; note \code{TrackMultiStack} objects not currently handled.
 #' @param TagID Option for a concatenated list of TagID numbers to be subsetted from the data.
 #' @param trips A \code{Trip} or \code{TripStack} object (note \code{TripMultStack}) objects not currently handled.
@@ -112,13 +110,6 @@
 #'
 #' #### END ###
 #'
-#' @import sf
-#' @importFrom sfheaders sf_multilinestring
-#' @import leaflet
-#' @rawNamespace import(shiny, except = c(dataTableOutput, renderDataTable, getQueryString))
-#' @import readr
-#' @import DT
-#' @import ggplot2
 #' @export
 plot_leaflet_trips <- function(data, TagID = NULL, gap = 8*60*60, gap_tol = 0.4, plotby = NULL, col = NULL, trips = NULL, shapes = NULL, points=NULL, radius = 4){
 
@@ -136,7 +127,7 @@ plot_leaflet_trips <- function(data, TagID = NULL, gap = 8*60*60, gap_tol = 0.4,
   onedata <- data
 
   # history tabulation
-  tab_hist <-  tabulate_history2(onedata)
+  tab_hist <-  tabulate_history(onedata)
 
   # as this is over gaps and we are more interested in the rates tags were on rather than overall dt gaps -
   # it would be more sensible to exclude those and evaluate rates over gapsections!
@@ -145,14 +136,14 @@ plot_leaflet_trips <- function(data, TagID = NULL, gap = 8*60*60, gap_tol = 0.4,
   if(!is.null(gap)){
 
     # then call gap_section function to assign
-    onedata = gap_section2(onedata, GAP = gap, tol = gap_tol)
+    onedata = gap_section(onedata, GAP = gap, tol = gap_tol)
 
     # and evaluate the rates by gapsection! i.e. dropping out NA's through the tidy approach of group_by()
-    rates = assign_rates2(onedata, by = unique(c("year",plotby,"gapsec")), split = FALSE, group_after_gap = TRUE)
+    rates = assign_rates(onedata, by = unique(c("year",plotby,"gapsec")), split = FALSE, group_after_gap = TRUE)
 
   } else{
     # business as usual
-    rates = assign_rates2(onedata, by = plotby, split = FALSE, group_after_gap = TRUE)
+    rates = assign_rates(onedata, by = plotby, split = FALSE, group_after_gap = TRUE)
 
   }
 
@@ -191,150 +182,138 @@ plot_leaflet_trips <- function(data, TagID = NULL, gap = 8*60*60, gap_tol = 0.4,
   # shiny ui
 
   if(!is.null(trips)){
-    ui <- shiny::navbarPage(
-      title = 'Data visualisation',
-      shiny::tabPanel(title='Leaflet Map',
-                      shiny::fluidPage(
-                        shiny::titlePanel("Leaflet visualisation"),
-                        #shiny::uiOutput("precinct"),
-                        shiny::column(6,
-                          shiny::uiOutput("tid")
-                          ),
-                        shiny::column(6,
-                          shiny::uiOutput("tripNo")
-                          ),
-                        shiny::column(12,
-                          shiny::uiOutput("Slider")
-                        ),
-                        leaflet::leafletOutput("mymap",width = "100%", height = 600)
-                        #,
-                        #shiny::actionButton("saveMap","Save map")
-
-                        #Giving an input name and listing out types to choose in the Shiny app
-                      )
+    ui <- dashboardPage(
+      dashboardHeader(title = "Data visualisation"),
+      dashboardSidebar(
+        sidebarMenu(
+          menuItem("Leaflet Map", tabName = "leaflet_map", icon = icon("map")),
+          menuItem("Trip details", tabName = "trip_details", icon = icon("table")),
+          menuItem("Trip stats", tabName = "trip_stats", icon = icon("chart-bar")),
+          menuItem("Trip metric distributions", tabName = "trip_distributions", icon = icon("chart-area")),
+          menuItem("Data spans", tabName = "data_spans", icon = icon("calendar-alt")),
+          menuItem("Rates", tabName = "rates", icon = icon("tachometer-alt"))
+        )
       ),
-      shiny::tabPanel(title='Trip details',
-                      shiny::fluidRow(
-                        shiny::column(
-                          width=10, shiny::h1('Key trip metrics'), shiny::hr(),
-                          DT::dataTableOutput('trips')
+      dashboardBody(
+        tabItems(
 
-                        )
-                      )
-      ),
-      shiny::tabPanel(title='Trip stats',
-                      shiny::fluidRow(
-                        shiny::column(
-                          width=10, shiny::h1('Summary trip stats'), shiny::hr(),
-                          DT::dataTableOutput('tripstats')
+          # Leaflet Map tab
+          tabItem(tabName = "leaflet_map",
+                  fluidRow(
+                    box(width = 6, uiOutput("tid")),
+                    box(width = 6, uiOutput("tripNo"))
+                  ),
+                  fluidRow(
+                    box(width = 12, uiOutput("Slider"))
+                  ),
+                  fluidRow(
+                    box(width = 12, leafletOutput("mymap", width = "100%", height = 600))
+                  )
+          ),
 
-                        )
-                      )
-      ),
-      shiny::tabPanel(title = "Trip metric distributions",
-                      shiny::fluidRow(
-                        title="Trip duration histogram",
-                        shiny::column(
-                          width=5,shiny::h2("One bird"),
-                          shiny::plotOutput(outputId = "TDhist")
-                        ),
-                        shiny::column(
-                          width=5,shiny::h2("All birds"),
-                          shiny::plotOutput(outputId = "TDhist2")
-                        )),
-                      shiny::fluidRow(
-                        title="Trip duration VS max distance",
-                        shiny::column(
-                          width=5,shiny::h2(""),
-                          shiny::plotOutput(outputId = "xy")
-                        ),
-                        shiny::column(
-                          width=5,shiny::h2(""),
-                          shiny::plotOutput(outputId = "xy2")
-                        )),
-                      shiny::fluidRow(
-                        title="Trip duration over time",
-                        #column(
-                        #   width=5,h2(""),
-                        #   plotOutput(outputId = "TDtime")
-                        #)
-                        #,
-                        shiny::column(
-                          width=5,shiny::h2(""),
-                          shiny::plotOutput(outputId = "TDtime2")
-                        )
-                      )
+          # Trip details tab
+          tabItem(tabName = "trip_details",
+                  fluidRow(
+                    box(width = 12, title = "Key trip metrics", status = "primary", solidHeader = TRUE,
+                        DT::dataTableOutput("trips"))
+                  )
+          ),
 
-      ),
-      shiny::tabPanel(title='Data spans',
-                      shiny::fluidRow(
-                        shiny::column(
-                          width=10, shiny::h1('Monitoring period'), shiny::hr(),
-                          DT::dataTableOutput('dataspans')
+          # Trip stats tab
+          tabItem(tabName = "trip_stats",
+                  fluidRow(
+                    box(width = 12, title = "Summary trip stats", status = "primary", solidHeader = TRUE,
+                        DT::dataTableOutput("tripstats"))
+                  )
+          ),
 
-                        )
-                      )
-      ),
-      shiny::tabPanel(title='Rates',
-                      shiny::fluidRow(
-                        shiny::column(
-                          width=4, shiny::h1('Likely sampling rates'), shiny::hr(),
-                          DT::dataTableOutput('rates')
+          # Trip metric distributions tab
+          tabItem(tabName = "trip_distributions",
+                  fluidRow(
+                    box(width = 5, title = "One bird", status = "primary", solidHeader = TRUE,
+                        plotOutput("TDhist")),
+                    box(width = 5, title = "All birds", status = "primary", solidHeader = TRUE,
+                        plotOutput("TDhist2"))
+                  ),
+                  fluidRow(
+                    box(width = 5, title = "Trip duration vs max distance", status = "primary", solidHeader = TRUE,
+                        plotOutput("xy")),
+                    box(width = 5, status = "primary", solidHeader = TRUE,
+                        plotOutput("xy2"))
+                  ),
+                  fluidRow(
+                    box(width = 5, status = "primary", solidHeader = TRUE,
+                        plotOutput("TDtime2"))
+                  )
+          ),
 
-                        ),
-                        shiny::column(
-                          width=5, shiny::h1('Rate distribution'), shiny::hr(),
-                          shiny::plotOutput(outputId = "rates.ggplot"),
-                          "Bar widths represent estimated range in potential rates the tag may have been on"
-                        )
-                      )
+          # Data spans tab
+          tabItem(tabName = "data_spans",
+                  fluidRow(
+                    box(width = 12, title = "Monitoring period", status = "primary", solidHeader = TRUE,
+                        DT::dataTableOutput("dataspans"))
+                  )
+          ),
+
+          # Rates tab
+          tabItem(tabName = "rates",
+                  fluidRow(
+                    box(width = 4, title = "Likely sampling rates", status = "primary", solidHeader = TRUE,
+                        DT::dataTableOutput("rates")),
+                    box(width = 5, title = "Rate distribution", status = "primary", solidHeader = TRUE,
+                        plotOutput("rates.ggplot"),
+                        "Bar widths represent estimated range in potential rates the tag may have been on")
+                  )
+          )
+        )
       )
     )
-
   } else{
-    ui <- shiny::navbarPage(
-      title = 'Data visualisation',
-      shiny::tabPanel(title='Leaflet Map',
-                      shiny::fluidPage(
-                        shiny::titlePanel("Leaflet visualisation"),
-                        #shiny::uiOutput("precinct"),
-                        shiny::column(6,
-                          shiny::uiOutput("tid")
-                        ),
-                        shiny::column(6,
-                          shiny::uiOutput("tripNo")
-                        ),
-                        shiny::column(12,
-                          shiny::uiOutput("Slider")
-                        ),
-                        leaflet::leafletOutput("mymap",width = "100%", height = 600)
-                        #,
-                        #shiny::actionButton("saveMap","Save map")
-                        #Giving an input name and listing out types to choose in the Shiny app
-                      )
+    ui <- dashboardPage(
+      dashboardHeader(title = "Data visualisation"),
+      dashboardSidebar(
+        sidebarMenu(
+          menuItem("Leaflet Map", tabName = "leaflet_map", icon = icon("map")),
+          menuItem("Data spans", tabName = "data_spans", icon = icon("calendar-alt")),
+          menuItem("Rates", tabName = "rates", icon = icon("tachometer-alt"))
+        )
       ),
-      shiny::tabPanel(title='Data spans',
-                      shiny::fluidRow(
-                        shiny::column(
-                          width=10, shiny::h1('Monitoring period'), shiny::hr(),
-                          DT::dataTableOutput('dataspans')
+      dashboardBody(
+        tabItems(
 
-                        )
-                      )
-      ),
-      shiny::tabPanel(title='Rates',
-                      shiny::fluidRow(
-                        shiny::column(
-                          width=5, shiny::h1('Likely sampling rates'), shiny::hr(),
-                          DT::dataTableOutput('rates')
+          # Leaflet Map tab
+          tabItem(tabName = "leaflet_map",
+                  fluidRow(
+                    box(width = 6, uiOutput("tid")),
+                    box(width = 6, uiOutput("tripNo"))
+                  ),
+                  fluidRow(
+                    box(width = 12, uiOutput("Slider"))
+                  ),
+                  fluidRow(
+                    box(width = 12, leafletOutput("mymap", width = "100%", height = 600))
+                  )
+          ),
 
-                        ),
-                        shiny::column(
-                          width=6, shiny::h1('Rate distribution'), shiny::hr(),
-                          shiny::plotOutput(outputId = "rates.ggplot"),
-                          "Bar widths represent estimated range in potential rates the tag may have been on"
-                        )
-                      )
+          # Data spans tab
+          tabItem(tabName = "data_spans",
+                  fluidRow(
+                    box(width = 12, title = "Monitoring period", status = "primary", solidHeader = TRUE,
+                        DT::dataTableOutput("dataspans"))
+                  )
+          ),
+
+          # Rates tab
+          tabItem(tabName = "rates",
+                  fluidRow(
+                    box(width = 5, title = "Likely sampling rates", status = "primary", solidHeader = TRUE,
+                        DT::dataTableOutput("rates")),
+                    box(width = 6, title = "Rate distribution", status = "primary", solidHeader = TRUE,
+                        plotOutput("rates.ggplot"),
+                        "Bar widths represent estimated range in potential rates the tag may have been on")
+                  )
+          )
+        )
       )
     )
   }
@@ -362,7 +341,7 @@ plot_leaflet_trips <- function(data, TagID = NULL, gap = 8*60*60, gap_tol = 0.4,
     extra_dat <- attr(attr(data, "define_trips"), "extra_rows")
 
     if(!is.null(extra_dat)){
-      extra_dat <- subset(extra_data, select = c(TagID, DateTime, longitude, latitude, tripNo, speed_2d, altitude, altitude_agl, satellites_used))
+      extra_dat <- subset(extra_dat, select = c(TagID, DateTime, longitude, latitude, tripNo, speed_2d, altitude, altitude_agl, satellites_used))
     }
 
     onedata_1 <- rbind(onedata_1, extra_dat)
@@ -729,7 +708,7 @@ plot_leaflet_trips <- function(data, TagID = NULL, gap = 8*60*60, gap_tol = 0.4,
 
         ) # end rendering datatable
 
-        output$tripstats <- DT::renderDataTable(DT::datatable(tabulate_trips2(onedatatrips)) %>%
+        output$tripstats <- DT::renderDataTable(DT::datatable(tabulate_trips(onedatatrips)) %>%
                                                   DT::formatStyle(
                                                     columns = 'TagID', target = 'row',
                                                     backgroundColor = DT::styleEqual(input$TagID,'yellow')
