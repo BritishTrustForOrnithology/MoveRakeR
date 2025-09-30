@@ -140,7 +140,7 @@ to specify subsections from the entire dataset available in repositories for ind
 animals. R library \code{adehabitatLT:as.:traj} is also called to add a trajectory speed to the dataset
 between fixes, along with a "dt" time difference (secs) and distance (m) between
 fixes. Note that occasionally the UvA database can go down, and recently the RODBC connection
-was not working on multiple computers. It is best to email myself or email \code{UvA-BiTS"at"uva.nl}.
+was not working on multiple computers. It is best to email the Dev, or email \code{UvA-BiTS"at"uva.nl}.
 
 There are other arguments included in this function for cleaning, but these have
 been transferred to the function \code{\link{clean_GPS}} function although they

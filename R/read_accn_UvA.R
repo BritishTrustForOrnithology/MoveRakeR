@@ -84,7 +84,6 @@
 #'
 #' @seealso [MoveRakeR::read_track_UvA], [MoveRakeR::read_pressure_UvA]
 #'
-#' @importFrom RODBC sqlQuery
 #' @export
 read_accn_UvA <- function(TagID,start=NULL,end=NULL){
 

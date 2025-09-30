@@ -36,7 +36,7 @@
 #' animals. R library \code{adehabitatLT:as.:traj} is also called to add a trajectory speed to the dataset
 #' between fixes, along with a "dt" time difference (secs) and distance (m) between
 #' fixes. Note that occasionally the UvA database can go down, and recently the RODBC connection
-#' was not working on multiple computers. It is best to email myself or email \code{UvA-BiTS"at"uva.nl}.
+#' was not working on multiple computers. It is best to email the Dev, or email \code{UvA-BiTS"at"uva.nl}.
 #'
 #' There are other arguments included in this function for cleaning, but these have
 #' been transferred to the function \code{\link{clean_GPS}} function although they
@@ -134,9 +134,6 @@
 #'
 #' @seealso [MoveRakeR::read_track_UvA], [MoveRakeR::Track2move]
 #'
-#' @importFrom move getMovebankAnimals getMovebankLocationData
-#' @importFrom adehabitatLT as.ltraj
-#' @import sf
 #' @export
 read_track_MB <- function(TagID=NULL,start=NULL,end=NULL,repo=NULL,
                           option = "BTOTT",dropsat = FALSE, dropsats=3, flt_switch=TRUE, mindata = 5,
@@ -1000,7 +997,7 @@ read_track_MB <- function(TagID=NULL,start=NULL,end=NULL,repo=NULL,
 #' \code{read_track_UvA} uses an ODBC connection to establish a link with the UvA-BiTS
 #' database. \strong{WARNING: THIS MUST BE SET UP FIRST BEFORE USING THIS FUNCTION}
 #' and of course you must have prior access to the UvA-BiTS system with a username and password. Steps to do
-#' this are provided here: \url{https://wiki.e-ecology.nl/index.php/How_to_access_the_e-Ecology_database}.
+#' this are provided here: \url{https://gitlab.com/uva_ibed_ame/uva-bits/-/wikis/How-to-access-the-e-Ecology-database}.
 #' Extraction of GPS positional data from the database is made using R library \code{RODBC}
 #' and the user must also first establish the database connection in their global environment
 #' named as object \strong{'db'}, specifying whet the connection was named as in the help file steps above:
@@ -1116,9 +1113,6 @@ read_track_MB <- function(TagID=NULL,start=NULL,end=NULL,repo=NULL,
 #' @seealso [MoveRakeR::read_track_MB], [MoveRakeR::read_pressure_UvA], [MoveRakeR::read_accn_UvA]
 #'
 #' @export
-#' @importFrom RODBC sqlQuery
-#' @importFrom adehabitatLT as.ltraj
-#' @import sf
 read_track_UvA <- function(TagID,start=NULL,end=NULL, dropsat = FALSE, dropsats=3, flt_switch=FALSE, mindata = 5, pressure = FALSE,
                            p4s = 3035,
                            verbose = TRUE){

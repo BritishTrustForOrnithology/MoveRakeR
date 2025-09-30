@@ -102,7 +102,7 @@ and then read in again for subsequent analytical steps.
 \code{read_track_UvA} uses an ODBC connection to establish a link with the UvA-BiTS
 database. \strong{WARNING: THIS MUST BE SET UP FIRST BEFORE USING THIS FUNCTION}
 and of course you must have prior access to the UvA-BiTS system with a username and password. Steps to do
-this are provided here: \url{https://wiki.e-ecology.nl/index.php/How_to_access_the_e-Ecology_database}.
+this are provided here: \url{https://gitlab.com/uva_ibed_ame/uva-bits/-/wikis/How-to-access-the-e-Ecology-database}.
 Extraction of GPS positional data from the database is made using R library \code{RODBC}
 and the user must also first establish the database connection in their global environment
 named as object \strong{'db'}, specifying whet the connection was named as in the help file steps above:

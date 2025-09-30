@@ -107,7 +107,6 @@
 #'
 #' @seealso [MoveRakeR::read_track_UvA], [MoveRakeR::read_accn_UvA]
 #'
-#' @importFrom RODBC sqlQuery
 #' @export
 read_pressure_UvA <- function(TagID,start=NULL,end=NULL, form = "mean"){
 

@@ -99,7 +99,6 @@
 #'
 #' ########## END EXAMPLE #########
 #'
-#' @importFrom RODBC sqlQuery
 #' @export
 read_voltage_UvA <- function(TagID, start=NULL, end=NULL, form = "energy"){
 
