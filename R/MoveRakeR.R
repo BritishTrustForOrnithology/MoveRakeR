@@ -1,8 +1,9 @@
 #' MoveRakeR: An R package for loading, manipulating and analysing animal tracking data.
 #'
-#' The \code{MoveRakeR} package ('Move' = animal movement; 'Rake' = cleaning data) provides several categories of functions:
-#' (1) reading in tracking data, carrying out (2) basic cleaning, (3) manipulation,
-#' summary, trip-level simple analyses and (4) plotting tracks, prior to further analytical
+#' The \code{MoveRakeR} package ('Move' = animal movement; 'Rake' = a sift through the data to check quality)
+#' provides several categories of functions:
+#' (1) reading in tracking data, carrying out (2) Data appraisal ('rake'), (3) basic data 'cleaning',
+#' (4) manipulation, summary, trip-level simple analyses and (5) plotting tracks, prior to further analytical
 #' adventures.
 #'
 #' The \code{MoveRakeR} package is primarily focused at the first stages of data manipulation and cleaning and has been
@@ -15,51 +16,93 @@
 #' and \code{AMT} (Signer et al. 2019) for further analyses and data manipulation. Of note, is that the \code{MoveRakeR} package is also
 #' currently aimed at GPS data collected from bird-borne devices, rather than other positional telemetry systems such as Argos or geolocator tags.
 #'
-#' @section Cleaning the data:
+#' @section Reading in data:
 #'
-#' When a GPS dataset is obtained, as with any data, requires scrutiny and assessment prior to further analyses
-#' being conducted to address the research question at hand. That goes without saying, however specifically for telemetry data
-#' and even more specifically for GPS data, there are certain 'cleaning' steps of the data that are typically undertaken. These mainly
-#' relate to measurement errors of the GPS data, perhaps not unlike other telemetry platforms.
+#' We provide a specific set of functions to source data from the University of Amsterdam Bird-tracking system (UvA-BiTS, Bouten et al. 2013) - see \url{https://www.uva-bits.nl/};
+#' the primary function is \code{\link{read_track_UvA}} which links directly with the postGreSQL online database. This requires initial set up of the R ODBC database connection (see function help for information).
+#' Further queries of that database are also made via functions to read in accelerometry data \code{\link{read_accn_UvA}} and
+#' data from pressure sensors \code{\link{read_pressure_UvA}} and voltage information \code{\link{read_voltage_UvA}}; a specific function is also required for
+#' plotting the voltage \code{plot.Vo}. It is often also helpful to query the UvA-BiTS database for TagIDs for the name of the repository and we
+#' therefore provide. A function not currently available in \code{MoveRakeR} is for merging of accelerometer
+#' classifications with \code{\link{Track}} data; this is not provided as it is considered up to the user how to do this but get in touch if this may be useful.
 #'
-#' Early steps in processing include dealing with duplicate records and constraining data per animal for
-#' a certain number of records and time periods. These are not covered here but instead we direct the user to the
-#' \code{move2} package liaising directly with MoveBank (Kranstauber et al. 2024). A further data preparation step is understanding the
-#' degree of location error and potential bias present in the data. These biases without treatment/consideration could have an impact on further
-#' data processing and analyses further down the line. This of course is highly dependent on the research question or intended use of data
-#' as the error in GPS may be of key interest in itself, and thus a fully 'raw' dataset may be what is needed for example to model such sources of error and understand why they occur.
-#' Some error can also be modelled/incorporated in other workflows such as continuous-time or behavioural movement modelling (e.g. R package \code{momentuHMM}, McClintock & Michelot 2018). However, a case in point is a more basic
-#' summary of movement of animals, such as migration or central place movement where it may not be the task to model such measurement errors, but
-#' instead filter the data to remove or 'clean' the data for less accurate/precise information. For example, a summary of 'foraging trips' of animals
-#' or time spent away from a central place may be all that is required, that benefits from removing GPS locations that may be clearly incorrect and their
-#' retention would inflate movement metrics. Basic area utilisation methods may also benefit from such treatment.
+#' It was not the task of \code{MoveRakeR} to fully replace any other work streams that source data from online repositories such as Movebank. However,
+#' we provide a wrapper function \code{\link{read_track_MB}} to access Movebank repositories using the \code{move} package; this was to bring data
+#' in line with the required layout for \code{MoveRakeR} and facilitated easy combining of Movebank and UvA-BiTS datasets.
+#' This may be quite a niche issue, in which case direct use of the \code{move} or \code{move2} packages are recommended.
 #'
-#' GPS locations (in the xy horizontal dimension) may be subject to positional errors that arise from a number of sources, and thus this subject is highlight complex; for example signal interference,
+#' For \code{MoveRakeR} data are required with a minimum of four columns: TagID, DateTime, longitude and latitude.
+#' These can be coerced to an in-house \code{Track} object
+#' for further generic plotting and summarising of the Track object class. The main format is a single data.frame object. listed
+#' objects are sometimes used, which are then named \code{TrackStack} and \code{TrackMultiStack} class objects. However, it is
+#' simpler to work with \code{data.frame} or \code{tibble} objects of a single dataset. These data objects can be of multiple animals. Movebank
+#' data can also be coerced to a \code{Track} format using \code{move2Track} or \code{Track2move} for the inverse operation.
+#'
+#' On a specific note, the \code{MoveRakeR} package makes substantial use of the \code{tidyverse}, specifically using R packages
+#' \code{dplyr}, \code{tibble} and \code{tidyr}. Given the aim of this package was to provide some useful tools,
+#' we have sought to make the code contained within functions accessible if need be, to avoid code becoming a 'black-box' and
+#' permit 'tidy' workflows (Langley et al. 2024). The {tidyverse} packages are used here to group data such as by TagID when carrying out specific tasks
+#' requiring a grouping, although \code{MoveRakeR} does make substantial use of base R and data.table as well.
+#'
+#' @section Data quality and outlier checking ('raking'), and data 'cleaning':
+#'
+#' When a GPS dataset is obtained, as with any data, it requires scrutiny and assessment prior to further analyses
+#' being conducted to address the research question at hand. However specifically for GPS telemetry data
+#' well-known measurement and sampling errors can initially be appraised. Here, a subtle delineation is made within
+#' \code{MoveRakeR} functions between:
+#' (1) initial assessment of potential data errors as a data 'rake', analogous to dragging
+#' a rake over the surface of some soil to uncover hidden issues, separate from:
+#' (2) 'cleaning' the data, i.e. annotating/filtering the data more formally for removal of likely erroneous data.
+#' Of course these two steps are not mutually exclusive.
+#'
+#' Regarding potential sources of error and bias, these may include dealing with duplicate records, missing (NA) location data, and constraining the amount of data per animal to
+#' a certain number of records over set time periods. It may also be worthwhile checking out other packages such as the
+#' \code{move2} package liaising directly with Movebank (Kranstauber et al. 2024) for these issues. Further consideration of a minimum number of fixes per animal
+#' may be needed. These elements can be dealt with in open code, but are uncovered through the \code{\link{rake}} and \code{\link{clean_GPS}} functions.
+#' A further Shiny app is also included \code{\link{ShinyRakeR}} that can be used to flag (i.e. annotate) the data for different perceived biases, helping to rake the data and
+#' see how these issues may stack up in a final filtering overarching step. Within that same app, and also in the \code{rake} function, the
+#' user can also check the timeline of tag deployments and density of animals tracked over time through \code{\link{tag_timeline}}, and therefore assess the temporal
+#' spread of the tracking data and sample sizes over the study duration. Spatial or temporal outliers may be rather obvious by eye, and
+#' these can also be assessed in the \code{rake} function or through direct use of the \code{\link{tag_spans}} function for proportion of data per tag
+#' that may be erroneous from an a priori expectation of spatio-temporal coverage.
+#'
+#' It is also important to assess the degree of location error and potential bias present in the data.
+#' GPS locations (xy horizontal dimension) may be subject to positional errors that arise from a number of sources; for example signal interference,
 #' obstruction (e.g. buildings, trees), interference signals, configuration and number of satellites in the sky,
 #' communication with the satellites, atmospheric conditions, and the 'start' of the tag i.e. cold-start/warm start,
-#' potentially linked also to sampling rate of the GPS. The \code{MoveRakeR} does not unpick all of these drivers specifically, but
-#' draws attention to these errors that may impact the data collected. Questions therefore arise as to how suitable the
-#' GPS data are for feeding into these simpler movement metrics (such as trip duration, distance travelled, foraging range), and where should cut-offs be
-#' placed to avoid biased estimates. Often these delineations are made based on expert judgement by the analyst by examining the precision information
-#' available from the tags deployed (that can also vary greatly in quality and amount). Fewer satellites used for a fix may result increase the error in
-#' location (minimum of three for a valid xy position and four for a vertical position) and therefore a minimum threshold of satellites available for a fix may be useful to consider.
-#' If information on satellite configuration position in the sky is available (DOP) then this may be worth examining. GPS can sometimes give highly inaccurate
-#' locations that are clearly impossible for the animal to have obtained, removed in a consecutive (forwards and backwards) way so that displacement of such fixes are captured. A simple trick is to use a maximum travel speed for the animal
-#' beyond which fixes are deemed impossible and therefore erroneous. These steps require thresholds to be set in the data, for which an initial
-#' function \code{\link{clean_GPS}} is provided. The speed filter used is a trajectory speed filter between consecutive fixes in date and time per animal,
-#' however, the sensitivity of the filter at finer temporal scales e.g. less than 60s, requires consideration, provided in the \code{\link{tspeed_jit}} function.
+#' also to sampling rate of data collection for the GPS sensor. The \code{MoveRakeR} does not unpick all of these drivers specifically, but
+#' draws attention to the resultant errors that may impact the data collected. Fewer satellites used for a fix may result increase the error in
+#' location (minimum of three for a valid xy position and four for a vertical position) and therefore a minimum threshold of satellites
+#' available for a fix may be useful to consider. If information on satellite configuration position in the sky is
+#' available (DOP) then this may be worth examining. GPS can sometimes give highly inaccurate
+#' locations that are clearly impossible for the animal to have obtained, removed in a consecutive way, through the \code{\link{speed_filt}} function
+#' and in turn within \code{ShinyRakeR} and \code{clean_GPS} so that
+#' displacement of such fixes are also captured. There are a variety of further R packages that also have other speed filter methods, such as the \code{trip}
+#' package. Nevertheless, the approach is to use a maximum travel speed for the animal beyond which fixes are deemed impossible and would therefore be erroneous.
+#' This may be complicated however, for very fine-scale (or perhaps very coarse) movements, so the sampling rate of the tag may also need considering
+#' - see function \code{\link{tspeed_jit}}.
 #'
-#' The methods used in \code{MoveRakeR} being simple metrics to consider that may carry bias, are by no means all that can be done.
-#' We recommend the R package \code{ctmm} to consider location error as well as trajectory speed estimates (Flemming et al. 2020), particularly the
-#' function ctmm::outlie() that can suggest outlying locations using distance calculations using longitude & latitude,
-#' and speeds over the timesteps, accounting for telemetry error.
+#' \code{MoveRakeR} also offers a simple assessment of potentially outlying data through the \code{\link{rake_outlie}} function. This can be useful to inform if
+#' such biases without treatment/consideration could have an impact on further data processing and analyses further down the line.
+#' This of course is highly dependent on the research question or intended use of data, as GPS error may be of key interest in
+#' itself, with methods available to model such sources of error and understand why they occur, such as continuous-time or behavioural movement
+#' modelling (R package \code{momentuHMM}, McClintock & Michelot 2018). However, there are cases where an appraisal and filtering
+#' i.e. 'cleaning' of the data for less accurate/precise information is needed. For example, a summary of 'foraging trips' of animals
+#' or time spent away from a central place may be all that is required, that benefits from removing GPS locations that may be clearly incorrect and their
+#' retention would distort movement metrics. Basic area utilisation methods may also benefit from such treatment.
+#' Among other R packages, \code{ctmm} can consider location error and trajectory speed estimates directly for detecting outliers (Flemming et al. 2020) -
+#' see function \code{ctmm::outlie}.
 #'
-#' Another key aspect of tracking data is that data collected may be interrupted, for example due to battery depletion, causing hiatuses in the
-#' recording. Through visual assessment of the data 'gaps' between GPS locations in date-time per animal can be identified and data
-#' can be labelled to flag up 'gapiness'. Having these strings of fixes identified id useful; for example, it is perhaps unwise to consider movement between two locations of
-#' with a large temporal gap as this may have missed a considerable amount of activity of the animal, particularly if distance-based metrics such as total distance
+#' Another key source of sampling bias in tracking data is that data collected may be interrupted, for example due to battery depletion, causing hiatuses in the
+#' recording. Visual assessment of the data 'gaps' between GPS locations in date-time per animal can be useful to identify these patterns, achievable both
+#' in the \code{ShinyRakeR} app and also for UvA-BiTS data through plotting a voltage data class in \code{plot.Vo}. The \code{MoveRakeR} workflow is centred upon
+#' annotation of the dataset to flag up such 'gapiness' and prevent calculations being made across timespans the user considers to be uncharacteristic of a continuous monvement pattern.
+#' These gaps in deployments can be viewed/detected at the day-level within \code{tag_timeline}. Having these strings of fixes identified id useful as a large temporal gap
+#' may have missed a considerable amount of activity of the animal, particularly if distance-based metrics such as total distance
 #' travelled are concerned. The function \code{\link{gap_section}} specifies the gap to label in the data; this gap definition is also allowed in \code{clean_GPS}. Additional operations
-#' such as consideration of what to do with 'orphaned' fixes resulting from placement as a single gapsection are also provided.
+#' such as consideration of what to do with such isolated fixes resulting from placement as a single gapsection are also provided, which is also available for consideration in the \code{ShinyRakeR} interactive tool.
+#'
+#' @section Manipulation, summary, trip-level simple analyses:
 #'
 #' Another common task is to filter (or downgrade) the data from a finer temporal sampling rate to a coarser one. This has many applications such as
 #' aligning data within and among animals across varying sampling rates, dealing with statistical issues such as temporal autocorrelation (e.g. Davies et al. 2024), or perhaps simply
@@ -75,12 +118,11 @@
 #' provide a novel sub-sampling approach to randomise this process; this is particularly useful to make maximal use of the data and important when an animal is traversing a
 #' unit of space only once, such as on migration (Schwemmer et al. 2021). The function \code{\link{sub_samp}} provides these additional capabilities.
 #'
-#' @section Central place foraging trips:
-#'
 #' Beyond the basic cleaning and filtering stages above, further annotation of the data is often required for central place foraging consideration. As mentioned above,
 #' metrics for an animal or population may be needed to assess how far typically animals move from their central place, how long trips are, and other metrics
-#' such as tortuosity, bearing, total distance and probably many others. To do this, trips ideally need annotation in the data directly and \code{MoveRakeR}
-#' uses a tidy approach as recommended by the \code{ExMove} toolkit. These processes
+#' such as tortuosity, bearing, total distance and probably many others. This links back to how suitable the GPS data are for feeding into these movement metrics and where such cut-offs should be to avoid biased estimates.
+#'
+#' Ideally, 'trips' need annotation in the data directly and \code{MoveRakeR} uses a tidy approach, as recommended by the \code{ExMove} toolkit, to achieve this. These processes
 #' are provided as a function \code{\link{define_trips}} to remove repetition of code and permitting definitions of a central place such as a radius, rectangle or polygon around a central colony point,
 #' or use of specific nest locations for individual animals; on the latter, nest locations may be known directly or perhaps where not, estimates from other
 #' approaches such as nestR (Picardi et al. 2020) or recurse (Bracis et al. 2019) may be informative, or alternatively a single colony location may be provided. These locations are needed by the function
@@ -94,45 +136,20 @@
 #' The sampling 'rate' of GPS tags may be known of course by the user, but if not, these can be estimated by simple binning of the data. This is a typically
 #' trivial task, but a separate function \code{\link{assign_rates}} is provided to assist.
 #'
-#' In should also be noted that vertical information is not the focus of \code{MoveRakeR} as this data cleaning as flight height of birds is considered a separate topic, but there is a degree of
-#' overlap in the way data may be assessed at the outset.
-#'
-#' @section Reading in data:
-#'
-#' We provide a specific set of functions to source data from the University of Amsterdam Bird-tracking system (UvA-BiTS, Bouten et al. 2013) - see \url{https://www.uva-bits.nl/};
-#' the primary function is \code{\link{read_track_UvA}} which links directly with the postGreSQL online database. This requires initial set up of the R ODBC database connection (see function help for information).
-#' Further queries of that database are also made via functions to read in accelerometry data \code{\link{read_accn_UvA}} and
-#' data from pressure sensors \code{\link{read_pressure_UvA}} and voltage information \code{\link{read_voltage_UvA}}; a specific function is also required for
-#' plotting the voltage \code{plot.Vo}. It is often also helpful to query the UvA-BiTS database for TagIDs for the name of the repository and we
-#' therefore provide. A function not currently available in \code{MoveRakeR} is for merging of accelerometer
-#' classifications with \code{\link{Track}} data; this is not provided as it is considered up to the user how to do this but get in touch if this may be useful.
-#'
-#' It was not the task of \code{MoveRakeR} to fully replace any other work streams that source data from online repositories such as MoveBank. However,
-#' we provide a wrapper function \code{\link{read_track_MB}} to access MoveBank repositories using the \code{move} package; this was to bring data
-#' in line with the required layout for \code{MoveRakeR} and facilitated easy combining of MoveBank and UvA-BiTS datasets.
-#' This may be quite a niche issue, in which case direct use of the \code{move} or \code{move2} packages are recommended.
-#'
-#' For \code{MoveRakeR} data are required with a minimum of four columns: TagID, DateTime, longitude and latitude.
-#' These can be coerced to an in-house \code{Track} object
-#' for further generic plotting and summarising of the Track object class. The main format is a single data.frame object. listed
-#' objects are sometimes used, which are then named \code{TrackStack} and \code{TrackMultiStack} class objects. However, it is
-#' simpler to work with \code{data.frame} or \code{tibble} objects of a single dataset. These data objects can be of multiple animals. MoveBank
-#' data can also be coerced to a \code{Track} format using \code{move2Track} or \code{Track2move} for the inverse operation.
-#'
-#' On a specific note, the \code{MoveRakeR} package makes substantial use of the \code{tidyverse}, specifically using R packages
-#' \code{dplyr}, \code{tibble} and \code{tidyr}. Given the aim of this package was to provide some useful tools,
-#' we have sought to make the code contained within functions accessible if need be, to avoid code becoming a 'black-box' and
-#' permit 'tidy' workflows (Langley et al. 2024). The {tidyverse} packages are used here to group data such as by TagID when carrying out specific tasks
-#' requiring a grouping, although \code{MoveRakeR} does make substantial use of base R and data.table as well.
+#' In should also be noted that at present the vertical information from GPS tags is not the primary focus of \code{MoveRakeR},
+#' although highly relevant and with potentially overlapping processing steps.
 #'
 #' @section Visualising data:
 #'
-#' This is totally up to the user of course, but some in-built plotting aids have been coded into \code{MoveRakeR} that use \code{leaflet}
-#' as a \code{shiny} application for a more interactive experience, specifically one for overall visualisation called \code{\link{plot_leaflet}}
+#' As noted above the \code{ShinyRakeR} Shiny application can be used to visualise data for 'raking' and 'cleaning' purposes.
+#' This is totally up to the user of course, but some further built-in plotting aids have been coded into \code{MoveRakeR} using \code{leaflet}
+#' as smaller \code{shiny} applications. Specifically one for overall visualisation is called \code{\link{plot_leaflet}}
 #' and one for once foraging trips have been defined on the data call \code{\link{plot_leaflet_trips}}, the latter which can help visualise
 #' specific trips, distances travelled over time and in relation to the overall distribution and so forth. Further a generic \code{plot.Track}
 #' S3 method is available if the data is coerced to a \code{Track} format. Additionally, \code{plot.Vo} is a further plot generic for voltage objects for
-#' UvA-BiTS data.
+#' UvA-BiTS data. A separate R package is available for visualisation called \code{RakeRvis}, see \href{https://github.com/BritishTrustForOrnithology/RakeRvis}{here}.
+#' This \code{RakeRvis} package is in development and uses \code{leaflet}, \code{leafgl} and \code{mapdeck}
+#' for a more elaborate visualisations, including palette choices, plotting animal data by other gradients of covariates in the data and other animations.
 #'
 #' @section Other:
 #'
@@ -193,7 +210,4 @@
 #' Sumner, M.D., Wotherspoon, S.J. & Hindell, M.A. (2009). Bayesian estimation of animal movement from archival and satellite tags.
 #' PLoS ONE, 4(10). <http://dx.plos.org/10.1371/journal.pone.0007324>.
 #'
-#'
 "_PACKAGE"
-#' @name MoveRakeR
-NULL
