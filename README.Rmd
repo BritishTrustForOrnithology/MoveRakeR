@@ -9,11 +9,9 @@ output: github_document
   
 # MoveRakeR
 
-### Current version: 1.0.5
+### Current version: 1.1.0
 
 [![DOI](https://zenodo.org/badge/948019784.svg)](https://doi.org/10.5281/zenodo.15275175)
-
-This is an initial release of `MoveRakeR`  and is subject to some ongoing updates.
 
 ## Overview
 
@@ -24,8 +22,8 @@ The R package `MoveRakeR` contains a collection of simple functions to help stre
 `MoveRakeR` needs the following packages installed:
 
 adehabitatLT,	dplyr,	tibble,	lubridate,	tidyr,	purrr,	data.table,	move,	RODBC, suncalc,
-geosphere, DT, leaflet,	shiny, shinyWidgets, suncalc, htmltools, sf, sfheaders, sp, ggplot2, R.rsp, readr, and units.
-	
+geosphere, DT, leaflet,	shiny, shinyWidgets, suncalc, htmltools, sf, sfheaders, sp, ggplot2, R.rsp, readr, 
+flexdashboard, plotly, shinydashboard, shinyWidgets, shinybusy, DT and units.
 
 ## Installation
 
@@ -37,7 +35,7 @@ devtools::install_github('BritishTrustForOrnithology/MoveRakeR', build_vignettes
 
 ## Vignettes
 
-At present, there are no vignettes in this R package but some will be added in future releases.
+At present, there are no vignettes in this R package these will be added in future releases.
 
 ## Usage
 
@@ -55,7 +53,7 @@ tabulate_history(data)
 
 ```
 
-The `MoveRakeR` package includes a number of data sourcing functions that allow data to be read into R from databases, for which the two currently implemented are MoveBank through the `read_track_MB` function, and the University of Amsterdam Bird-tracking System database (UvA-BiTS) (Bouten et al. 2013), using the `read_track_UvA` function. For the UvA-BiTS connection, you will need to
+The `MoveRakeR` package includes a number of data sourcing functions that allow data to be read into R from databases, for which the two currently implemented are MoveBank through the `read_track_MB()` function, and the University of Amsterdam Bird-tracking System database (UvA-BiTS) (Bouten et al. 2013), using the `read_track_UvA()` function. For the UvA-BiTS connection, you will need to
 first follow the steps outlined under `?read_track_UvA` to set up an ODBC connection using R package `RODBC`. The MoveBank login details are also required for use and create this calling:
 
 ``` r
@@ -66,7 +64,7 @@ library(move)
 login <- MoveBankLogin("username","password")
 ```
 
-Then data can be read in using `read_track_UvA` and `read_track_MB` that allows concatenation of animal IDs 
+Then data can be read in using `read_track_UvA()` and `read_track_MB()` that allows concatenation of animal IDs 
 and start/end times of sections of data required:
 
 ``` r
@@ -84,22 +82,25 @@ repo = "your_MoveBank_repo"
 dataMB <- read_track_MB(TagID, start=start, end=end, repo = repo)
 ```
 
-The MoveBank read in depends on the `move` package, which of course can be done directly using that package; the `read_track_MB` function seeks to align different datasets to a common form for further combination. The raw MoveBank form of the data can be preserved if need be. Note also, that the read in for MoveBank data 
+The MoveBank read in depends on the `move` package, which of course can be done directly using that package; the `read_track_MB()` function seeks to align different datasets to a common form for further combination. The raw MoveBank form of the data can be preserved if need be. Note also, that the read in for MoveBank data 
 automatically filters out duplicate data - see also `move2` (Kranstauber et al. 2024) for more details of such filtering.
 
 ## Initial visualisation
 
 A further R package is also available alongside `MoveRakeR` called `RakeRvis`, which is a `Shiny` app with detailed plotting functionality for neater visualisation using `leaflet`, `leafgl` and `mapdeck`, with further option to either load data or download data from MoveBank or UvA-BiTS. 
 
-Although this is of course up to the user, `MoveRakeR` also provides `leaflet` mapping options as two simpler R `Shiny` standalone apps that can be called upon. These will hopefully be updated in the near future to the `Bootstrap` layout more aligned with `RakeRvis`. The first of these, `plot_leaflet` and can simply allow visualisation of tracked animals, via:
+Although this is of course up to the user, `MoveRakeR` also provides `leaflet` mapping options as two simpler R `Shiny` standalone apps that can be called upon. The first of these, `plot_leaflet()` and can simply allow visualisation of tracked animals, via:
 
 ``` r
 plot_leaflet(data)
+
 ```
 
-in `plot_leaflet` there are further options for plotting shapes, additional point shape layers (using the `sf` package), and options to *plotby* a different variable, e.g. a year, cohort, behaviour etc that you may have in your data; further coloration and point/line options are available. This function is a work in progress and replicated perhaps other in further packages such as in the `bayesmove` package (Cullen 2020), and `ExMove` (Langley et al. 2024) but helps to have such a tool built in. 
+![](README_files/plot_leaflet.JPG)
 
-A further extension to this app is provided separately in `MoveRakeR` through the `plot_leaflet_trips` function. This function visualises individual trips of animals in more detail with further
+in `plot_leaflet()` there are further options for plotting shapes, additional point shape layers (using the `sf` package), and options to *plotby* a different variable, e.g. a year, cohort, behaviour etc that you may have in your data; further coloration and point/line options are available. This function is a work in progress and replicated perhaps other in further packages such as in the `bayesmove` package (Cullen 2020), and `ExMove` (Langley et al. 2024) but helps to have such a tool built in. 
+
+A further extension to this app is provided separately in `MoveRakeR` through the `plot_leaflet_trips()` function. This function visualises individual trips of animals in more detail with further
 tabs for data summaries. 
 
 A generic S3 `plot` function for is also available for Track objects, which uses base R graphics and can 
@@ -122,7 +123,7 @@ plot(data, anims = "uniq",
      p4s = 4326)
 ```
 
-Should the user be interested in voltages, then these can also be plotted through an S3 generic plot function, that plots objects of class `Vo`. But, currently this is only available for University of Amsterdam data at the moment, which is accessed through the `read_voltage_UvA` function. This may be useful to see how tags are performing, e.g. battery and solar charging after deployment to check sustainability of sampling protocols, and plotted alongside GPS data. Further options also exist to source acceleration 
+Should the user be interested in voltages, then these can also be plotted through an S3 generic plot function, that plots objects of class `Vo`. But, currently this is only available for University of Amsterdam data at the moment, which is accessed through the `read_voltage_UvA()` function. This may be useful to see how tags are performing, e.g. battery and solar charging after deployment to check sustainability of sampling protocols, and plotted alongside GPS data. Further options also exist to source acceleration 
 and pressure data from UvA-BiTS directly into R. 
 
 ## Cleaning and identifying spurious data
@@ -143,26 +144,50 @@ plot(OUT,units=FALSE)
 
 ```
 
-Alternatively, the user may deem fixes directly unsuitable by virtue of a deemed poor quality measurement in these underlying measurement parameters, for example through too few satellites or DOP values. These can be examined and then filtered out using `MoveRakeR`. The function `clean_GPS` can be used to remove data rows in the Track dataset that are determined to be incorrect by the user. This process is a rather blunt instrument in that currently this is done at the user's discretion. A further option exists to filter data based on the quality of fix column ("flt_switch") that may be available for your data from MoveBank.
+Alternatively, the user may consider fixes directly unsuitable due to poor quality measurement in these underlying measurement parameters, for example through too few satellites or DOP values. These can be examined, annotated and filtered out using `MoveRakeR`. 
 
-The function `clean_GPS` can also be used to filter by a trajectory speed to remove clear jumps in the GPS that may be obvious from visual inspection of the data. The `clean_GPS` function uses a trajectory speed filter to sequentially removes fixes that are beyond a pre-determined travel speed ('Thres') for the animal. However, within `MoveRakeR`, the function `tspeed_jit` acknowledges that trajectory speed as used in the `clean_GPS` function is dependent on sampling rate of tags, and small changes in positional xy error will have a proportionally greater influence on whether fixes collected at very fine scales, e.g. 60s or less may be deemed incorrect by `clean_GPS`. The `tspeed_jit` function helps understand this pattern through introducing bootstrapped error jitter in the fixes allowing assessment of the error curve.
-
-Finally, `clean_GPS` can label sections of GPS recording where the tag was recording at the rate as programmed; as GPS data collection is subject to battery constraints, 'gaps' may appear in the data, for which it is often useful to label to avoid extrapolation over time periods where there is greater uncertainty in position. Gaps can also be labelled separately in the `gap_section` function. The user may know the rate that tags are programmed to already, but if not, the function `assign_rates` can categorise the GPS data using the time elapsed between consecutive fixes.
+`MoveRakeR` makes a distinction between initial error/outlier assessment and potential effects of removal of 
+GPS data ('raking' through the data), and subsequently annotating and filtering out such data ('cleaning'). A shiny
+app is supplied that can assist with visual effects of this process:
 
 ``` r
-clean_GPS(data = data, dropsats = 3, Thres = 30, GAP = 28800)
+ShinyRakeR(data)
 
-gap_section(data, GAP = 28800*2)
 ```
 
-Among other packages, the `ExMove` toolkit (Langley et al. 2024) provides a Shiny App to investigate the effect of filter effects of speed and net displacement based on prior knowledge of the study system. Within `MoveRakeR` a Shiny application *is planned for future releases* to  investigate distributions of parameters and leverage plots of available location error data, and highlight potential gaps in the DateTime GPS data record (see below). 
+This app displays two main tabs, a threshold explorer and a temporal inspector, which can be synchronised. The threshold explorer is a means of annotating the data for potentially outlying fixes, the combined effects of which 
+can be explored geographically using the leaflet map as well as individually, with visual and tabular breakdowns also evaluated for proportion of fixes affected by the choices at the animal level. Options for annotating include minimum numbers of GPS fixes per animal, duplicate data, minimum numbers of satellites, dilution of precision values, trajectory speeds (using function `speed_filt()`), turning angles and spatial xy extents. A function to annotate 'gaps' in the data, `gap_section()` where GPS data obtained is intermittent i.e. deviating from the programmed sampling schedule of the tag, for which any GPS fixes left isolated between two gaps can also be flagged.
+
+![](README_files/shiny_app_1.JPG)
+
+The temporal inspector tab allows for visualisation of variables associated with the data through time as line plots, alongside a map. The histogram distribution of the variable chosen can be explored and a plot for the density of tracking data across animals through time is also displayed.
+
+
+![](README_files/shiny_app_2.JPG)
+
+For a summary of the general quality of the data, the `rake()` function can be used. This function gives s simple summary looking for general spatial and temporal extent of the data, and any birds with outlying temporal or spatial fixes, and numbers of birds tracked through time, and and so is mostly focused on potential sampling biases. The `rake()` function uses `tag_spans()` for spatial extent summaries and `tag_history()` for a daily perspective of GPS records through time per animal. A further function `rake_outlie()` can be used to look in more detail at potential measurement errors from variables in the data exploring potential outlying data using boxplot, quantile or Hampel approaches to outlier detection.
+
+Annotation or filtering of the data following data inspection can be made using the `clean_GPS()`, which is an all-encompassing process similar to the threshold explorer tab of the `ShinyRakeR()` function, to flag a combined errant data label per row. `clean_GPS()` can also filter automatically for these decisions. This process is a rather blunt instrument in that currently this is done at the user's discretion. A further option exists to filter data based on the quality of fix column ("flt_switch") that may be available for your data from MoveBank.
+
+Among other packages, the `ExMove` toolkit (Langley et al. 2024) provides a Shiny App to investigate the effect of filter effects of speed and net displacement based on prior knowledge of the study system. 
+
+The function `clean_GPS()`  uses the `speed_filt()` function noted above to filter by a trajectory speed to remove clear jumps in the GPS that may be obvious from visual inspection, which works by sequentially removing fixes that are beyond a pre-determined travel speed for the animal. However, within `MoveRakeR`, the function `tspeed_jit()` acknowledges that trajectory speed as used in the `clean_GPS()` function is dependent on scheduled tag sampling rate, and small changes in positional xy error will have a proportionally greater influence on whether fixes collected at very fine or larger scales. The `tspeed_jit()` function helps understand this pattern through introducing bootstrapped error jitter in the fixes allowing assessment of the error curve.
+
+Finally, `clean_GPS()`, as noted above, can label sections of GPS recording where the tag was recording at the rate as programmed using `gap_section()` The user may know the rate that tags are programmed to already, but if not, the function `assign_rates()` can categorise the GPS data using the time elapsed between consecutive fixes.
+
+``` r
+clean_GPS(data = data, drop_sats = 3, sp_thres = 40, GAP = 28800, drop_single_gap = FALSE)
+
+gap_section(data, GAP = 28800*2, tol = 0.2)
+
+```
 
 ## Further data manipulation
 
 A common task is to sub-sample GPS data to a common rate; this may be needed for further analytical steps
-or to align data in some way. As with all these tasks, modelling solutions may exist to not require this step. However,`MoveRakeR` provides a sub-sampling algorithm `sub_samp` that builds upon existing tools available in some other packages such as `AMT` (Signer et al. 2019) and `move` (Kranstauber et al. 2018), in particular including a bootstrap method to sub-sample data and maximise data availability, useful for animals traversing space for only a limited time such as on migration. Other approaches using interpolation and simulation are not provided in `MoveRakeR` for which other R packages are available to provide those operations, such as `adehabitatLT`, `move` and continuous-time movement modelling approaches such as `crawl` (Johnson et al. 2008) `ctmm` (Fleming & Calabrese 2023) and `aniMotum` (Jonsen et al. 2023).
+or to align data in some way. As with all these tasks, modelling solutions may exist to not require this step. However,`MoveRakeR` provides a sub-sampling algorithm `sub_samp()` that builds upon existing tools available in some other packages such as `AMT` (Signer et al. 2019) and `move` (Kranstauber et al. 2018), in particular including a bootstrap method to sub-sample data and maximise data availability, useful for animals traversing space for only a limited time such as on migration. Other approaches using interpolation and simulation are not provided in `MoveRakeR` for which other R packages are available to provide those operations, such as `adehabitatLT`, `move` and continuous-time movement modelling approaches such as `crawl` (Johnson et al. 2008) `ctmm` (Fleming & Calabrese 2023) and `aniMotum` (Jonsen et al. 2023).
 
-Further annotation of the data is often required for central place foraging consideration. Metrics for an animal or population may be needed to assess how far typically animals move from their central place, how long trips are, and other metrics such as tortuosity, bearing, total distance and probably many others. The trips are first identified provided using function `define_trips` using user-specified definitions of the central place such as a radius around a centre point, a rectangle or polygon to define the central place, or alternatively use of specific nest locations for individual animals; on the latter, nest locations may be known directly or perhaps where not, estimates from other approaches such as `nestR` (Picardi et al. 2020) or `recurse` (Bracis et al. 2019) may be informative; see also the `trip` package (Sumner et al. 2009, Sumner 2011). These locations are needed by the function to estimate where to measure the trip start/end point in space and time. The function `trip_stats` can then be used to generate movement metric summaries of trips for each animal and the group of animals. Further tabulation functions are provided such as `tabulate_trips` which takes the output from `trip_stats` and summarise the information neatly. The `trip_stats` function will return a new object of class `Trip`. The default of the `trip_stats` function is to use the first and last fix of the animal within the central place boundary to compute trip duration and distances. 
+Further annotation of the data is often required for central place foraging consideration. Metrics for an animal or population may be needed to assess how far typically animals move from their central place, how long trips are, and other metrics such as tortuosity, bearing, total distance and probably many others. The trips are first identified provided using function `define_trips()` using user-specified definitions of the central place such as a radius around a centre point, a rectangle or polygon to define the central place, or alternatively use of specific nest locations for individual animals; on the latter, nest locations may be known directly or perhaps where not, estimates from other approaches such as `nestR` (Picardi et al. 2020) or `recurse` (Bracis et al. 2019) may be informative; see also the `trip` package (Sumner et al. 2009, Sumner 2011). These locations are needed by the function to estimate where to measure the trip start/end point in space and time. The function `trip_stats()` can then be used to generate movement metric summaries of trips for each animal and the group of animals. Further tabulation functions are provided such as `tabulate_trips()` which takes the output from `trip_stats()` and summarise the information neatly. The `trip_stats()` function will return a new object of class `Trip`. The default of the `trip_stats()` function is to use the first and last fix of the animal within the central place boundary to compute trip duration and distances. 
 
 
 ``` r
@@ -182,7 +207,7 @@ plot_leaflet_trips(newdata, trips = trips)
 ```
 
 Note that complexities can arise for trips that are determined as arriving and then
-departing again from the central place with a single shared GPS fix for starts and ends of trips. These are handled in `MoveRakeR` through duplicate row records, stored as an attribute from the `define_trips` function. However should substantial data manipulation, such as base R processing, be carried out between these two functions being run, it is best to add these duplicate data directly into the data before such manipulation and ahead of `trip_stats` being run; beware that this data will likely need removing again ahead of downstream analyses.
+departing again from the central place with a single shared GPS fix for starts and ends of trips. These are handled in `MoveRakeR` through duplicate row records, stored as an attribute from the `define_trips()` function. However should substantial data manipulation, such as base R processing, be carried out between these two functions being run, it is best to add these duplicate data directly into the data before such manipulation and ahead of `trip_stats()` being run; beware that this data will likely need removing again ahead of downstream analyses.
 
 ``` r
 
@@ -213,7 +238,7 @@ The `MoveRakeR` package is mainly focused on xy position, but further functional
 
 These are all routine GIS operations, that `MoveRakeR` doesn't seek to replicate. However, 
 should you wish to add a distinction for offshore and onshore (likely very specific circumstances) then
-a function `offshore` is available to annotate as a simple binary vector. Should you be interested in distance to coast as a metric for foraging trips, then `dist2coast` is also provided, then can be fed through the `trip_stats` routine. These functions depend on you definitions of the coastline for which an `sf` shape is provided to each function, with a buffer extent available to crop the overall shape for increased efficiency.
+a function `offshore()` is available to annotate as a simple binary vector. Should you be interested in distance to coast as a metric for foraging trips, then `dist2coast()` is also provided, then can be fed through the `trip_stats()` routine. These functions depend on you definitions of the coastline for which an `sf` shape is provided to each function, with a buffer extent available to crop the overall shape for increased efficiency.
 
 ``` r
 
