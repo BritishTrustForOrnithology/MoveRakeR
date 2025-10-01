@@ -236,7 +236,7 @@ data, `gap_section()` where GPS data obtained is intermittent
 i.e. deviating from the programmed sampling schedule of the tag, for
 which any GPS fixes left isolated between two gaps can also be flagged.
 
-![](README_files/shiny_app_1.JPG)
+![](README_files/Shiny_app_1.JPG)
 
 The temporal inspector tab allows for visualisation of variables
 associated with the data through time as line plots, alongside a map.
@@ -244,7 +244,7 @@ The histogram distribution of the variable chosen can be explored and a
 plot for the density of tracking data across animals through time is
 also displayed.
 
-![](README_files/shiny_app_2.JPG)
+![](README_files/Shiny_app_2.JPG)
 
 For a summary of the general quality of the data, the `rake()` function
 can be used. This function gives s simple summary looking for general

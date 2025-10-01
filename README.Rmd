@@ -158,12 +158,12 @@ ShinyRakeR(data)
 This app displays two main tabs, a threshold explorer and a temporal inspector, which can be synchronised. The threshold explorer is a means of annotating the data for potentially outlying fixes, the combined effects of which 
 can be explored geographically using the leaflet map as well as individually, with visual and tabular breakdowns also evaluated for proportion of fixes affected by the choices at the animal level. Options for annotating include minimum numbers of GPS fixes per animal, duplicate data, minimum numbers of satellites, dilution of precision values, trajectory speeds (using function `speed_filt()`), turning angles and spatial xy extents. A function to annotate 'gaps' in the data, `gap_section()` where GPS data obtained is intermittent i.e. deviating from the programmed sampling schedule of the tag, for which any GPS fixes left isolated between two gaps can also be flagged.
 
-![](README_files/shiny_app_1.JPG)
+![](README_files/Shiny_app_1.JPG)
 
 The temporal inspector tab allows for visualisation of variables associated with the data through time as line plots, alongside a map. The histogram distribution of the variable chosen can be explored and a plot for the density of tracking data across animals through time is also displayed.
 
 
-![](README_files/shiny_app_2.JPG)
+![](README_files/Shiny_app_2.JPG)
 
 For a summary of the general quality of the data, the `rake()` function can be used. This function gives s simple summary looking for general spatial and temporal extent of the data, and any birds with outlying temporal or spatial fixes, and numbers of birds tracked through time, and and so is mostly focused on potential sampling biases. The `rake()` function uses `tag_spans()` for spatial extent summaries and `tag_history()` for a daily perspective of GPS records through time per animal. A further function `rake_outlie()` can be used to look in more detail at potential measurement errors from variables in the data exploring potential outlying data using boxplot, quantile or Hampel approaches to outlier detection.
 
