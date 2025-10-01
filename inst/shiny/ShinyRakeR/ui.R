@@ -52,11 +52,11 @@ ui <- dashboardPage(
                             tags$h4("Step 2: Annotate data", style = "color: darkgreen;"),
                             uiOutput("custom_flag_ui"),
 
-                            # 0. Too few data per bird
+                            # 0. Too few data per animal
                             div(
                               style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
                               div(style = "flex: 3;",
-                                  sliderInput("fix_thresh_slider", "Number of fixes/bird:",
+                                  sliderInput("fix_thresh_slider", "Number of fixes/animal:",
                                               min = 0, max = 100, value = 5) # that upper value may need to be flexible
                               ),
                               div(style = "flex: 1;",
@@ -67,7 +67,7 @@ ui <- dashboardPage(
                                   )
                               ),
                               div(style = "flex: 0 0 auto;",
-                                  actionButton("run_fixflag", "Run fix/bird", style = "width: 120px;")
+                                  actionButton("run_fixflag", "Run fix/animal", style = "width: 120px;")
                               )
                             ),
 
@@ -428,7 +428,7 @@ ui <- dashboardPage(
 
                         #column(
                         #width = 12,
-                        DT::dataTableOutput("rake_summary_table")  # dynamic table of birds/fixes & params
+                        DT::dataTableOutput("rake_summary_table")  # dynamic table of animals/fixes & params
                       )
                     ) # Rake box close
                   ) # fluidRow inside container close

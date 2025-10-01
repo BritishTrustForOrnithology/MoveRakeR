@@ -308,14 +308,14 @@ server <- function(input, output, session) {
   #########################################################################################################
 
   # -------------------------------------------------------------- #
-  # Birds with too few fixes
+  # Animals with too few fixes
   # -------------------------------------------------------------- #
 
   observeEvent(input$run_fixflag, {
 
     shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running pdop simple filter ...")
 
-    # basically, if any birds have too few fixes, flag it.
+    # basically, if any animals have too few fixes, flag it.
     # basic dplyr
     df <- get_annotation_base()
 
@@ -695,14 +695,14 @@ server <- function(input, output, session) {
     req(df)
     has_gaps <- "gapsec" %in% names(df)
 
-    # for each gapsection per bird - just do a simple speed filter from x to x+1
+    # for each gapsection per animal - just do a simple speed filter from x to x+1
     #browser()
 
     if(has_gaps){
       df0 = df %>% group_by(TagID, gapsec)
     } else{
       df0 = df %>% group_by(TagID)
-      warning("---- no gapsecs yet defined, running at the bird level ----")
+      warning("---- no gapsecs yet defined, running at the animal level ----")
     }
 
     df0 <- df0 %>%
@@ -1422,7 +1422,7 @@ server <- function(input, output, session) {
                           )
       if(is.null(param_val)){param_val <- "n/a"}
 
-      # this needs to be at the bird level
+      # this needs to be at the animal level
       df0 = df %>% select("TagID", col) %>% group_by(TagID) %>%
         summarise(n_flagged = sum(!!sym(col), na.rm=TRUE),
                   n_NA = length(which(is.na(!!sym(col)))),
