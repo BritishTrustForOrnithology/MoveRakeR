@@ -15,6 +15,7 @@ read_track_MB(
   flt_switch = TRUE,
   mindata = 5,
   p4s = 3035,
+  reduced = TRUE,
   verbose = TRUE
 )
 }
@@ -60,7 +61,11 @@ to be retained and is a form of cleaning, but here is retained to exclude readin
 in data from animals with too few data deemed unusable for analysis.
 Defaults to mindata = 5. It can of course be set to zero if a completely raw dataset.}
 
-\item{p4s}{A coordinate reference system argument using \code{sf::st_crs()}, thus the user just needs to enter in an epsg value, default = 27700.
+\item{p4s}{A coordinate reference system argument using \code{sf::st_crs()}, thus the user just needs to enter in an epsg value, default = 27700.}
+
+\item{reduced}{TRUE/FALSE (default TRUE) for if a subset of predefined names should be returned; use with caution
+as Movebank data structures can vary; for example this argument assumes a column called 'altitude' is present on Movebank,
+which is not always the case.
 The lat-longs extracted from the Movebank database will be projected via this CRS and stored in two new columns
 \emph{X} and \emph{Y} (note capitilisation). Note however, that further functions
 give options to change this if you wish in due course, and the user of course do all point-level manipulation
@@ -70,25 +75,28 @@ outside the functions if they so wish anyway. Argument Defaults to BNG using eps
 }
 \value{
 The final data outputted for individual animals is a \code{Track and data.frame} object.
-The output of the function depends on the "option" selection. If "BTOTT" is chosen, then this will be
+The output of the function depends on the "option" selection. If "BTOTT" is chosen, and reduced = TRUE, then this will be
 of 29 variables for each animal read in
 with column names: Type, TagID, DateTime, speed_2d, speed_3d, traj_speed, latitude, longitude,
 X, Y, dist, dt, satellites_used, gps_fixtime, gps.pdop, gps.hdop, altitude,
 altitude_agl, h_accuracy, v_accuracy, pressure, temperature, x_speed, y_speed,
 z_speed, speed_accuracy, direction, location and flt_switch.
-It is assumed here the user will be familiar with most of these. But if option = "BTOTT_MB"
-then the returned data will be whatever is stored in the Movebank database, but note, there may be
-issues if combining TWO repos with DIFFERENT dataformats so beware in that instanace as it may
+Beware that if you have different named columns for variables such as altitude (e.g. height.above.msl perhaps)
+or instantaneous speed (e.g. ground.speed), then it is best to either use reduced = TRUE or option = "BTOTT_MB".
+If option = "BTOTT_MB" then the returned data will be whatever is stored in the Movebank database, but note,
+there may then be
+issues if combining TWO repos with DIFFERENT data formats so beware in that instance as it may
 need individual repo read ins and further alignment.
-For option "BTOTT", you will notice that for Movebank and data downloaded from the University of Amsterdam
-i.e. from different sources, will have columns of all NAs for some variables
+
+For those using both University of Amsterdam and Movebank downloads and then combining datasets (rather niche)
+using option "BTOTT", data will have columns of all NAs for some variables
 that were in one database but not another. This alignment has meant the
 inclusion of missing variables in those cases. For example UvA has a gps.pdop
 value but Movetech (for data used for initial function build) had gps.hdop.
-Note also variables may differ to their
-original truly "raw" naming convention in stored databases. The output for option "BTOTT" here is
-to align and simplify for further analysis. All time units are in seconds
-and distances in metres, speeds in m/s. Importantly "location" refers to the
+Note also variables may differ to their original truly "raw" naming convention in stored databases.
+The output for option "BTOTT" here is to align and simplify for further analysis.
+
+All time units are in seconds and distances in metres, speeds in m/s. The variable "location" refers to the
 individual row.name identifier in respective databases, so that no matter what
 data are extracted in this function, the saved data can be matched back and if
 necessary recreated through the location variable if need be. This is important
