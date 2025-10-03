@@ -6,6 +6,8 @@
 #' fills that need, although this is a single GIS task obviously achievable in many ways outside this function.
 #'
 #' @param data Input data object, with required columns: TagID, DateTime, longitude, latitude.
+#' @param use_crs_shape logical defaulting to TRUE whether to use the projection of the shape provided for bird data, otherwise
+#' the function will project both bird data and the shape using the p4s argument.
 #' @param shape the function expects a single sf shape (sf MULTIPOLYGON or POLGON) representing the coastline.
 #' @param crop logical defaulting to TRUE as to whether the polygon should be cropped by a square
 #' extent (in association with the buffer_extent. This can greatly speed up the process
@@ -13,16 +15,21 @@
 #' but the user \strong{MUST BE CONFIDENT} that the points bounded by the cropped shape outline will be those closest, and not
 #' for instance a separate part of the polygon outside the crop, or the border of the actual crop. A warning
 #' directs attention to this issue - it is best to plot first and carefully assess.
+#' @param simplify TRUE/FALSE defaults to TRUE, using \code{rmapshaper::ms_simplify}.
+#' @param keep Parameter of \code{rmapshaper::ms_simplify}, defaults to 0.05 (5-10% points retains).
 #' @param plot logical defaulting to TRUE giving a local pop up plot window.
-#' @param use_crs_shape logical defaulting to TRUE whether to use the projection of the shape provided for bird data, otherwise
-#' the function will project both bird data and the shape using the p4s argument.
+#' @param lon_min Minimum longitude WGS84 for plotting if plot = TRUE (default = 0).
+#' @param lon_max Minimum longitude WGS84 for plotting if plot = TRUE (default = 10).
+#' @param lat_min Minimum longitude WGS84 for plotting if plot = TRUE (default = 50).
+#' @param lat_max Minimum longitude WGS84 for plotting if plot = TRUE (default = 55).
 #' @param buffer_extent A value to further add around the bird data to circumvent potential issues
 #' of edges of the cropped map missing potential true land area; a default value is specified as 50000
 #' but this will depend on map units and it is suggested this is checked before hand if using this option.
 #' @param p4s The \code{sf} projection required for overlap processing, defaulting to BNG \code{epsg:3035}.
 #' @param verbose logical, defaulting to TRUE, should detailed output messaging be returned on run of the function.
 #'
-#' @return The same dataset object as input with an additional column of dist2coast in metres.
+#' @return The same dataset object as input with an additional column of dist2coast in metres and a column of
+#' onshore TRUE/ALSE for if points were inside the shape (onshore) or outside the shape (offshore).
 #'
 #' @seealso [MoveRakeR::offshore], [MoveRakeR::trip_stats]
 #'
@@ -49,169 +56,199 @@
 #'     crop = TRUE, plot = TRUE, buffer_extent = 50000, p4s = 3035)
 #'
 #' @export
-dist2coast <- function(data, use_crs_shape = TRUE, shape = NULL, crop = TRUE, plot = FALSE,
-                      buffer_extent = 50000, p4s = 3035, verbose = TRUE){
+dist2coast <- function (data, use_crs_shape = TRUE, shape = NULL, crop = TRUE,
+                        simplify = TRUE, keep = 0.05, # rshapemapper arguments
+                        lon_min = 0, # for plotting
+                        lon_max = 10,
+                        lat_min = 50,
+                        lat_max = 55,
+                        plot = FALSE, buffer_extent = 50000, p4s = 3035, verbose = TRUE){
 
-  cond <- ifelse(all(c("TagID","DateTime", "longitude", "latitude") %in% names(data)), TRUE, FALSE) # required columns
-  if(!cond){
+  cond <- ifelse(all(c("TagID", "DateTime", "longitude", "latitude") %in%
+                       names(data)), TRUE, FALSE)
+  if(!cond) {
     stop("Missing column names! Check input data for named columns: 'TagID','DateTime','longitude','latitude'")
   }
-
-  #######
-  if(verbose){message("Adding distances (m) to coast inland and offshore")}
-
-  # get attributes from previous function runs
+  if(verbose) {
+    message("Adding distances (m) to coast inland and offshore")
+  }
   attr_list <- get_attributes(data)
-
-  # -------------------- #
-  # check for extra rows for trips that may share a start and end - these will need labelling as well
   extra_rows <- NULL
   extra_rows <- attr(attr(data, "define_trips"), "extra_rows")
-
-  # these will need binding for the trip duration and total distance, but note that should not be retained as it distorts the original data
-  if(!is.null(extra_rows)){
-    if(nrow(extra_rows) > 0){
+  if(!is.null(extra_rows)) {
+    if(nrow(extra_rows) > 0) {
       message("Extra rows found from define_trips() function run")
       extra_rows$extra_row = 1
-      data = data %>% mutate(extra_row = 0) %>% bind_rows(.,extra_rows) %>% arrange(TagID,DateTime)
+      data = data %>% mutate(extra_row = 0) %>% bind_rows(.,
+                                                          extra_rows) %>% arrange(TagID, DateTime)
     }
   }
-  # -------------------- #
+  if(!inherits(data,"sf")){
+    b_sf <- sf::st_as_sf(data, coords = c("longitude", "latitude"), crs = 4326)
 
-  #######
-  b_sf <- sf::st_as_sf(data, coords = c("longitude", "latitude"), crs = 4326)
+    if(verbose) {
+      message("Projecting shapes using p4s argument")
+    }
 
-  # project first to whatever the CRS is of the shapefile supplied
+  } else{
+    if(verbose) {
+      message("sf data detected, projecting using p4s")
+      b_sf <- data
+    }
+  }
 
-  if(verbose){message("Projecting shapes using p4s argument")}
-  if(use_crs_shape){
+  if(use_crs_shape) {
     b_sf <- sf::st_transform(b_sf, sf::st_crs(shape))
   } else{
-
     b_sf <- sf::st_transform(b_sf, p4s)
-
-    # only then reproject the shape as could slow down run time
-    if(!identical(sf::st_crs(shape),sf::st_crs(b_sf))){
-
+    if (!identical(sf::st_crs(shape), sf::st_crs(b_sf))) {
       shape <- sf::st_transform(shape, p4s)
-
     }
   }
 
-  if(crop){
-
-    if(verbose){message("Using a further crop of the shape based on bird extent:
-       --> CAUTION: make sure GPS points are away from edges of the map! <--")}
-
-    BBox <- sf::st_bbox(b_sf) # box around the GPS point extent
-
-    # get the bounding box of the animal sf object, buffer by chosen amount
+  if(crop) {
+    if(verbose) {
+      message("Using a further crop of the shape based on bird extent:\n       --> CAUTION: make sure GPS points are away from edges of the map! <--")
+    }
+    BBox <- sf::st_bbox(b_sf)
     bbox_animal <- sf::st_bbox(b_sf)
     bbox_pol <- sf::st_as_sfc(bbox_animal)
     extent_polygon <- sf::st_as_sf(bbox_pol)
-
-    if(!is.null(buffer_extent)){
-      if(verbose){message("---- Adding buffer around bird data extent ----
-        --> Make sure the scale units in buffer_extent make sense with the proj used <--")}
+    if(!is.null(buffer_extent)) {
+      if(verbose) {
+        message("---- Adding buffer around bird data extent ----\n        --> Make sure the scale units in buffer_extent make sense with the proj used <--")
+      }
       extent_polygon <- sf::st_buffer(extent_polygon, buffer_extent)
     }
-
     ex = sf::st_bbox(extent_polygon)
-
-    sf::st_agr(shape) = "constant" # assumme attribute geometry is consistent throughout (see above)
+    sf::st_agr(shape) = "constant"
     mm <- sf::st_crop(shape, ex)
-
   } else{
     mm <- shape
   }
 
-  ## STRONGLY ADVISED THAT YOU VIEW THE PLOT AND SEE IF ANY POINT GO NEARER THE EXTENT IN WHICH
-  ## CASE NEEDS EXPANDING OR RUNNING SEPARATELY
-  if(plot){
 
-    x11()
-    if(crop){
-
-      plot(mm$geometry, xlim = c(ex[[1]],ex[[3]]), ylim = c(ex[[2]],ex[[4]]) )
-
-    } else{
-      plot(mm$geometry)
-    }
-    # points
-    plot(b_sf$geometry, cex=0.2, add=TRUE, pch=21, col="red", bg="red")
-
+  if(verbose) {
+    message("--- Calculating distance of closest point along LINESTRING to each GPS fix ---")
   }
-
-  ################### Distance calculations ######################
-  ##### distance to nearest polygon - but....only for offshore points lying outside poly in this example
-  ##### see: https://stackoverflow.com/questions/51292952/snap-a-point-to-the-closest-point-on-a-line-segment-using-sf
-
-  if(verbose){message("--- Calculating distance of closest point along LINESTRING to each GPS fix ---")}
 
   start = Sys.time()
 
-  # this is too slow really
-  # cast to line string
+  ############## OLD VERY SLOW
+  #mm <- sf::st_union(mm)
+  #L = sf::st_cast(mm, "MULTILINESTRING")
+  #b_sf %>% ungroup() %>% mutate(my_linestring = sf::st_nearest_points(geometry,
+  #     L), closest_point = sf::st_cast(my_linestring, "POINT")[seq(2,nrow(.) * 2, 2)]) %>% {closest_points <<- .}
+  #vv = sf::st_distance(b_sf$geometry, closest_points$closest_point,
+  #                     by_element = TRUE)
+  #data$dist2coast <- vv
 
+
+  ############## NEW FASTER
+  # Union land polygons into one geometry
+  if(verbose){message("--- Make valid shape and union --- ")}
+  mm <- sf::st_make_valid(mm)
   mm <- sf::st_union(mm)
-  L = sf::st_cast(mm, "MULTILINESTRING")
 
-  b_sf %>% ungroup() %>%
+  # Keep only keep*100 to (keep*100)+5% of points
+  if(simplify){
+    if(verbose){message("--- Simplifying using rmapshaper (keep = ", keep, ", keep_shapes = TRUE) ---")}
+    mm_simple <- rmapshaper::ms_simplify(mm, keep = keep, keep_shapes = TRUE)
+  } else{
+    mm_simple <- mm
+  }
+
+  # Coastline as LINESTRING, for distance calcs
+  coastline <- st_cast(mm_simple, "MULTILINESTRING")
+
+  # Inside/outside classification
+  b_sf <- b_sf %>%
     mutate(
-      my_linestring = sf::st_nearest_points(geometry, L),
-      closest_point = sf::st_cast(my_linestring, 'POINT')[seq(2, nrow(.)*2, 2)]
-    ) %>%
-    {. ->> closest_points}
+      onshore = lengths(st_within(geometry, mm_simple)) > 0
+    )
 
-  # get distance using by_element to bypass original mapply sluggishness: https://github.com/r-spatial/sf/issues/1044
-  vv = sf::st_distance(b_sf$geometry, closest_points$closest_point, by_element = TRUE)
+  # Distance to coast (regardless of in/out)
+  b_sf <- b_sf %>%
+    mutate(
+      dist2coast = st_distance(geometry, coastline)
+    )
 
-  data$dist2coast <- vv
+  b_sf$dist2coast <- as.numeric(b_sf$dist2coast)
+  data$dist2coast <- b_sf$dist2coast
+  data$onshore <- b_sf$onshore
+
+  ############ PLOT
+  if(plot){
+    if(verbose){message("--- Plot checker --- ")}
+    # Example: your desired lon/lat box
+    lonlat_bbox <- st_sfc(
+      st_polygon(list(rbind(
+        c(lon_min, lat_min),
+        c(lon_min, lat_max),
+        c(lon_max, lat_max),
+        c(lon_max, lat_min),
+        c(lon_min, lat_min)
+      ))),
+      crs = 4326  # WGS84
+    )
+
+    # Transform to map CRS
+    proj_bbox <- st_transform(lonlat_bbox, st_crs(b_sf))
+
+    # Extract numeric bbox for plotting
+    bbox_nums <- st_bbox(proj_bbox)
+    ggplot() +
+      geom_sf(data = b_sf, aes(color = onshore)) +
+      geom_sf(data = coastline, color = "black", size = 0.4) +
+
+      scale_color_manual(values = c("TRUE" = "blue", "FALSE" = "red")) +
+      scale_size_continuous(range = c(1, 3)) +
+      theme_minimal() +
+      coord_sf(xlim = c(bbox_nums["xmin"], bbox_nums["xmax"]),
+               ylim = c(bbox_nums["ymin"], bbox_nums["ymax"]))
+
+    #x11()
+    #if (crop) {
+    #  plot(mm$geometry, xlim = c(ex[[1]], ex[[3]]), ylim = c(ex[[2]],
+    #                                                         ex[[4]]))
+    #} else{
+    #  plot(mm$geometry)
+    #}
+    #plot(b_sf$geometry, cex = 0.2, add = TRUE, pch = 21,
+    #     col = "red", bg = "red")
+  }
+
+  #RakeRvis::RakeRvis(Track(data), shapes = list(shape))
+  ################
 
   end = Sys.time()
-
-  val_tke <- as.vector(difftime(end,start, unit = 'secs'))
-  units = 'secs'
-  if(val_tke > 60){
-    val_tke <- val_tke /60
-    units = 'mins'
+  val_tke <- as.vector(difftime(end, start, unit = "secs"))
+  units = "secs"
+  if(val_tke > 60) {
+    val_tke <- val_tke/60
+    units = "mins"
   }
-  if(verbose){print(paste0("--- Time ellapsed: ", round(val_tke,3), " ", units, " ---"))}
-
-  # --------------------------------------------------------- #
+  if(verbose) {
+    print(paste0("--- Time ellapsed: ", round(val_tke, 3),
+                 " ", units, " ---"))
+  }
   data <- give_attributes(data, attr_list)
-
-  # --------------------------------------------------------- #
-  # new attributes on current function run
-  if(is.null(attr(data, "dist2coast") )){
+  if(is.null(attr(data, "dist2coast"))) {
     attr(data, "dist2coast") <- "dist2coast"
   }
-
-  # sub_attributes for arguments
   attr(attr(data, "dist2coast"), "use_crs_shape") <- use_crs_shape
   attr(attr(data, "dist2coast"), "crop") <- crop
   attr(attr(data, "dist2coast"), "buffer_extent") <- buffer_extent
-  #attr(attr(data, "dist2coast"), "shape") <- shape # could get memory hungry!
   attr(attr(data, "dist2coast"), "p4s") <- p4s
-
-  # -------------------- #
-  # update the extra rows slot
-
-  if(is.null(attr(data, "define_trips") )){
+  if(is.null(attr(data, "define_trips"))) {
     attr(data, "define_trips") <- "define_trips"
   }
-  attr(attr(data, "define_trips"), "extra_rows") <- data[data$extra_row == 1,]
 
-  # remove extra rows from the main data
-  data <- data[data$extra_row == 0,]
-
-  # -------------------- #
-
-
+  if(exists("extra_row", data)){
+    attr(attr(data, "define_trips"), "extra_rows") <- data[data$extra_row == 1, ]
+    data <- data[data$extra_row == 0, ]
+  }
 
   return(data)
-
 }
-
-
 

@@ -18,6 +18,7 @@
 #' @import sf
 #' @import sp
 #' @import ggplot2
+#' @importFrom rmapshaper ms_simplify
 #' @importFrom move getMovebankAnimals getMovebankLocationData movebankLogin move moveStack
 #' @importFrom RODBC sqlQuery odbcConnect
 #' @importFrom viridisLite viridis

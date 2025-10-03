@@ -1,7 +1,7 @@
 ---
 title: "README"
 author: "Chris Thaxter"
-date: "25/04/2025"
+date: "03/10/2025"
 output: github_document
 ---
 
@@ -9,7 +9,7 @@ output: github_document
   
 # MoveRakeR
 
-### Current version: 1.1.0
+### Current version: 1.1.1
 
 [![DOI](https://zenodo.org/badge/948019784.svg)](https://doi.org/10.5281/zenodo.15275175)
 
@@ -23,7 +23,7 @@ The R package `MoveRakeR` contains a collection of simple functions to help stre
 
 adehabitatLT,	dplyr,	tibble,	lubridate,	tidyr,	purrr,	data.table,	move,	RODBC, suncalc,
 geosphere, DT, leaflet,	shiny, shinyWidgets, suncalc, htmltools, sf, sfheaders, sp, ggplot2, R.rsp, readr, 
-flexdashboard, plotly, shinydashboard, shinyWidgets, shinybusy, DT and units.
+flexdashboard, plotly, shinydashboard, shinyWidgets, shinybusy, DT, rmapshaper and units.
 
 ## Installation
 

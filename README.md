@@ -1,13 +1,13 @@
 README
 ================
 Chris Thaxter
-25/04/2025
+03/10/2025
 
 <!-- README.md is generated from README.Rmd. Please edit that file, but only with package maintainer's permission -->
 
 # MoveRakeR
 
-### Current version: 1.1.0
+### Current version: 1.1.1
 
 [![DOI](https://zenodo.org/badge/948019784.svg)](https://doi.org/10.5281/zenodo.15275175)
 
@@ -37,7 +37,8 @@ Flemming et al. (2020) and the `ctmm` R package (Fleming & Calabrese
 adehabitatLT, dplyr, tibble, lubridate, tidyr, purrr, data.table, move,
 RODBC, suncalc, geosphere, DT, leaflet, shiny, shinyWidgets, suncalc,
 htmltools, sf, sfheaders, sp, ggplot2, R.rsp, readr, flexdashboard,
-plotly, shinydashboard, shinyWidgets, shinybusy, DT and units.
+plotly, shinydashboard, shinyWidgets, shinybusy, DT, rmapshaper and
+units.
 
 ## Installation
 
