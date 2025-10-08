@@ -2191,13 +2191,14 @@ server <- function(input, output, session) {
 
   # - o - o - o - o - o - o - o - o - o - o - o - o - o - o #
   # GPS fixes
-  df_debounced <- debounce(filtered_data, 500)  # 500 ms delay
-
+  #df_debounced <- debounce(filtered_data, 500)  # 500 ms delay
 
   observe({
-    df <- as.data.frame(df_debounced()) # for leafgl
-
+    #df <- as.data.frame(df_debounced()) # for leafgl
+    df <- filtered_data()
     req(df)
+    req(nrow(df)>0)
+
     #req(nrow(df) > 0)
     req(!is.null(df), nrow(df) > 0)
     pal <- tag_palette()

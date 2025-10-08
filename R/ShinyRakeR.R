@@ -61,7 +61,7 @@
 #' ShinyRakeR(data)
 #'
 #' @export
-ShinyRakeR <- function(data = NULL, dev = TRUE, launchBrowser = TRUE,
+ShinyRakeR <- function(data = NULL, dev = FALSE, launchBrowser = TRUE,
                        Providers = c("OpenStreetMap", "GoogleEarth", "Esri.OceanBasemap", "Esri.WorldImagery")
   ){
 

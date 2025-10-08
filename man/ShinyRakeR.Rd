@@ -6,7 +6,7 @@
 \usage{
 ShinyRakeR(
   data = NULL,
-  dev = TRUE,
+  dev = FALSE,
   launchBrowser = TRUE,
   Providers = c("OpenStreetMap", "GoogleEarth", "Esri.OceanBasemap", "Esri.WorldImagery")
 )

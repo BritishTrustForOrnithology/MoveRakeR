@@ -9,6 +9,12 @@ dist2coast(
   use_crs_shape = TRUE,
   shape = NULL,
   crop = TRUE,
+  simplify = TRUE,
+  keep = 0.05,
+  lon_min = 0,
+  lon_max = 10,
+  lat_min = 50,
+  lat_max = 55,
   plot = FALSE,
   buffer_extent = 50000,
   p4s = 3035,
@@ -30,6 +36,18 @@ but the user \strong{MUST BE CONFIDENT} that the points bounded by the cropped s
 for instance a separate part of the polygon outside the crop, or the border of the actual crop. A warning
 directs attention to this issue - it is best to plot first and carefully assess.}
 
+\item{simplify}{TRUE/FALSE defaults to TRUE, using \code{rmapshaper::ms_simplify}.}
+
+\item{keep}{Parameter of \code{rmapshaper::ms_simplify}, defaults to 0.05 (5-10\% points retains).}
+
+\item{lon_min}{Minimum longitude WGS84 for plotting if plot = TRUE (default = 0).}
+
+\item{lon_max}{Minimum longitude WGS84 for plotting if plot = TRUE (default = 10).}
+
+\item{lat_min}{Minimum longitude WGS84 for plotting if plot = TRUE (default = 50).}
+
+\item{lat_max}{Minimum longitude WGS84 for plotting if plot = TRUE (default = 55).}
+
 \item{plot}{logical defaulting to TRUE giving a local pop up plot window.}
 
 \item{buffer_extent}{A value to further add around the bird data to circumvent potential issues
@@ -41,7 +59,8 @@ but this will depend on map units and it is suggested this is checked before han
 \item{verbose}{logical, defaulting to TRUE, should detailed output messaging be returned on run of the function.}
 }
 \value{
-The same dataset object as input with an additional column of dist2coast in metres.
+The same dataset object as input with an additional column of dist2coast in metres and a column of
+onshore TRUE/ALSE for if points were inside the shape (onshore) or outside the shape (offshore).
 }
 \description{
 Function for calculating the nearest distance to coast both offshore and inland using a specified polygon.
