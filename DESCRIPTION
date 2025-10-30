@@ -1,7 +1,7 @@
 Package: MoveRakeR
 Type: Package
 Title: An R package to source, clean and visualise tracking data.
-Version: 1.1.1
+Version: 1.1.2.9000
 Authors@R: 
     person(given = "Chris",
            family = "Thaxter",
@@ -48,5 +48,7 @@ Imports:
 	units,
 	flexdashboard,
 	plotly,
-	rmapshaper
+	rmapshaper,
+	magrittr,
+	viridisLite
 	
