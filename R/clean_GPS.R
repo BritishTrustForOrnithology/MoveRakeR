@@ -457,7 +457,7 @@ clean_GPS <- function(data,
       }
 
       # sats < min thresh
-      if(any(data_dp$satellites_used <= drop_sats)){
+      if(any(na.omit(data_dp$satellites_used) <= drop_sats)){
         data_dp$sat_rm <- ifelse( data_dp$satellites_used <= drop_sats,1, data_dp$sat_rm)
         #data_dp$sat_rm <- ifelse( is.na(data_dp$sat_rm),NA, data_dp$sat_rm)
       }
