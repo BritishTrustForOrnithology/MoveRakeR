@@ -37,8 +37,8 @@ Flemming et al. (2020) and the `ctmm` R package (Fleming & Calabrese
 adehabitatLT, dplyr, tibble, lubridate, tidyr, purrr, data.table, move,
 RODBC, suncalc, geosphere, DT, leaflet, shiny, shinyWidgets, suncalc,
 htmltools, sf, sfheaders, sp, ggplot2, R.rsp, readr, flexdashboard,
-plotly, shinydashboard, shinyWidgets, shinybusy, DT, rmapshaper and
-units.
+plotly, shinydashboard, shinyWidgets, shinybusy, DT, rmapshaper, units,
+magrittr and viridisLite.
 
 ## Installation
 
@@ -50,21 +50,24 @@ devtools::install_github('BritishTrustForOrnithology/MoveRakeR', build_vignettes
 
 ## Vignettes
 
-At present, there are no vignettes in this R package these will be added
-in future releases.
+There is currently one vignette called *“Cleaning and Raking”*, that
+gives a more detailed overview of the initial error-checking and data
+annotation/filtering processes involved at the outset. Further vignettes
+will be added to show the overall layout and general usage of the
+package, initial read in and data handling, data manipulation, and
+defining trips.
 
 ## Usage
 
-By way of a brief history, `MoveRakeR` was borne out of seabird tracking
-work. Although not entirely, much of the focus of `MoveRakeR` is on
-movements of tracked animals from a central place, used within numerous
-papers to date (e.g. Thaxter et al. 2015, Langley et al. 2021, Clewley
-et al. 2023, O’Hanlon et al. in prep).
-
-The `MoveRakeR` pipeline requires a dataset with the following columns:
-*TagID*, *DateTime*, *latitude* and *longitude*. The `MoveRakeR` process
-is built around a `Track` class object. This is not a strict requirement
-but aids in visualisation of printing, plotting and summarising.
+`MoveRakeR` was borne out of seabird tracking work. Much of the focus of
+`MoveRakeR` is on movements of tracked animals from a central place,
+used within numerous papers to date (e.g. Thaxter et al. 2015, Langley
+et al. 2021, Clewley et al. 2023, Thaxter et al. 2025, O’Hanlon et
+al. 2025). The `MoveRakeR` pipeline requires a dataset with the
+following columns: *TagID*, *DateTime*, *latitude* and *longitude*. The
+`MoveRakeR` process is built around a `Track` class object. This is not
+a strict requirement but aids in visualisation of printing, plotting and
+summarising.
 
 ``` r
 data <- read.csv(data.csv,sep = ",", header=TRUE)
@@ -425,20 +428,22 @@ newdata <- data %>%
 Bouten, W., Baaij, E.W., Shamoun-Baranes, J. & Camphuysen, K.C.J. (2013)
 A flexible GPS tracking system for studying bird behaviour at multiple
 scales. Journal of Ornithology, 54, 571–580.
+<https://doi.org/10.1007/s10336-012-0908-1>
 
 Bracis, C., Bildstein, K.L. & Mueller, T. (2018) Revisitation analysis
-uncovers spatio-temporal patterns in animal movement data. Ecography,
-doi.10.1111/ ecog.03618.
+uncovers spatio-temporal patterns in animal movement data. Ecography.
+<https://doi.10.1111/ecog.03618>
 
 Calenge, C. (2006) The package adehabitat for the R software: tool for
 the analysis of space and habitat use by animals. Ecological Modelling,
-197, 516-519
+197, 516-519. <https://doi.org/10.1016/j.ecolmodel.2006.03.017>
 
 Clewley, G.D., Thaxter, C., Scragg, E.S., Masden, E.A., Barber, L.J.,
 Conway, G., Clark, N.A. & Burton, N.H.K. (2023) Daily, seasonal and
 annual variation in area use of Lesser Black-backed Gulls (*Larus
-fuscus*) related to offshore renewable developments. Bird Study, 70,
-<doi:10.1080/00063657.2023.2190080>
+fuscus*) related to offshore renewable developments. Bird Study, 70.
+<a href="https://doi:10.1080/00063657.2023.2190080"
+class="uri">https://doi:10.1080/00063657.2023.2190080</a>
 
 Cullen, J. (2020) R package ‘bayesmove’ v 0.1.0.
 <https://github.com/joshcullen/bayesmove>
@@ -452,31 +457,26 @@ Pfeiffer, T., Pike, K.N., Roulin, A., Safi, K., Séchaud, R., Scharf,
 A.K., Shephard, J.M., Stabach, J.A., Stein, K., Tonra, C.M., Yamazaki,
 K., Fagan, W.F. & Calabrese, J.M. (2020) A comprehensive framework for
 handling location error in animal tracking data. bioRxiv
-2020.06.12.130195; doi: <https://doi.org/10.1101/2020.06.12.130195>
+2020.06.12.130195. <https://doi.org/10.1101/2020.06.12.130195>
 
 Fleming, C.H. & Calabrese, J.M. (2023). ctmm: Continuous-Time Movement
 Modeling. R package version 1.2.0.
 <https://CRAN.R-project.org/package=ctmm>
 
-Langley, L.P., Bearhop, S., Burton, N.H. Banks, A.N., Frayling, T.,
-Thaxter, C.B., Clewley, G.D., Scragg, E. & Votier, S.C. (2021) GPS
-tracking reveals landfill closures induce higher foraging effort and
-habitat switching in gulls. Movement Ecology, 9, 56
-<https://doi.org/10.1186/s40462-021-00278-2>
-
 Johnson, D.S., London, J.M., Lea, M.-A. & Durban, J.W. (2008)
 Continuous-time correlated random walk model for animal telemetry data.
-Ecology, 89, 1208-1215. <doi:10.1890/07-1032.1>.
+Ecology, 89, 1208-1215. <a href="https://doi:10.1890/07-1032.1"
+class="uri">https://doi:10.1890/07-1032.1</a>
 
 Jonsen, I.D., Grecian, W.J., Phillips, L., Carroll, G., McMahon, C.,
 Harcourt, R.G., Hindell, M.A. & Patterson, T.A. (2023) aniMotum, an R
 package for animal movement data: Rapid quality control, behavioural
 estimation and simulation. Methods in Ecology & Evolution, 14(3),
-806-816.
+806-816. <https://doi.org/10.1111/2041-210X.14060>
 
 Joo, R., Boone, M.E., Clay, T.A., Patrick, S.C., Clusella-Trulas, S. &
 Basille, M. (2020) Navigating through the R packages for movement. BES,
-89, 248-267.
+89, 248-267. <https://doi.org/10.1111/1365-2656.13116>
 
 Kranstauber, B., Smolla, M., & Scharf, A. K. (2018). move: Visualizing
 and analyzing animal track data. R package version 3.1.0.
@@ -484,11 +484,25 @@ and analyzing animal track data. R package version 3.1.0.
 
 Kranstauber, B., Safi, S. & Scharf, A.K. (2024) move2: R package for
 processing movement data. Methods in Ecology and Evolution, 15(9),
-1561-1567.
+1561-1567. <https://doi.org/10.1111/2041-210X.14383>
+
+Langley, L.P., Bearhop, S., Burton, N.H. Banks, A.N., Frayling, T.,
+Thaxter, C.B., Clewley, G.D., Scragg, E. & Votier, S.C. (2021) GPS
+tracking reveals landfill closures induce higher foraging effort and
+habitat switching in gulls. Movement Ecology, 9, 56
+<https://doi.org/10.1186/s40462-021-00278-2>
+
+O’Hanlon, N.J., Clewley, G.D., Johnston, D.T., Thaxter, C.B., Langlois
+Lopez S., Quinn, L.R., Boersch-Supan, P.H., Masden, E.A., Daunt, F.,
+Wilson, J., Burton, N.H.K., Humphreys, E.M. Partial Niche Partitioning
+in Three Sympatric Gull Species Through Foraging Areas and Habitat
+Selection. Ecology & Evolution, 15(7), e71577
+<https://doi.org/10.1002/ece3.71577>
 
 Signer, J. Fieberg, J. & Avgar, T. (2019) Animal movement tools (AMT): R
 package for managing tracking data and conducting habitat selection
 analysis. Ecology and Evolution, 9, 880-890.
+<https://doi.org/10.1002/ece3.4823>
 
 Sumner, M.D. (2011) The Tag Location Problem. Ph.D. thesis, University
 of Tasmania. <https://eprints.utas.edu.au/12273/3/sumner.pdf>.
@@ -501,4 +515,12 @@ Thaxter, C.B., Ross-Smith, V.H., Bouten, W., Clark, N.A., Conway, G.J.,
 Rehfisch, M.M. & Burton, N.H.K. (2015) Seabird–wind farm interactions
 during the breeding season vary within and between years: A case study
 of lesser black-backed gull *Larus fuscus* in the UK. Biological
-Conservation, 186 doi.10.1016/j.biocon.2015.03.027.
+Conservation, 186 <https://doi.10.1016/j.biocon.2015.03.027>
+
+Thaxter, C.B., Quinn, L., Atkinson, P., Booth Jones, K.A., Clark, N.A.,
+Clewley, G.D., Green, R.M.W., O’Hanlon, N.J., Johnston, D.T., Masden,
+E.A., Ross-Smith, V.H., Sage, E., Scragg, E., Taylor, R., Burton, N.K.H.
+& Humpreys, E.H. 2025. Breeding and foraging habitat are important in
+determining foraging ranges of sympatric generalist species. Ibis
+<a href="https://doi:10.1111/ibi.13446"
+class="uri">https://doi:10.1111/ibi.13446</a>
