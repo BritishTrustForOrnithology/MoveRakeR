@@ -2,7 +2,7 @@
 #'
 #' \code{Track2move} acts as a bridge between \code{MoveRakeR} and the \code{move}
 #' R package (Kranstauber et al. 2021), converting \emph{Track} objects into
-#' a \emph{move::move} or emph{move::moveStack} object.
+#' a \emph{move::move} or \emph{move::moveStack} object.
 #'
 #' @param data A \code{Track} family object (no S3 methods are coded).
 #' @param group_anims whether to treat animals with the same 'TagID' as

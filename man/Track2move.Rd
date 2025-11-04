@@ -23,7 +23,7 @@ reads in a static Movebank-downloaded csv to convert to a \code{Track} object.
 \description{
 \code{Track2move} acts as a bridge between \code{MoveRakeR} and the \code{move}
 R package (Kranstauber et al. 2021), converting \emph{Track} objects into
-a \emph{move::move} or emph{move::moveStack} object.
+a \emph{move::move} or \emph{move::moveStack} object.
 }
 \details{
 Function \code{Track2move} takes the Track class back to \code{move} for further use of that R package.

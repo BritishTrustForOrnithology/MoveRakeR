@@ -122,7 +122,7 @@ also allows the define_trips function to essentially tell you when the first rea
 central place by the start time of the first trip and end time of the last.}
 
 \item{p4s}{A numeric or \code{sf} \code{CRS} argument, here defaulting to epsg:3035 (NW Europe). This is used in projecting
-the supplied \code{WGS84} \code{lls} argument for code{rect} and \code{circ} methods, and for projecting the \code{sf}
+the supplied \code{WGS84} \code{lls} argument for \code{rect} and \code{circ} methods, and for projecting the \code{sf}
 object supplied for the \code{shepe} method.}
 
 \item{verbose}{logical (default TRUE) for whether detailed messaging is required.}

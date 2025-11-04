@@ -1,6 +1,6 @@
 Package: MoveRakeR
 Type: Package
-Title: An R package to source, clean and visualise tracking data.
+Title: An R package to source, invesigate, clean and visualise tracking data
 Version: 1.1.2.9000
 Authors@R: 
     person(given = "Chris",
@@ -9,8 +9,8 @@ Authors@R:
            email = "chris.thaxter@bto.org",
            comment = c(ORCID = "0000-0003-0341-4199"))
 Maintainer: Chris Thaxter <chris.thaxter@bto.org>
-Description: Load, clean and visualise tracking data.
-License: MIT
+Description: Load, investigate, clean and visualise tracking data
+License: MIT + file LICENSE
 Depends: R (>= 3.5.0)
 Encoding: UTF-8
 LazyData: true
@@ -19,6 +19,7 @@ RoxygenNote: 7.3.2
 Suggests: knitr,
     rmarkdown,
 	R.rsp
+VignetteBuilder: knitr
 Imports: 
 	adehabitatLT,
 	dplyr,
@@ -37,18 +38,21 @@ Imports:
 	shinydashboard,
     shinyWidgets,
 	shinybusy,
-	suncalc,
     htmltools,
     sf,
 	sfheaders,
 	sp,
 	ggplot2,
-    R.rsp,
     readr,
 	units,
 	flexdashboard,
 	plotly,
 	rmapshaper,
 	magrittr,
-	viridisLite
+	viridisLite,
+	stats,
+    utils,
+    graphics,
+    grDevices,
+    methods
 	

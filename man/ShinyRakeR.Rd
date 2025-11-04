@@ -15,10 +15,12 @@ ShinyRakeR(
 \item{data}{Input data object, with required columns: TagID, DateTime, longitude, latitude. If no data are supplied
 a fake dataset is automatically generated.}
 
+\item{dev}{A developer testing tool not to be used, default FALSE.}
+
 \item{launchBrowser}{TRUE/FALSE (Default TRUE) whether to launch a browser window (preferred) otherwise a local
 window will be used in RStudio, but app visual performance may then be sub-optimal.}
 
-\item{Providers}{A list of providers to use in the base leaflet maps for options of swutching between
+\item{Providers}{A list of providers to use in the base leaflet maps for options of switching between
 tiled layers; defaults to: c("OpenStreetMap", "GoogleEarth", "Esri.OceanBasemap", "Esri.WorldImagery").}
 }
 \description{
@@ -59,7 +61,7 @@ The user can also export annotated data back to the current R session global env
 
 (2) The temporal inspector tab
 This tab has a separate map and timeslider that is linked to the threshold explorer tab. This can be used to bring
-up numeric variables in the data and plot them through time using \code{ggplot} or {plotly}. This tab is therefore
+up numeric variables in the data and plot them through time using \code{ggplot} or \code{plotly}. This tab is therefore
 handy to show variation over the covariates through time and where these fixes are spatially.
 
 An interactive histogram is also provided to visualise the distribution of these variables.

@@ -128,7 +128,7 @@
 #' points inside or outside the shape for which trips are based (useful for comparing different
 #' trip classification systems).
 #' @param p4s A numeric or \code{sf} \code{CRS} argument, here defaulting to epsg:3035 (NW Europe). This is used in projecting
-#' the supplied \code{WGS84} \code{lls} argument for code{rect} and \code{circ} methods, and for projecting the \code{sf}
+#' the supplied \code{WGS84} \code{lls} argument for \code{rect} and \code{circ} methods, and for projecting the \code{sf}
 #' object supplied for the \code{shepe} method.
 #' @param verbose logical (default TRUE) for whether detailed messaging is required.
 #'

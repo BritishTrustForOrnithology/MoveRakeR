@@ -41,7 +41,7 @@
 #' On a specific note, the \code{MoveRakeR} package makes substantial use of the \code{tidyverse}, specifically using R packages
 #' \code{dplyr}, \code{tibble} and \code{tidyr}. Given the aim of this package was to provide some useful tools,
 #' we have sought to make the code contained within functions accessible if need be, to avoid code becoming a 'black-box' and
-#' permit 'tidy' workflows (Langley et al. 2024). The {tidyverse} packages are used here to group data such as by TagID when carrying out specific tasks
+#' permit 'tidy' workflows (Langley et al. 2024). Some \code{tidyverse} packages are used here to group data such as by TagID when carrying out specific tasks
 #' requiring a grouping, although \code{MoveRakeR} does make substantial use of base R and data.table as well.
 #'
 #' @section Data quality and outlier checking ('raking'), and data 'cleaning':
