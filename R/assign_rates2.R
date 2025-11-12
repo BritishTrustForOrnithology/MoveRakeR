@@ -255,19 +255,52 @@ assign_rates2 <- function(data, by = NULL,
         which_second_max = sapply(which_vals, `[`, 2)
       )
 
+      # # # # # # Bug fix 12/11/2025 # # # # # # #
+
       # above a certain proportion?
       #pctn_rate_thresh = 20
 
-      max_vals_fixed <- rates_norm %>% cbind(., rates_norm_all[-1]) %>%
-        reframe(across(-1, ~ which(.x > pctn_rate_thresh)))
-      #%>%
-      #unlist(use.names = TRUE)
+      # reframe stopped working as anticiapted in most recent dplyr:
+      #max_vals_fixed <- rates_norm %>% cbind(., rates_norm_all[-1]) %>%
+      #  reframe(across(-1, ~ which(.x > pctn_rate_thresh)))
+      #i = 2
+      #max_vals_fixed2 <- max_vals_fixed
+      #for(i in 1:nrow(max_vals_fixed)){
+      #  max_vals_fixed2[i,] <- rates_norm$likely_rate[unlist(max_vals_fixed[i,],use.names=TRUE)]
+      #}
 
-      i = 2
-      max_vals_fixed2 <- max_vals_fixed
-      for(i in 1:nrow(max_vals_fixed)){
-        max_vals_fixed2[i,] <- rates_norm$likely_rate[unlist(max_vals_fixed[i,],use.names=TRUE)]
-      }
+      ###### NEW SECTION
+      max_vals_fixed <- rates_norm %>% cbind(., rates_norm_all[-1])
+
+      # For each column (except first), get indices above threshold
+      idx_list <- max_vals_fixed %>%
+        select(-1) %>%  # exclude first column
+        map(~ {
+          w <- which(.x > pctn_rate_thresh)
+          if(length(w) == 0) w <- NA_integer_  # handle no matches
+          w
+        })
+
+      # determine maximum number of rows needed
+      max_len <- max(map_int(idx_list, length))
+
+      # Expand each column to match max_len
+      idx_expanded <- map_dfc(idx_list, ~ rep(.x, length.out = max_len))
+
+      # Replace indices with the actual likely_rate values
+      max_vals_fixed2 <- idx_expanded %>%
+        mutate(
+          across(
+            everything(),  # replace values in all columns including indices
+            ~ ifelse(
+              is.na(.x),
+              NA_real_,
+              as.numeric(gsub("\\+", "", rates_norm$likely_rate[.x]))
+            )
+          )
+        )
+
+      # # # # # # End Bug fix 12/11/2025 # # # # # # #
 
       # get the minimum rates where 20% more data at rate
       # assess the coarsest rate
@@ -289,7 +322,7 @@ assign_rates2 <- function(data, by = NULL,
       i = 1
       y <- list()
       for(i in 1:ncol(max_vals_fixed2)){
-        y[[i]] <- min(as.numeric(unique(max_vals_fixed2[,i])))
+        y[[i]] <- min((unique(max_vals_fixed2[,i])))
       }
       y <- unlist(y)
 
@@ -312,63 +345,78 @@ assign_rates2 <- function(data, by = NULL,
       cat(rep(" ",  getOption("width")), "\n", sep = "")
 
       ############# Any other coarser rates in top two or > 'pctn_rate_thresh'%?
-      fin_check_max = as.numeric(summary_tbl[summary_tbl$TagID != "all_anim",]$which_max)
-      fin_check_next_max = as.numeric(summary_tbl[summary_tbl$TagID != "all_anim",]$which_second_max)
 
-      covered_so_far <- unique(c( as.numeric(most_freq_all),
-                                  as.numeric(next_most_freq_all),
-                                  max(y), min(y) ))# inc max rate across animals at which 'pctn_rate_thresh'% (e.g. 20%) data was collected
+      # # # # # # Bug fix2 12/11/2025 # # # # # # #
+      summary_tbl$which_max2 <- as.numeric(gsub("\\+", "", summary_tbl$which_max))
+      summary_tbl$which_second_max2 <- as.numeric(gsub("\\+", "", summary_tbl$which_second_max2))
 
+
+      fin_check_max = as.numeric(summary_tbl[summary_tbl$TagID != "all_anim",]$which_max2)
+      fin_check_next_max = as.numeric(summary_tbl[summary_tbl$TagID != "all_anim",]$which_second_max2)
+
+
+      # ----------------------------------------- #
+      # Other rates?
+
+      covered_so_far <- unique(c(as.numeric(most_freq_all), as.numeric(next_most_freq_all), max(y), min(y)))
       max_feq_missed <- tid_missed <- NULL
-      if(!all(fin_check_max %in% covered_so_far)){
-        max_feq_missed = fin_check_max[!fin_check_max %in% covered_so_far ]
-        tid_missed = paste(names(which(summary_tbl$which_max == max_feq_missed)), collapse = ", ")
+
+      df_1 <- df_2 <- NULL
+      if(!all(fin_check_max %in% covered_so_far)) {
+        max_feq_missed = fin_check_max[!fin_check_max %in%
+                                         covered_so_far]
+        tid_missed = paste(names(which(summary_tbl$which_max ==
+                                         max_feq_missed)), collapse = ", ")
+        df_1 <- tibble(tid_missed, max_feq_missed) %>% rename(TagID = tid_missed, which_max = max_feq_missed)
+
       }
       next_max_feq_missed <- tid_missed2 <- NULL
-      if(!all(fin_check_next_max %in% covered_so_far)){
-        next_max_feq_missed = fin_check_next_max[!fin_check_next_max %in% covered_so_far ]
-        tid_missed2 = paste(names(which(summary_tbl$which_second_max == next_max_feq_missed)), collapse = ", ")
+      if (!all(fin_check_next_max %in% covered_so_far)) {
+        next_max_feq_missed = fin_check_next_max[!fin_check_next_max %in%
+                                                   covered_so_far]
+        tid_missed2 = paste(names(which(summary_tbl$which_second_max ==
+                                          next_max_feq_missed)), collapse = ", ")
+        df_2 <- tibble(tid_missed2, next_max_feq_missed) %>% rename(TagID = tid_missed2, which_max = next_max_feq_missed)
+
       }
 
-      rate_miss = unique(c(max_feq_missed, next_max_feq_missed))
-      tid_miss = unique(c(tid_missed, tid_missed2))
+      df_l <- unique(rbind(df_1,df_2))
 
-      ########
-      df_l <- tibble(tid_miss, rate_miss) %>% rename(TagID = tid_miss, which_max = rate_miss)
+      #rate_miss = unique(c(max_feq_missed, next_max_feq_missed))
+      #tid_miss = unique(c(tid_missed, tid_missed2))
+      #df_l <- tibble(tid_miss, rate_miss) %>% rename(TagID = tid_miss, which_max = rate_miss)
 
-      if(!is.null(tid_miss)){
+      if(!is.null(df_l)) {
 
         bds = summary_tbl[summary_tbl$TagID %in% tid_miss,]
+        a = subset(bds, select = c("TagID", "max_val",
+                                   "which_max2")) %>% rename(which_max = which_max2)
+        b = subset(bds, select = c("TagID", "second_max_val",
+                                   "which_second_max2")) %>% rename(max_val = second_max_val,
+                                                                    which_max = which_second_max2)
 
-        a = subset(bds, select = c("TagID", "max_val", "which_max"))
-        b = subset(bds, select = c("TagID", "second_max_val", "which_second_max")) %>% rename(max_val = second_max_val, which_max = which_second_max)
-        d = rbind(a,b)
-
-        d = merge(d,df_l, by = c("TagID","which_max"))
-
-        cat(paste0("\033[",msg_col,"m","Some animals also had either their top two rates or > ",pctn_rate_thresh,"% fixes at likely coarser rates: ","\033[0m\n"))
-
-        msg = d %>%
-          group_by(TagID) %>%
-          summarise(
-            txt = paste0(
-              which_max, " s, ", sprintf("%.2f", max_val), " %"
-            ) %>%
-              paste(collapse = "; "),
-            .groups = "drop"
-          ) %>%
+        d = rbind(a, b)
+        d = merge(d, df_l, by = c("TagID", "which_max"))
+        cat(paste0("\033[", msg_col, "m", "Some animals also had either their top two rates or > ",
+                   pctn_rate_thresh, "% fixes at likely coarser rates: ",
+                   "\033[0m\n"))
+        msg = d %>% group_by(TagID) %>% summarise(txt = paste0(which_max,
+                                                               " s, ", sprintf("%.2f", max_val), " %") %>%
+                                                    paste(collapse = "; "), .groups = "drop") %>%
           mutate(txt = paste0(TagID, " (", txt, ")")) %>%
           summarise(msg = paste(txt, collapse = ", ")) %>%
           pull(msg)
-
-        # print with color
         cat(paste0("\033[", msg_col, "m - ", msg, "\033[0m\n"))
-        cat(rep(" ",  getOption("width")), "\n", sep = "")
+        cat(rep(" ", getOption("width")), "\n", sep = "")
+
+        if (length(msg) > max_show) {
+          msg <- c(msg[1:max_show], "...")
+        }
+
       }
 
-      if(length(msg) > max_show) {
-        msg <- c(msg[1:max_show], "...")
-      }
+      # # # # # # End Bug fix2 12/11/2025 # # # # # # #
+
 
       ############ finally, if any fixes were above the max rate expected (i.e. gaps)
       # df = if not length zero will be the extra rates above the max rate specified
