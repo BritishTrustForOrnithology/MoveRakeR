@@ -348,7 +348,7 @@ assign_rates2 <- function(data, by = NULL,
 
       # # # # # # Bug fix2 12/11/2025 # # # # # # #
       summary_tbl$which_max2 <- as.numeric(gsub("\\+", "", summary_tbl$which_max))
-      summary_tbl$which_second_max2 <- as.numeric(gsub("\\+", "", summary_tbl$which_second_max2))
+      summary_tbl$which_second_max2 <- as.numeric(gsub("\\+", "", summary_tbl$which_second_max))
 
 
       fin_check_max = as.numeric(summary_tbl[summary_tbl$TagID != "all_anim",]$which_max2)
@@ -388,7 +388,7 @@ assign_rates2 <- function(data, by = NULL,
 
       if(!is.null(df_l)) {
 
-        bds = summary_tbl[summary_tbl$TagID %in% tid_miss,]
+        bds = summary_tbl[summary_tbl$TagID %in% df_l$TagID,]
         a = subset(bds, select = c("TagID", "max_val",
                                    "which_max2")) %>% rename(which_max = which_max2)
         b = subset(bds, select = c("TagID", "second_max_val",
