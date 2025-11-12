@@ -250,6 +250,27 @@ also displayed.
 
 ![](README_files/Shiny_app_2.JPG)
 
+### A temporary situation with a shiny update
+
+Note, as of July 2025, there was an update to `shiny` and subsequent
+`shinydashboard` that affects the way menu items are coded. For
+functions such as `ShinyRakeR` there is a chance, depending on the
+versions of those packages you have, that apps may stall and complain
+about deprecation of *menuItems*. This has yet to be explored, but for
+now I suggest using a stable combination of those packages to run the
+shiny apps:
+
+``` r
+remotes::install_version("shiny", version = "1.8.1")
+remotes::install_version("shinydashboard", version = "0.7.2")
+ 
+# then
+ShinyRakeR(data) # should work as intended - get in touch if not!
+ 
+```
+
+### Other data summaries and raking
+
 For a summary of the general quality of the data, the `rake()` function
 can be used. This function gives s simple summary looking for general
 spatial and temporal extent of the data, and any birds with outlying
@@ -261,6 +282,8 @@ animal. A further function `rake_outlie()` can be used to look in more
 detail at potential measurement errors from variables in the data
 exploring potential outlying data using boxplot, quantile or Hampel
 approaches to outlier detection.
+
+### Data cleaning
 
 Annotation or filtering of the data following data inspection can be
 made using the `clean_GPS()`, which is an all-encompassing process

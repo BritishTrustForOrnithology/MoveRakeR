@@ -13,6 +13,7 @@ output: github_document
 
 [![DOI](https://zenodo.org/badge/948019784.svg)](https://doi.org/10.5281/zenodo.15275175)
 
+
 ## Overview
 
 The R package `MoveRakeR` contains a collection of simple functions to help streamline data processing and common data wrangling tasks that often occurs with GPS tracking data. `MoveRakeR` operates at the initial stages after data acquisition. Although a number of R packages are now available for analysis of animal movement data (Joo et al. 2020), `MoveRakeR` tackles some fundamental data processing steps that are often encountered to help streamline data preparation ahead of further analytical steps. The `MoveRakeR` package is intended to support the other existing workflows in other R packages, such as `move` (Kranstauber et al. 2018) and `move2` (Kranstauber et al. 2024) and provides some further tools to address common manipulations of data routinely encountered that often require a degree of subjectivity in decision making. Should the user be interested in exploring location error in GPS devices in more detail, we would recommend the approach of Flemming et al. (2020) and the `ctmm` R package (Fleming & Calabrese 2023).
@@ -162,7 +163,24 @@ The temporal inspector tab allows for visualisation of variables associated with
 
 ![](README_files/Shiny_app_2.JPG)
 
+### A temporary situation with a shiny update
+
+Note, as of July 2025, there was an update to ```shiny``` and subsequent ```shinydashboard``` that affects the way menu items are coded. For functions such as ```ShinyRakeR``` there is a chance, depending on the versions of those packages you have, that apps may stall and complain about deprecation of *menuItems*. This has yet to be explored, but for now I suggest using a stable combination of those packages to run the shiny apps:
+
+``` r
+remotes::install_version("shiny", version = "1.8.1")
+remotes::install_version("shinydashboard", version = "0.7.2")
+ 
+# then
+ShinyRakeR(data) # should work as intended - get in touch if not!
+ 
+```
+
+### Other data summaries and raking
+
 For a summary of the general quality of the data, the `rake()` function can be used. This function gives s simple summary looking for general spatial and temporal extent of the data, and any birds with outlying temporal or spatial fixes, and numbers of birds tracked through time, and and so is mostly focused on potential sampling biases. The `rake()` function uses `tag_spans()` for spatial extent summaries and `tag_history()` for a daily perspective of GPS records through time per animal. A further function `rake_outlie()` can be used to look in more detail at potential measurement errors from variables in the data exploring potential outlying data using boxplot, quantile or Hampel approaches to outlier detection.
+
+### Data cleaning
 
 Annotation or filtering of the data following data inspection can be made using the `clean_GPS()`, which is an all-encompassing process similar to the threshold explorer tab of the `ShinyRakeR()` function, to flag a combined errant data label per row. `clean_GPS()` can also filter automatically for these decisions. This process is a rather blunt instrument in that currently this is done at the user's discretion. A further option exists to filter data based on the quality of fix column ("flt_switch") that may be available for your data from MoveBank.
 
