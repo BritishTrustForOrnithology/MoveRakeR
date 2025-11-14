@@ -338,6 +338,8 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL,
   ##data <- data[249:432,] # some slower than 5 mins, some faster
   ##BTOTrackingTools::assign_rates(LBBGWalB201416)
 
+  final_samp <- coarser_fixes <- NULL # for below attribute output, a bit hacky
+
   ##########################################################
   data_tb <- tibble(data) %>% group_by(TagID) %>% arrange(TagID, DateTime)
 
@@ -1312,12 +1314,13 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL,
 
     data2 <- structure(.Data = gapped2a, class = c("Track", "grouped_df", "tbl_df","tbl","data.frame"))
 
-    if(is.null(attr(data2, "sub_samp") )){
-      attr(data2, "sub_samp") <- "sub_samp"
-    }
-
-    attr(attr(data2, "sub_samp"), "boots") <- final_samp
-    attr(attr(data2, "sub_samp"), "coarser") <- coarser_fixes
+    # don't attempt to set attribute here yet - a below process over-writes it!
+    #if(is.null(attr(data2, "sub_samp") )){
+    #  attr(data2, "sub_samp") <- "sub_samp"
+    #}
+    #
+    #attr(attr(data2, "sub_samp"), "boots") <- final_samp
+    #attr(attr(data2, "sub_samp"), "coarser") <- coarser_fixes
   }
 
   # 44243 for rounding date version, 44237 for the sequence version, NOT BAD! given they will never match of course
@@ -1405,6 +1408,13 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL,
   attr(attr(data2, "sub_samp"), "u_tol") <- u_tol
   attr(attr(data2, "sub_samp"), "l_tol") <- l_tol
   attr(attr(data2, "sub_samp"), "by") <- by
+
+  if(!is.null(final_samp)){
+    attr(attr(data2, "sub_samp"), "boots") <- final_samp
+  }
+  if(!is.null(coarser_fixes)){
+    attr(attr(data2, "sub_samp"), "coarser") <- coarser_fixes
+  }
 
   return(data2)
 
