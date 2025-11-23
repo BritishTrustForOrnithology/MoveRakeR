@@ -86,7 +86,7 @@
 #' @export
 assign_rates <- function(data, by = NULL, split = TRUE, group_after_gap = FALSE,
                           breaks = c(1, 60, 100, 300, 600, 900, 1200, 1800, 3600, 7200, 10800),
-                          tol = c(0,0.5,rep(0.4,2),rep(0.3,5),rep(0.2,2)), out = "summary"){
+                          tol = c(0,0.5,rep(0.4,2),rep(0.3,5),rep(0.2,2)), out = "summary", verbose=FALSE){
 
 
   # --------------------------------------- #
@@ -165,11 +165,11 @@ assign_rates <- function(data, by = NULL, split = TRUE, group_after_gap = FALSE,
   # final data
   data = left_join(data, df, by = "rate_") %>% dplyr::select(-rate_) %>% group_by(TagID, !!!syms(unique(by))) %>% dplyr::select(-dt_)
 
-  #if(verbose){
+  if(verbose){
     if(breaks[length(breaks)] > max(data_dtmax$dt_,na.rm=TRUE) ){
       message("Current function quirk in assign_rates() if the upper break is > all timesteps in data: \n- function returns animal-specific upper maximum bounds")
     }
-  #}
+  }
   # --------------------------------------------------------------------------------- #
   # within the data, per animal, replace the maximum category with the upper limit
   # for the specific animal, i.e. upper dt will be that across all animals
