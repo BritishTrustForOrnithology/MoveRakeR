@@ -1,7 +1,7 @@
 Package: MoveRakeR
 Type: Package
 Title: An R package to source, invesigate, clean and visualise tracking data
-Version: 1.1.2.9000
+Version: 1.1.3
 Authors@R: 
     person(given = "Chris",
            family = "Thaxter",

@@ -87,6 +87,7 @@ rake_summary <- rake(
 The terminal window output should look something like the following (here using some 'real' data):
 
 ![](figures/Terminal_1.JPG){width=80%}
+
 ![](figures/Terminal_2.JPG){width=80%}
 
 #### Data spans

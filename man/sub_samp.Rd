@@ -10,20 +10,22 @@ sub_samp(
   dt = 300,
   Unit = "secs",
   by = NULL,
-  tol = 0.4,
+  tol = 0.2,
   u_tol = NULL,
   l_tol = NULL,
-  rateU = dt + (dt * tol),
-  rateL = dt - (dt * tol),
-  method = c("sequencer", "rounder", "boot_sequencer"),
-  nboots = 5,
+  rateU = NULL,
+  rateL = NULL,
+  method = c("sequencer", "rounder", "boot_sequencer", "boot_rate"),
+  strict = FALSE,
+  blind = FALSE,
+  n_boot = 5,
   seed = NULL,
-  split_ratio = 50,
   drop_coarser = TRUE,
-  verbose = TRUE
+  verbose = TRUE,
+  verbose_repair = FALSE
 )
 
-retrieve_boots(data, drop_coarser = TRUE, verbose = TRUE)
+retrieve_boots(data, animal = NULL, include_coarser = FALSE, verbose = TRUE)
 }
 \arguments{
 \item{data}{Input data object, with required columns: TagID, DateTime, longitude, latitude.}
@@ -39,49 +41,85 @@ e.g. 'secs' or 'mins'.}
 added or subtracted from the specified filtering rate \code{dt}. See below.}
 
 \item{rateU}{The upper rate (dt+(dt*tol)) at which to remove fixes as above using the \code{tol} parameter; this is the primary
-value for which sub-sampling is carried out.}
+value for which sub-sampling is carried out in all methods; see rateL for more details of calculation with tol arguments.}
 
 \item{rateL}{A lower rate given automatically using \code{tol} as (dt-(dt*tol)).
-Occasionally the filter will not remove some rates <= dt due to it's matching nature
-therefore after the subsampling, the numeric value given in \code{rateL} will drop rates lower than this value. By default,
-\code{rateL} and \code{rateU} are therefore both determined by the tolerance proportional value \code{tol}, to
+For the methods 'sequencer' and 'rounder', occasionally the filter will not remove some rates <= dt due to it's matching nature
+therefore after the subsampling, the numeric value given in \code{rateL} will drop rates lower than this value. For the 'boot_sequencer'
+and 'boot_rate' methods, rateL is used as a minimum value to search for within segment windows of length rateU.
+By default, \code{rateL} and \code{rateU} are therefore both determined by the tolerance proportional value \code{tol}, to
 give a window of lee-way error given that GPS rates rarely sample spot on the rate they are programmed to take measurements at
-i.e. due to satellite communications, time to fix errors etc.}
+i.e. due to satellite communications, time to fix errors etc. However rateL and rateU can also be determined by
+bespoke l_tol or u_tol parameters that override tol, which are in turn also overridden if the user specifies
+a direct raeL or rateU. The hierarchy of rateL and rateU determination in order of
+increasing priority are are thus via tol, u_tol or l_tol and finally via the rateL or rateU provision directly. By default
+rateU and rateL are NULL, and so tol values are used.}
 
-\item{method}{A choice of three, "sequencer", "rounder", or "boot_sequencer" as to how to do the downgrading; sequencing (default) uses
-data.table to 'roll' DateTimes to nearest on a sequences of dates at the desired sampling rate from the start of the animal per year.
-The second option is to round to the nearest whole DateTime at the desired sampling rate, both being valid options.
-The function \code{sub_samp} also calls \code{\link{gap_section}} using the drop = TRUE option to remove orphaned gappy sections
+\item{method}{A choice of four, "sequencer", "rounder", "boot_sequencer", or "boot_rate" as to how to do the downgrading:
+(1) The sequencer is the default method that \code{sub_samp()} uses, with a
+data.table used to 'roll' DateTimes to nearest on a sequences of dates at the desired sampling rate from the start of the animal per year.
+(2) The second option is to round to the nearest whole DateTime at the desired sampling rate, both being valid options.
+The function \code{sub_samp} also calls \code{\link{gap_section}} using the drop = TRUE option to remove isolated gappy sections
 of data (single points) and remove all data beyond the desired rate, e.g. if 300 s was wanted, then any coarse rates
-such as 1800 s would be dropped, that is if \code{fun} is set to TRUE. The boot sequencer uses the sequence approach
-but selects random fixes within consecutive sections of data t0 to t+1 where (t+1)-t = dt; this
-approach should be considered at the beta stage. The boot_sequencer samples with replacement. This
-process is currently slow for large datasets, e.g. 10 s to five minutes for data across many months per animal;
-that is even with use of \code{base::combn} and tidyverse approaches such as \code{slice_sample()}; here
-we vectorised the process comparing pairs of points per section samples. The routine works by selecting points within sections of data at length dt, and a validity check
-is needed to make sure fixes are not selecting at the boundaries of neighbouring sections < rateL; requiring an
-iterative approach. The result is a listed output of boots, that can be translated back into
-\code{Track} data using the function \code{retrieve_boots}. Initial tests for five birds for 100
-boots downgrading to 300 s from GPS data with a mixture of 10 s, 300 s and 1800 s rates across five months were in the region of a 1.5 hours on an i5 8GB RAM PC, but
-parallel processing has not yet been explored. We would welcome any feedback.}
+such as 1800 s would be dropped, that is if \code{fun} is set to TRUE.
+(3) The boot sequencer uses the sequence approach as above
+but selects random fixes within consecutive sections of data t0 to t+1 where (t+1)-t = dt.
+The boot_sequencer samples with replacement, and searches within 'segments' of points within windows length rateU.
+This window search operates across TagID/'VAR'/gapsec levels with 'VAR' being the potential by variable that can be included in the hierarchy.
+This process of course slower for large datasets, e.g. 10 s to five minutes for data across many months per animal. The sequencer
+also has a quirk if used with default settings (blind = TRUE, strict = FALSE), in that across windows of the data,
+there will naturally be only certain GPS fixes that can be sampled from the segment windows, dependent on the rateL and rateU conditions used.
+This will 'lock in' the same fixes sampled on the same bootstraps each time. Options are available to relax this condition
+through setting the 'blind' argument to TRUE, which will forget the previous point selection in the sequence. If the 'strict'
+argument is also set to TRUE, then any fixes too close to a previous segment selection will be dropped. With 'strict' as FALSE (default)
+these points will not be dropped and any gaps of too lengthy time spans where rateU is violated will be checked for other points to insert.
+A more conservative but still quite strict approach is to lower the lower tolerance 'l_tol' value, e.g. to 0.4 from 0.2 overall 'tol'
+so that some variation within the sequence of fixes is allowed, but this is a trade-off as the lower l_tol specified will
+increasingly deviate away from the intended overall 'dt' rate downgraded to.
+Another option is to use the fourth method option:
+(4) This introduces another level into the hierarchy so that sequences are performed within TagID/'VAR'/rate/gapsec.
+This uses the \code{assign_rates()} function \strong{with defaults from that function}, to allow strings of fixes
+along which the sequence of bootstrapping is performed to occur within rate changes of the tag, which is useful if there
+are multiple rates used. This will begin the search of random points at each rate switch to break that 'locked in' pattern
+of samples across bootstraps. However, this will also result in possible no valid fixes being found at those boundaries.
+\strong{A warning here}: If your data is on the scale of one fix every day, then the 'boot_rate' approach will not work as
+the defaults are used within \code{assign_rates()}, which guesses rates up to three hours.#'
+The result of the two boot methods is a listed output of boots, that can be translated back into
+\code{Track} data using the function \code{retrieve_boots}.}
 
-\item{nboots}{The number of bootstraps to take using the sequence sampler, relevant only for that method.}
+\item{strict}{Logical, defaults to FALSE. Determines whether the function drops out the fixes that are too fast and violate
+the rateL lower bound as determined by the tol or l_tol arguments. In the boot methods, frequently, fixes cannot be sampled to meet
+both rateL and rateU, particularly at coarser rates from slightly less coarser rates, where fewer fixes are available fore resampling.
+This of course depends on the tolerance parameters used too. That said a situation can also arise if for example
+one sampling segment has an issue finding a fix skipping it, which forces the next segment along to randomly pick from any of the fixes
+in that second segment, which may be further forward in time > rateU between remaining sampled fixes; this is because
+essentially that second segment has to start the search off again considering all fixes.
+This can give 'holes' in the data, but these on occasion can be back-filled (repaired) by going back to the original data to check for valid points, and if
+strict = FALSE, this will happen with 1:n fixes randomly inserted, where n is the maximum possible on that slice of the data.}
+
+\item{blind}{Logical, default FALSE. Following on from the strict argument, if blind is TRUE, all segments sample 'blindly'
+where within segment t, any previous GPS random pick of a point in the segment t-1 is forgotten. This allows a full true randomisation
+but will violate rateL and rateU conditions. Therefore strict arguments should be considered alongside. If strict is TRUE as well as blind being TRUE,
+the result is removal of fixes violating rateL but keeping 'holes' in the data from rateU segment to segment quirks (see strict argument).
+If blind is TRUE but strict is FALSE, then faster sampled points are retained, but attempts are made to put potentially missing fixes into data 'holes'.}
 
 \item{seed}{Seed to set for reproducibility using the boot sequencer.}
-
-\item{split_ratio}{A ratio to split up pairs of sequences for the boot sequencer option, to speed up processing inthe
-\code{combn} \code{data.table} process assessing validity of pairs. Defaults to 50. Toggling this may help runtime.}
 
 \item{drop_coarser}{Logical to drop the coarser rates than the ones we sub-sample for? Default TRUE.
 This is handy to set to FALSE if comparing trip statistics and effects of downgrading if multiple rates per trip are evident.}
 
 \item{verbose}{logical to return detailed messaging.}
 
+\item{verbose_repair}{Logical defaulting to FALSE. This turns on detailed messaging for the routine that
+attempts to 'repair' the randomly sub-sampled data after the "boot_sequencer" or "boot_rate" methods have been used.}
+
 \item{tol_u}{A bespoke upper tolerance if the user wants to specify a different value for upper and lower tolerance.}
 
 \item{tol_l}{A bespoke lower tolerance if the user wants to specify a different value for upper and lower tolerance.}
 
 \item{fun}{Logical TRUE or FALSE (default TRUE) to use the \code{\link{gap_section}} function to remove coarser rates, see also 'method' argument.}
+
+\item{nboots}{The number of bootstraps to take using the sequence sampler, relevant only for that method.}
 }
 \value{
 Returns the same format data as inputted but a reduced dataset (except for the boot_sequencer - see below)
@@ -104,16 +142,40 @@ sampling biases in further analyses. \code{sub_samp} offers a way to reduce \cod
 based on the start and end time of each Tag's record. Note, however, this method does not fully interpolate
 the deployments to a fixed temporal value, as is done in linear and non-linear (e.g. correlated
 random walk) interpolation offered through R packages adehabitat (Calenge 2006) and Crawl (Johnson et al. 2008)
-\code{sub_samp} is based on original code from Emiel van Loon at the University of Amsterdam.
+\code{sub_samp} has its early origins from original code from Emiel van Loon at the University of Amsterdam.
 
-Three options are available in \code{sub_samp} for subsampling: "sequencer", "rounder", or "boot_sequencer", see
+Four options are available in \code{sub_samp} for subsampling: "sequencer", "rounder", "boot_sequencer" or "boot_rate", see
 the argument descriptions for more details. These allow subsampling to the nearest time unit based on
-either the start time of the animal (sequencer) or the nearest whole time unit (rounder). The boot method
-is a beta method that has been developed to produce simulations so as to
+either the start time of the animal (sequencer) or the nearest whole time unit (rounder). These methods also handle
+situations where two competing fixes may be available to be rounded to the same time, which can result in holes in the data if
+only one valid fix is picked. The default of \code{sub_samp()} is to preserve a true downgraded sample, and so the "rounder"
+and "sequencer" methods (as also with the boot methods) make an attempt to randomly fill in potentially missing fixes in such cases
+via a final sweep of the data.
+
+The boot methods have been developed to produce simulations so as to
 avoid reliance on always selecting the same fixes from the sample - useful for example if an animal traverses
 a spatial unit a limited number of times and you want o make the most of the data from within the track.
 The function \code{retrieve_boots} can be used to access the bootstrapped GPS data, that are stored as lookup indices
 from \code{sub_samp} for memory saving purposes.
+
+Regarding the bootstrap methods, these are complex and tricky to arrive at a true random sample as it depends
+ultimately on the structure of the data underlying. The aim is to preserve the linear temporal
+structure of the original track as much as possible, just at a downgraded rate. In doing so, the \code{sub_samp()} function caters for as made of these
+data quirks as possible. In particular, a key issue is when a sequence of fixes is 'locked in', for example when a switch of
+rates of the tag occurs, or when there are just too few samples to choose from to meet a desired acceptable
+lower and upper bound around the target downgrade rate. As in other \code{MoveRakeR} functions, tolerance values
+are allowed to vary this bound around the rate required resulting in a lower 'rateL' and upper 'rateU' around the original 'dt'
+sampling rate. Widening this gap will bring more GPS fixes into play within the samplers, but at expense of deviating from the targetted downgrade rate.
+The samplers operate via random search windows where one fixe is randomly picked in a 'segment' window along the track where the segment length is rateU.
+The ambition is that sampled fixes meet both rateL and rateU condition, but may not always possible for every segment and boot.
+Some flexibility is therefore provided in \code{sub_samp()} to vary the method used. The primary "boot_sequencer" approach is similar to the
+"sequencer" method in sampling within strings of points, with the first fixes' DateTime used to start the sampling off.
+The string of points considered for segmentation is thus a nested hierarchy of: TagID/(optional by variable)/gapsection. Another level is introduced in the second
+boot method "boot_rate" that still uses a sequence from the first DateTime in the valid ctring of points,
+but using: TagID/(optional by variable)/rate/gapsection to begin the segment randomisation process. Strictness in how the samplers treats fixes that are too close
+together after the sampling is finished, as well as a repairing process to insert potentially valid fixes back in if holes in the data arise.
+Finally, the sampling can also be done 'blindly' without remembering any fixes in the sequence, but at a cost
+of violating the rateL/rateU conditions between sampled fixes.
 }
 \examples{
 
@@ -215,7 +277,7 @@ new2$dt <- ifelse(is.na(new2$dt),0,new2$dt)
 #  2: 2014-05-21 05:45:03 2014-05-21 05:47:20   137     0
 
 # -------------------------------------------------------- #
-# To get around this, in the sub_samp function, we therefore revisit the original data
+# To get around the rounder issue, in the sub_samp() function, we therefore revisit the original data
 # and look for potential real points that could sit in between consecutive fixes that would meet a
 # minimum threshold difference between the fixes informed by dt-(dt*tol)
 # -------------------------------------------------------- #
@@ -223,6 +285,16 @@ new2$dt <- ifelse(is.na(new2$dt),0,new2$dt)
 # Ultimately, interpolation methods may be more useful depending on further analytical uses.
 
 sub_samp(data = data_test_df, dt = 300, tol = 0.4, method = "rounder")
+
+#Using method: rounder
+#Computed rateL from tolerance: 180
+#Computed rateU from tolerance: 420
+#---- rounding process ----
+#  ---- overly strict point removal checker ----
+#  TagID difftime            DateTime  dt rn
+#1     1       NA 2014-05-21 05:37:44 287  1
+#2     1      287 2014-05-21 05:42:31 289  2 <------ better
+#3     1       NA 2014-05-21 05:47:20  NA  3
 
 ##########################################################################################
 dates <- c("2014-05-21 05:37:44","2014-05-21 05:42:31","2014-05-21 05:47:20",
@@ -271,19 +343,37 @@ x3600 <- sub_samp(data, dt = 3600, tol = 0.4, method = "sequencer", drop_coarser
 x300 <- sub_samp(data = data, dt = 300, tol = 0.2, method = "sequencer", drop_coarser = TRUE)
 
 # -------------------------------------------------------- #
-# 3. Boot sequencer
+# 3. Boot sequencers
+
 # produce 'realisations' of the data randomly sampling
-# This can be lengthy if say you have lots of 10 s data and wanting to go to e.g. 1800!
-# So that's a lot of potential combinations of pairs of points to assess validity in the current approach.
+# This can be quite lengthy if say you have lots of animals, lots of 10 s data and wanting to go to e.g. 1800 s
+# We have stuck to use of loops in the sub_samp() function as after much testing, these were actually
+# some of the fastest approaches.
 
-x1800_boot <- sub_samp(data = data, dt = 1800, tol = 0.2, method = "boot_sequencer", drop_coarser = TRUE)
-x1800_actual_boots <- retrieve_boots(x1800_boot) # use of retrieve-boots function to access boots (stored from the sub_samp function as an index lookup to save memory)
+# The two boot options:
+# ------------------ #
+# (a) "boot_sequencer" using TagID/(by variable)/gapsec/segment approach:
 
-data_test_df <- data_test_df \%>\% mutate(difftime = as.vector(difftime(DateTime, lag(DateTime), units= 'secs')))
+x1800_boot <- sub_samp(data = data, dt = 1800, tol = 0.2, method = "boot_sequencer")
+boots_x1800 <- retrieve_boots(x1800_boot) # use of retrieve-boots function to access boots (stored from the sub_samp function as an index lookup to save memory)
 
-new3 = sub_samp(data, dt=7200, tol = 0.2, method = "boot_sequencer", nboots = 10, seed = 1)
-new = retrieve_boots(new3)
-plot_leaflet(data = data, plotby = "boot") # check visualisation
+RakeRvis::RakeRvis(data = boots_x1800) # check visualisation, plotting 'by' boot in the app or...
+plot_leaflet(data = boots_x1800, plotby = "boot")
+
+# example using random points in all segments, and patching potential fixes in that violate rateL conditions after:
+x1800_boot_blind <- sub_samp(data = data, dt = 1800, tol = 0.2, method = "boot_sequencer", blind = TRUE)
+
+#or being strict and dropping out any fixes that violate rateL without patching any fixes back in
+x1800_boot_blind <- sub_samp(data = data, dt = 1800, tol = 0.2, method = "boot_sequencer", blind = TRUE, strict = TRUE)
+
+# example using a more leniant lower tolerance value, preserving the sequence of point randomisation
+x1800_boot_ltol <- sub_samp(data = data, dt = 1800, tol = 0.2, l_tol = 0.4, method = "boot_sequencer", blind = FALSE, strict = FALSE)
+
+# ------------------ #
+(b) "boot_rate" using TagID/(by variable)/rate/gapsec/segment approach:
+
+x1800_boot_rate <- sub_samp(data = data, dt = 1800, tol = 0.2, method = "boot_rate", drop_coarser = TRUE)
+boots_x1800_rate <- retrieve_boots(x1800_boot)
 
 }
 \references{
@@ -298,5 +388,5 @@ correlated random walk models to animal movement data. Zenodo.
 \url{https://doi.org/10.5281/zenodo.596464}
 }
 \seealso{
-\link{clean_GPS}, \link{gap_section}, \link{Track2move}
+\link{clean_GPS}, \link{gap_section}, \link{Track2move}, \link{progress_estimated2}
 }

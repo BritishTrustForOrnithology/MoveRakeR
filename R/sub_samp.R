@@ -14,16 +14,40 @@
 #' based on the start and end time of each Tag's record. Note, however, this method does not fully interpolate
 #' the deployments to a fixed temporal value, as is done in linear and non-linear (e.g. correlated
 #' random walk) interpolation offered through R packages adehabitat (Calenge 2006) and Crawl (Johnson et al. 2008)
-#' \code{sub_samp} is based on original code from Emiel van Loon at the University of Amsterdam.
+#' \code{sub_samp} has its early origins from original code from Emiel van Loon at the University of Amsterdam.
 #'
-#' Three options are available in \code{sub_samp} for subsampling: "sequencer", "rounder", or "boot_sequencer", see
+#' Four options are available in \code{sub_samp} for subsampling: "sequencer", "rounder", "boot_sequencer" or "boot_rate", see
 #' the argument descriptions for more details. These allow subsampling to the nearest time unit based on
-#' either the start time of the animal (sequencer) or the nearest whole time unit (rounder). The boot method
-#' is a beta method that has been developed to produce simulations so as to
+#' either the start time of the animal (sequencer) or the nearest whole time unit (rounder). These methods also handle
+#' situations where two competing fixes may be available to be rounded to the same time, which can result in holes in the data if
+#' only one valid fix is picked. The default of \code{sub_samp()} is to preserve a true downgraded sample, and so the "rounder"
+#' and "sequencer" methods (as also with the boot methods) make an attempt to randomly fill in potentially missing fixes in such cases
+#' via a final sweep of the data.
+#'
+#' The boot methods have been developed to produce simulations so as to
 #' avoid reliance on always selecting the same fixes from the sample - useful for example if an animal traverses
 #' a spatial unit a limited number of times and you want o make the most of the data from within the track.
 #' The function \code{retrieve_boots} can be used to access the bootstrapped GPS data, that are stored as lookup indices
 #' from \code{sub_samp} for memory saving purposes.
+#'
+#' Regarding the bootstrap methods, these are complex and tricky to arrive at a true random sample as it depends
+#' ultimately on the structure of the data underlying. The aim is to preserve the linear temporal
+#' structure of the original track as much as possible, just at a downgraded rate. In doing so, the \code{sub_samp()} function caters for as made of these
+#' data quirks as possible. In particular, a key issue is when a sequence of fixes is 'locked in', for example when a switch of
+#' rates of the tag occurs, or when there are just too few samples to choose from to meet a desired acceptable
+#' lower and upper bound around the target downgrade rate. As in other \code{MoveRakeR} functions, tolerance values
+#' are allowed to vary this bound around the rate required resulting in a lower 'rateL' and upper 'rateU' around the original 'dt'
+#' sampling rate. Widening this gap will bring more GPS fixes into play within the samplers, but at expense of deviating from the targetted downgrade rate.
+#' The samplers operate via random search windows where one fixe is randomly picked in a 'segment' window along the track where the segment length is rateU.
+#' The ambition is that sampled fixes meet both rateL and rateU condition, but may not always possible for every segment and boot.
+#' Some flexibility is therefore provided in \code{sub_samp()} to vary the method used. The primary "boot_sequencer" approach is similar to the
+#' "sequencer" method in sampling within strings of points, with the first fixes' DateTime used to start the sampling off.
+#' The string of points considered for segmentation is thus a nested hierarchy of: TagID/(optional by variable)/gapsection. Another level is introduced in the second
+#' boot method "boot_rate" that still uses a sequence from the first DateTime in the valid ctring of points,
+#' but using: TagID/(optional by variable)/rate/gapsection to begin the segment randomisation process. Strictness in how the samplers treats fixes that are too close
+#' together after the sampling is finished, as well as a repairing process to insert potentially valid fixes back in if holes in the data arise.
+#' Finally, the sampling can also be done 'blindly' without remembering any fixes in the sequence, but at a cost
+#' of violating the rateL/rateU conditions between sampled fixes.
 #'
 #' @param data Input data object, with required columns: TagID, DateTime, longitude, latitude.
 #' @param dt The new sampling rate at which we wish the data to be downgraded to. Numeric value.
@@ -35,37 +59,71 @@
 #' @param tol_l A bespoke lower tolerance if the user wants to specify a different value for upper and lower tolerance.
 #' @param by A by variable also which to work with data at a lower level, e.g. year, migration phase (but currently only used by the boot sampler).
 #' @param rateL A lower rate given automatically using \code{tol} as (dt-(dt*tol)).
-#' Occasionally the filter will not remove some rates <= dt due to it's matching nature
-#' therefore after the subsampling, the numeric value given in \code{rateL} will drop rates lower than this value. By default,
-#' \code{rateL} and \code{rateU} are therefore both determined by the tolerance proportional value \code{tol}, to
+#' For the methods 'sequencer' and 'rounder', occasionally the filter will not remove some rates <= dt due to it's matching nature
+#' therefore after the subsampling, the numeric value given in \code{rateL} will drop rates lower than this value. For the 'boot_sequencer'
+#' and 'boot_rate' methods, rateL is used as a minimum value to search for within segment windows of length rateU.
+#'  By default, \code{rateL} and \code{rateU} are therefore both determined by the tolerance proportional value \code{tol}, to
 #' give a window of lee-way error given that GPS rates rarely sample spot on the rate they are programmed to take measurements at
-#' i.e. due to satellite communications, time to fix errors etc.
+#' i.e. due to satellite communications, time to fix errors etc. However rateL and rateU can also be determined by
+#' bespoke l_tol or u_tol parameters that override tol, which are in turn also overridden if the user specifies
+#' a direct raeL or rateU. The hierarchy of rateL and rateU determination in order of
+#' increasing priority are are thus via tol, u_tol or l_tol and finally via the rateL or rateU provision directly. By default
+#' rateU and rateL are NULL, and so tol values are used.
 #' @param rateU The upper rate (dt+(dt*tol)) at which to remove fixes as above using the \code{tol} parameter; this is the primary
-#' value for which sub-sampling is carried out.
+#' value for which sub-sampling is carried out in all methods; see rateL for more details of calculation with tol arguments.
 #' @param drop_coarser Logical to drop the coarser rates than the ones we sub-sample for? Default TRUE.
 #' This is handy to set to FALSE if comparing trip statistics and effects of downgrading if multiple rates per trip are evident.
 #' @param fun Logical TRUE or FALSE (default TRUE) to use the \code{\link{gap_section}} function to remove coarser rates, see also 'method' argument.
-#' @param method A choice of three, "sequencer", "rounder", or "boot_sequencer" as to how to do the downgrading; sequencing (default) uses
-#' data.table to 'roll' DateTimes to nearest on a sequences of dates at the desired sampling rate from the start of the animal per year.
-#' The second option is to round to the nearest whole DateTime at the desired sampling rate, both being valid options.
-#' The function \code{sub_samp} also calls \code{\link{gap_section}} using the drop = TRUE option to remove orphaned gappy sections
+#' @param method A choice of four, "sequencer", "rounder", "boot_sequencer", or "boot_rate" as to how to do the downgrading:
+#' (1) The sequencer is the default method that \code{sub_samp()} uses, with a
+#' data.table used to 'roll' DateTimes to nearest on a sequences of dates at the desired sampling rate from the start of the animal per year.
+#' (2) The second option is to round to the nearest whole DateTime at the desired sampling rate, both being valid options.
+#' The function \code{sub_samp} also calls \code{\link{gap_section}} using the drop = TRUE option to remove isolated gappy sections
 #' of data (single points) and remove all data beyond the desired rate, e.g. if 300 s was wanted, then any coarse rates
-#' such as 1800 s would be dropped, that is if \code{fun} is set to TRUE. The boot sequencer uses the sequence approach
-#' but selects random fixes within consecutive sections of data t0 to t+1 where (t+1)-t = dt; this
-#' approach should be considered at the beta stage. The boot_sequencer samples with replacement. This
-#' process is currently slow for large datasets, e.g. 10 s to five minutes for data across many months per animal;
-#' that is even with use of \code{base::combn} and tidyverse approaches such as \code{slice_sample()}; here
-#' we vectorised the process comparing pairs of points per section samples. The routine works by selecting points within sections of data at length dt, and a validity check
-#' is needed to make sure fixes are not selecting at the boundaries of neighbouring sections < rateL; requiring an
-#' iterative approach. The result is a listed output of boots, that can be translated back into
-#' \code{Track} data using the function \code{retrieve_boots}. Initial tests for five birds for 100
-#' boots downgrading to 300 s from GPS data with a mixture of 10 s, 300 s and 1800 s rates across five months were in the region of a 1.5 hours on an i5 8GB RAM PC, but
-#' parallel processing has not yet been explored. We would welcome any feedback.
+#' such as 1800 s would be dropped, that is if \code{fun} is set to TRUE.
+#' (3) The boot sequencer uses the sequence approach as above
+#' but selects random fixes within consecutive sections of data t0 to t+1 where (t+1)-t = dt.
+#' The boot_sequencer samples with replacement, and searches within 'segments' of points within windows length rateU.
+#' This window search operates across TagID/'VAR'/gapsec levels with 'VAR' being the potential by variable that can be included in the hierarchy.
+#' This process of course slower for large datasets, e.g. 10 s to five minutes for data across many months per animal. The sequencer
+#' also has a quirk if used with default settings (blind = TRUE, strict = FALSE), in that across windows of the data,
+#' there will naturally be only certain GPS fixes that can be sampled from the segment windows, dependent on the rateL and rateU conditions used.
+#' This will 'lock in' the same fixes sampled on the same bootstraps each time. Options are available to relax this condition
+#' through setting the 'blind' argument to TRUE, which will forget the previous point selection in the sequence. If the 'strict'
+#' argument is also set to TRUE, then any fixes too close to a previous segment selection will be dropped. With 'strict' as FALSE (default)
+#' these points will not be dropped and any gaps of too lengthy time spans where rateU is violated will be checked for other points to insert.
+#' A more conservative but still quite strict approach is to lower the lower tolerance 'l_tol' value, e.g. to 0.4 from 0.2 overall 'tol'
+#' so that some variation within the sequence of fixes is allowed, but this is a trade-off as the lower l_tol specified will
+#' increasingly deviate away from the intended overall 'dt' rate downgraded to.
+#' Another option is to use the fourth method option:
+#' (4) This introduces another level into the hierarchy so that sequences are performed within TagID/'VAR'/rate/gapsec.
+#' This uses the \code{assign_rates()} function \strong{with defaults from that function}, to allow strings of fixes
+#' along which the sequence of bootstrapping is performed to occur within rate changes of the tag, which is useful if there
+#' are multiple rates used. This will begin the search of random points at each rate switch to break that 'locked in' pattern
+#' of samples across bootstraps. However, this will also result in possible no valid fixes being found at those boundaries.
+#' \strong{A warning here}: If your data is on the scale of one fix every day, then the 'boot_rate' approach will not work as
+#' the defaults are used within \code{assign_rates()}, which guesses rates up to three hours.#'
+#' The result of the two boot methods is a listed output of boots, that can be translated back into
+#' \code{Track} data using the function \code{retrieve_boots}.
+#' @param strict Logical, defaults to FALSE. Determines whether the function drops out the fixes that are too fast and violate
+#' the rateL lower bound as determined by the tol or l_tol arguments. In the boot methods, frequently, fixes cannot be sampled to meet
+#' both rateL and rateU, particularly at coarser rates from slightly less coarser rates, where fewer fixes are available fore resampling.
+#' This of course depends on the tolerance parameters used too. That said a situation can also arise if for example
+#' one sampling segment has an issue finding a fix skipping it, which forces the next segment along to randomly pick from any of the fixes
+#' in that second segment, which may be further forward in time > rateU between remaining sampled fixes; this is because
+#' essentially that second segment has to start the search off again considering all fixes.
+#' This can give 'holes' in the data, but these on occasion can be back-filled (repaired) by going back to the original data to check for valid points, and if
+#' strict = FALSE, this will happen with 1:n fixes randomly inserted, where n is the maximum possible on that slice of the data.
+#' @param blind Logical, default FALSE. Following on from the strict argument, if blind is TRUE, all segments sample 'blindly'
+#' where within segment t, any previous GPS random pick of a point in the segment t-1 is forgotten. This allows a full true randomisation
+#' but will violate rateL and rateU conditions. Therefore strict arguments should be considered alongside. If strict is TRUE as well as blind being TRUE,
+#' the result is removal of fixes violating rateL but keeping 'holes' in the data from rateU segment to segment quirks (see strict argument).
+#' If blind is TRUE but strict is FALSE, then faster sampled points are retained, but attempts are made to put potentially missing fixes into data 'holes'.
 #' @param nboots The number of bootstraps to take using the sequence sampler, relevant only for that method.
-#' @param split_ratio A ratio to split up pairs of sequences for the boot sequencer option, to speed up processing inthe
-#' \code{combn} \code{data.table} process assessing validity of pairs. Defaults to 50. Toggling this may help runtime.
 #' @param seed Seed to set for reproducibility using the boot sequencer.
 #' @param verbose logical to return detailed messaging.
+#' @param verbose_repair Logical defaulting to FALSE. This turns on detailed messaging for the routine that
+#' attempts to 'repair' the randomly sub-sampled data after the "boot_sequencer" or "boot_rate" methods have been used.
 #'
 #' @return Returns the same format data as inputted but a reduced dataset (except for the boot_sequencer - see below)
 #' removing rows of data for each animal faster than the desired rate. The boot sequencer returns a list of row numbers matching
@@ -73,7 +131,7 @@
 #' to \code{Track} data using the \code{retrieve_boots} function that adds an additional column of 'boot'
 #' in a stacked dataset across all animals.
 #'
-#' @seealso [MoveRakeR::clean_GPS], [MoveRakeR::gap_section], [MoveRakeR::Track2move]
+#' @seealso [MoveRakeR::clean_GPS], [MoveRakeR::gap_section], [MoveRakeR::Track2move], [MoveRakeR::progress_estimated2]
 #'
 #' @examples
 #'
@@ -175,7 +233,7 @@
 #' #  2: 2014-05-21 05:45:03 2014-05-21 05:47:20   137     0
 #'
 #' # -------------------------------------------------------- #
-#' # To get around this, in the sub_samp function, we therefore revisit the original data
+#' # To get around the rounder issue, in the sub_samp() function, we therefore revisit the original data
 #' # and look for potential real points that could sit in between consecutive fixes that would meet a
 #' # minimum threshold difference between the fixes informed by dt-(dt*tol)
 #' # -------------------------------------------------------- #
@@ -183,6 +241,16 @@
 #' # Ultimately, interpolation methods may be more useful depending on further analytical uses.
 #'
 #' sub_samp(data = data_test_df, dt = 300, tol = 0.4, method = "rounder")
+#'
+#' #Using method: rounder
+#' #Computed rateL from tolerance: 180
+#' #Computed rateU from tolerance: 420
+#' #---- rounding process ----
+#' #  ---- overly strict point removal checker ----
+#' #  TagID difftime            DateTime  dt rn
+#' #1     1       NA 2014-05-21 05:37:44 287  1
+#' #2     1      287 2014-05-21 05:42:31 289  2 <------ better
+#' #3     1       NA 2014-05-21 05:47:20  NA  3
 #'
 #' ##########################################################################################
 #  # rigorous function tests - in the below example we have a a mix of rates 3600, 300 and faster 20 s
@@ -232,19 +300,37 @@
 #' x300 <- sub_samp(data = data, dt = 300, tol = 0.2, method = "sequencer", drop_coarser = TRUE)
 #'
 #' # -------------------------------------------------------- #
-#' # 3. Boot sequencer
+#' # 3. Boot sequencers
+#'
 #' # produce 'realisations' of the data randomly sampling
-#' # This can be lengthy if say you have lots of 10 s data and wanting to go to e.g. 1800!
-#' # So that's a lot of potential combinations of pairs of points to assess validity in the current approach.
+#' # This can be quite lengthy if say you have lots of animals, lots of 10 s data and wanting to go to e.g. 1800 s
+#' # We have stuck to use of loops in the sub_samp() function as after much testing, these were actually
+#' # some of the fastest approaches.
 #'
-#' x1800_boot <- sub_samp(data = data, dt = 1800, tol = 0.2, method = "boot_sequencer", drop_coarser = TRUE)
-#' x1800_actual_boots <- retrieve_boots(x1800_boot) # use of retrieve-boots function to access boots (stored from the sub_samp function as an index lookup to save memory)
+#' # The two boot options:
+#' # ------------------ #
+#' # (a) "boot_sequencer" using TagID/(by variable)/gapsec/segment approach:
 #'
-#' data_test_df <- data_test_df %>% mutate(difftime = as.vector(difftime(DateTime, lag(DateTime), units= 'secs')))
+#' x1800_boot <- sub_samp(data = data, dt = 1800, tol = 0.2, method = "boot_sequencer")
+#' boots_x1800 <- retrieve_boots(x1800_boot) # use of retrieve-boots function to access boots (stored from the sub_samp function as an index lookup to save memory)
 #'
-#' new3 = sub_samp(data, dt=7200, tol = 0.2, method = "boot_sequencer", nboots = 10, seed = 1)
-#' new = retrieve_boots(new3)
-#' plot_leaflet(data = data, plotby = "boot") # check visualisation
+#' RakeRvis::RakeRvis(data = boots_x1800) # check visualisation, plotting 'by' boot in the app or...
+#' plot_leaflet(data = boots_x1800, plotby = "boot")
+#'
+#' # example using random points in all segments, and patching potential fixes in that violate rateL conditions after:
+#' x1800_boot_blind <- sub_samp(data = data, dt = 1800, tol = 0.2, method = "boot_sequencer", blind = TRUE)
+#'
+#' #or being strict and dropping out any fixes that violate rateL without patching any fixes back in
+#' x1800_boot_blind <- sub_samp(data = data, dt = 1800, tol = 0.2, method = "boot_sequencer", blind = TRUE, strict = TRUE)
+#'
+#' # example using a more leniant lower tolerance value, preserving the sequence of point randomisation
+#' x1800_boot_ltol <- sub_samp(data = data, dt = 1800, tol = 0.2, l_tol = 0.4, method = "boot_sequencer", blind = FALSE, strict = FALSE)
+#'
+#' # ------------------ #
+#' (b) "boot_rate" using TagID/(by variable)/rate/gapsec/segment approach:
+#'
+#' x1800_boot_rate <- sub_samp(data = data, dt = 1800, tol = 0.2, method = "boot_rate", drop_coarser = TRUE)
+#' boots_x1800_rate <- retrieve_boots(x1800_boot)
 #'
 #' @references
 #'
@@ -259,10 +345,16 @@
 #' \url{https://doi.org/10.5281/zenodo.596464}
 #'
 #' @export
-sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL, l_tol = NULL, rateU=dt+(dt*tol), rateL = dt-(dt*tol),
-                    method = c("sequencer", "rounder", "boot_sequencer"),
-                    nboots = 5, seed = NULL, split_ratio = 50,
-                    drop_coarser = TRUE, verbose = TRUE){
+sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.2, u_tol=NULL, l_tol = NULL,
+                    rateU=NULL, rateL = NULL,
+                    method = c("sequencer", "rounder", "boot_sequencer", "boot_rate"),
+                    strict = FALSE, blind = FALSE,
+                    n_boot = 5, seed = NULL,
+                    drop_coarser = TRUE,
+                    verbose = TRUE,
+                    verbose_repair = FALSE){
+
+
 
   # --------------------------------------- #
   # assessment of relevant minimum namings in data
@@ -271,54 +363,50 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL,
 
   method = method[1] # using sequence by default
 
-  #l_tol = NULL
-  ##u_tol = 0.4
-  #u_tol = NULL
-  #rateL <- rateU <- NULL
+  if(verbose){
 
-  if(!is.null(u_tol)){
-      message("Bespoke upper tolerance: (", dt, "+(", dt,"*",u_tol, ") = ", dt+(dt*u_tol), " s)", " using ", method, " method")
+    message("Using method: ", method[1])
 
-      rateU <- dt+(dt*u_tol)
+    # Step 0: define base rate
+    rate <- dt
 
-      if(is.null(l_tol)){
-        l_tol = u_tol
+    # Step 1: determine effective tolerances
+    # If tol is NULL, use midpoint of provided l_tol/u_tol if any, else default 0.2
+    if (is.null(tol)) {
 
-        rateL <- dt-(dt*l_tol)
+      if(is.null(l_tol) & is.null(u_tol)){tol = 0.2} else{
+
+        tol <- mean(c(l_tol, u_tol), na.rm = TRUE)
+        #if (is.nan(tol)) tol <- 0.2  # default fallback
       }
 
-  }
-
-  if(!is.null(l_tol)){
-      message("Bespoke lower tolerance: (", dt, "-(", dt,"*",l_tol, ") = ", dt-(dt*l_tol), " s)", " using ", method, " method")
-
-      if(is.null(u_tol)){
-        u_tol = l_tol
-        message("Bespoke upper tolerance: (", dt, "+(", dt,"*",u_tol, ") = ", dt+(dt*u_tol), " s)", " using ", method, " method")
-        rateU <- dt+(dt*u_tol)
-      }
-
-    rateL <- dt-(dt*l_tol)
-  }
-
-  if(is.null(l_tol) & is.null(u_tol)){
-    if(verbose){
-      message("Reducing data to common rate of ", dt, "s, with tolerance of ", tol, " using ", method, " method")
     }
+
+    l_tol_use <- if(!is.null(l_tol)) l_tol else tol
+    u_tol_use <- if(!is.null(u_tol)) u_tol else tol
+
+    # Step 2: rateL
+    if (!is.null(rateL)) {
+      final_rateL <- rateL
+      message("Using rateL supplied: ", final_rateL)
+    } else {
+      final_rateL <- rate - (rate * l_tol_use)
+      message("Computed rateL from tolerance: ", final_rateL)
+    }
+
+    # Step 3: rateU
+    if (!is.null(rateU)) {
+      final_rateU <- rateU
+      message("Using rateU supplied: ", final_rateU)
+    } else {
+      final_rateU <- rate + (rate * u_tol_use)
+      message("Computed rateU from tolerance: ", final_rateU)
+    }
+
   }
 
-
-  #if(fun){
-  #  if(verbose){
-  #      if(method != "boot_sequencer" & drop_coarser & exists("gapsec", data)){
-  #        message("calling gap_section function, dropping all points > ",rateU, Unit, " (including tol of ", tol,"*",dt,")")
-  #      }
-  #      if(!exists("gapsec", fin2) & drop_coarser){
-  #        message("gapsec not found in data: WARNING result may contain data above rateU+tol")
-  #      }
-  #    }
-  #}
-
+  rateL = final_rateL
+  rateU = final_rateU
 
   ##################################
   # Three options
@@ -330,44 +418,66 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL,
   # The updated code here accounts for potential issues with missed fixes (see help example)
   # (3) A resampling approach for sections of data at the level of thinning required using option (2) above
   # This is in beta development and could possibly be made more efficient
-  #
-  # Tests
-  #data <- LBBGWalB201416
-  ##data = BTOTrackingTools::simplify(data, extra_vars = "dt")
-  #data$rn <- 1:nrow(data)
-  ##data <- data[249:432,] # some slower than 5 mins, some faster
-  ##BTOTrackingTools::assign_rates(LBBGWalB201416)
 
   final_samp <- coarser_fixes <- NULL # for below attribute output, a bit hacky
 
   ##########################################################
   data_tb <- tibble(data) %>% group_by(TagID) %>% arrange(TagID, DateTime)
 
-  ##########################################################
+  # ======================================================= #
   # 1. Rounding to the nearest datetime unit
-
+  # ======================================================= #
   if(method == "rounder"){
 
     if(verbose){message("---- rounding process ----")}
 
     # quickly inserted this patch - may be a better way around
-    if(dt > 60){
-      dt2 = dt / 60
-      Unit2 = "mins"
-    } else{
-        dt2 = dt
-        Unit2 = Unit
-        }
+    #if(dt > 60){
+    #  dt2 = dt / 60
+    #  Unit2 = "mins"
+    #} else{
+    #  dt2 = dt
+    #  Unit2 = Unit
+    #}
+
+    #new2 <- data_tb %>%
+    #  group_by(TagID) %>%
+    #  mutate(difftime = as.vector(difftime(DateTime, lag(DateTime), units = 'secs'))) %>% # retain this to check from original data if any data are above the rate we are downgrading too
+    #  rename(DateTime_orig = "DateTime") %>%
+    #  mutate(DateTime = round_date(DateTime_orig, unit = period(num = dt2, units = Unit2)),
+    #         diff = abs(as.vector(difftime(DateTime_orig, DateTime, units = "secs")))
+    #  ) %>% group_by(TagID, DateTime) %>% slice_min(diff) %>%
+    #  group_by(TagID) %>%
+    #  mutate(dt = as.vector(difftime(lead(DateTime_orig), DateTime_orig, units = 'secs')) ) # recalculate dt#
+
+    dt_secs = dt
+
+    if(Unit == "mins"){
+      dt_secs <- dt * 60
+    }
+    if(Unit == "hours"){
+      dt_secs <- dt * 60 * 60
+    }
+    if(Unit == "days"){
+      dt_secs <- dt * 60 * 60 * 24
+    }
 
     new2 <- data_tb %>%
+      ungroup() %>%  # remove any prior grouping
+      mutate(
+        difftime = as.vector(difftime(DateTime, lag(DateTime), units = 'secs')), # retain this to check from original data if any data are above the rate we are downgrading too
+        DateTime_orig = DateTime,
+        RoundedTime = as.POSIXct(dt_sec * round(as.numeric(DateTime_orig) / dt_sec),
+                                 origin = "1970-01-01",
+                                 tz = tz(DateTime_orig)),
+        diff = abs(as.numeric(DateTime_orig) - as.numeric(RoundedTime))
+      ) %>%
+      group_by(TagID, RoundedTime) %>%
+      slice_min(diff, with_ties = FALSE) %>%
+      ungroup() %>%     # optional, to return ungrouped
+      dplyr::select(-RoundedTime) %>%
       group_by(TagID) %>%
-      mutate(difftime = as.vector(difftime(DateTime, lag(DateTime), units = 'secs'))) %>% # retain this to check from original data if any data are above the rate we are downgrading too
-      rename(DateTime_orig = "DateTime") %>%
-      mutate(DateTime = round_date(DateTime_orig, unit = period(num = dt2, units = Unit2)),
-             diff = abs(as.vector(difftime(DateTime_orig, DateTime, units = "secs")))
-      ) %>% group_by(TagID, DateTime) %>% slice_min(diff) %>%
-      group_by(TagID) %>%
-      mutate(dt = as.vector(difftime(lead(DateTime_orig), DateTime_orig, units = 'secs')) ) # recalculate dt
+      mutate(dt = as.vector(difftime(lead(DateTime_orig), DateTime_orig, units = 'secs')) ) # recalculate dt#
 
     # sorry this is complex
     new2 <- new2 %>% mutate(dt = as.vector(difftime(DateTime_orig, lag(DateTime_orig), units = 'secs')) )
@@ -380,9 +490,9 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL,
 
   }
 
-  ##########################################################
-  # 2. Sequential 'rolling' in data.table, original methods used at BTO
-
+  # ======================================================= #
+  # 2. Sequential 'rolling' in data.table
+  # ======================================================= #
   if(method == "sequencer"){
 
     if(verbose){message("---- sequencer process ----")}
@@ -410,10 +520,6 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL,
     r2 <- data.table::data.table(data_seq, key = c("TagID","DateTime"))  # interpolated data
     new <- r1[r2 , roll = "nearest", allow.cartesian=TRUE ] #list(TagID, DateTime, DateTime_orig),
 
-    #r1[525:535,]
-    #as.POSIXct("2016-06-05 10:17:07 UTC", tz = "UTC") %in% new$DateTime_orig
-    #new[5080:5120,]
-
     # get difference of DateTime to the original Datetime
     new$diff <- as.vector(difftime(new$DateTime_orig,new$DateTime,units = 'secs'))
     new$diff <- ifelse(new$diff < 0, new$diff *-1,new$diff)
@@ -429,13 +535,6 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL,
     new2$dt <- ifelse(is.na(new2$dt),0,new2$dt)
 
     new2 <- new2 %>% mutate(dt = as.vector(difftime(DateTime_orig, lag(DateTime_orig), units = 'secs')) ) # recalculate dt
-
-
-    # the sequencer can misbehave more than the rounder - this is because when looking
-    # for nearest matches it will always find them nearest the sequence even if too close
-    # to the next fix
-    # we need to make sure therefore that our result at this point is valid and that no fixes
-    # quicker than the rate we want to degrade to are still present
     new2 <- new2[is.na(new2$dt) | new2$dt > rateL,] # was difftime
 
     # alignment with rounding output
@@ -447,7 +546,7 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL,
   }
 
   ##########################################
-  if(method != "boot_sequencer"){
+  if(!method %in% c("boot_sequencer", "boot_rate")){
 
     ###############################
     # first row difftime make same as second lag for rateU filter, also complexity for first valid dt!
@@ -459,12 +558,6 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL,
              dt = ifelse(rn == max(rn),lag(dt),dt),
              difftime = ifelse(dt < difftime, dt, difftime) )
 
-    #new2[525:535,]
-
-    #tail(new2_test[new2_test$TagID == 4032,]$dt)
-    #new2$dt[nrow(new2)] <- new2$difftime[(nrow(new2)-1)]
-    #new2$difftime <- ifelse(new2$dt < new2$difftime, new2$dt, new2$difftime)
-
     #################################################################################################################
     # look for potentially missing fixes from the 'too harsh' sub-sampling
     # Base R approach used originally. This looked for any violations of the dt rule
@@ -473,7 +566,8 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL,
     # maximum threshold we are allowing, e.g. 300 seconds plus a tolerance (0.4 default) = 420 s
     # then if in the original fix there is a fix than is within the re-estimated dt gap, here being 576 s
     # check to see if it is OK to include the additional fix as part of the sequence
-    # flipping between tidyverse and data.table here!
+    # flipping between tidyverse and data.table here
+
     if(verbose){message("---- overly strict point removal checker ----")}
 
     new2. <- new2 %>% group_by(TagID) %>% arrange(TagID, DateTime_orig) %>%
@@ -482,73 +576,39 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL,
       rename(st = "DateTime_orig", en = "DateTime_orig2") %>%
       dplyr::select(c(TagID, st, en))
 
-    #new2.[525:535,]
-
     # to slim this down - look at this point for number of fixes between these dates
     # i.e. any fixes between these two values consider for adding back into the data
     # left_join in - this will be bigger as there will be starts and ends doubling up of rows
     st_en <- new2. %>%  tidyr::pivot_longer(cols = c(`st`,`en`), names_to = "st_en", values_to = "DateTime")
 
-    #st_en[st_en$DateTime %in% as.POSIXct("2016-05-18 18:50:36", tz = "UTC"),]
-    #tail(st_en[st_en$TagID == 202,])
-
-    #new2.[new2.$st %in% as.POSIXct("2016-05-31 07:28:28", tz = "UTC"),]
-    #st_en[st_en$DateTime %in% as.POSIXct("2016-05-31 07:28:28", tz = "UTC"),]
-    #st_en[st_en$DateTime %in% as.POSIXct("2016-05-31 08:27:41", tz = "UTC"),]
-    #st_en$p <- sort(rep(1:(nrow(st_en)/2), 2))
-    #st_en[st_en$p == 2418,]
-
     # ------------------- #
     # extra step here as we do not want to reinsert the fixes rightly filtered out
     # so use rateL to drop fixes with faster dts?
     # the issue we are getting at here is for data already on the rate we are filtering too
-    #r1a = r1 %>% mutate(dt = as.vector(difftime(lead(DateTime), DateTime, units = 'secs')) ) %>%
-    #  filter(dt >= rateL) %>% relocate(dt, .after = DateTime) %>% tibble()
 
-    #### the above row in the example of 202, drops out "2016-06-05 10:17:07"
-    #### which is a valid fix five mins after "2016-06-05 10:12:07"
-    #### this is because the lead DT - DT is being used to filter rateLs
-    #### whereas it should be I think DT - lag(DT)
     dt_ <- dt
     r1a <- r1 %>% mutate(dt = as.vector(difftime(DateTime, lag(DateTime), units = 'secs')) ) %>%
-       relocate(dt, .after = DateTime) %>% group_by(TagID) %>%
-        mutate(rn = row_number(),
+      relocate(dt, .after = DateTime) %>% group_by(TagID) %>%
+      mutate(rn = row_number(),
              dt = ifelse(rn == min(rn),lead(dt),dt),
              dt = ifelse(is.na(dt), dt_, dt)) %>% # for nrows of 1 per animal the above lead will not work, i.e. no second row, so just take dt supplied to function (dt_ here)
       dplyr::select(-rn) %>% filter(dt >= rateL)
 
-    #r1b[525:535,]
-    #r1a[525:535,]
-    #r1b[1,]$dt # NA
     # ------------------ #
-
-    #if(!exists("longitude", data)){r1a$longitude <- 1}
-    #if(!exists("latitude", data)){r1a$latitude <- 1}
 
     # drop any fixes > rateU as at the start and end it can include fixes - see if they are arphaned with gapsec process
     r1a = r1a %>% gap_section(GAP = rateU, tol = 0, drop = TRUE, verbose = FALSE) %>% tibble()
 
-    #if(!exists("longitude", data)){r1a <- r1a %>%  dplyr::select(-c(longitude))}
-    #if(!exists("latitude", data)){r1a <- r1a %>%  dplyr::select(-c(latitude))}
     if(!exists("gapsec", data)){r1a <- r1a %>%  dplyr::select(-c(gapsec))}
     if(!exists("gap", data)){r1a <- r1a %>%  dplyr::select(-c(gap))}
 
-    #r1a$dt[nrow(r1a)] <- dt
-
     # ------------------- #
-
     # are there any valid fixes to actually check to add in?
-
 
     if(nrow(r1a) > 0){
 
       # better to rbind as now r1a is slimmed down so may not have the start or end to match to in prev left_join
       # first remove the 'negative space' between the starts and ends of sections of data where dt was VALID i.e. < dt threshold
-
-      #st_en_test <- st_en[st_en$TagID %in% 4032 & st_en$DateTime >= as.POSIXct("2016-05-31 07:28:28", tz = "UTC") &
-      #                      st_en$DateTime <= as.POSIXct("2016-05-31 08:27:41", tz = "UTC"),]
-      #r1a_test <- r1a[r1a$TagID == 4032 & r1a$DateTime >= as.POSIXct("2016-05-31 07:28:28", tz = "UTC") &
-      #                  r1a$DateTime <= as.POSIXct("2016-05-31 08:27:41", tz = "UTC"),]
 
       part1 = r1a %>%  dplyr::select(TagID, DateTime) %>% mutate(st_en = NA) %>% relocate(st_en, .after = TagID) %>%
         rbind(.,st_en) %>% arrange(TagID, DateTime) %>%
@@ -561,83 +621,42 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL,
         tidyr::fill(cond0) %>%
         mutate(cond0 = ifelse(is.na(cond0) & row_number() == 1, lead(cond0), cond0),
                cond0 = ifelse(is.na(lag(st_en)), lag(cond0), cond0),
-              Sec = consecutive_id(cond0)
-               ) %>%
+               Sec = consecutive_id(cond0)
+        ) %>%
         dplyr::select(-cond0)
 
-      #View(part1)
-
-      # old way broken
-      #part1 = left_join(r1a, st_en, by = c("TagID", "DateTime")) %>% group_by(TagID) %>%
-      #  mutate(cond0 = if_else(is.na(st_en) & lag(st_en) == "en", row_number(), 0), # complex => sure there must be a way of doing in one single if_else but on the day it got better of me, splitting up to two columns at no real overhead cost
-      #         cond1 = if_else(is.na(st_en) & lead(st_en) == "st", row_number(), 0),
-      #         cond2 = if_else(cond0 == 0 & cond1 == 0, 0,
-      #                         if_else(cond0 > 0 & is.na(cond1), cond0,
-      #                                 if_else(cond1 > 0 & is.na(cond0), cond1, NA)))
-      #  ) %>%
-      #   dplyr::select(-c(cond0,cond1)) %>%  tidyr::fill(cond2) %>%
-      #  mutate(cond2 = if_else(cond2 > 0, 1, cond2)) %>%
-      #  filter(cond2 == 0) %>% # remove the sections where we do not want to search, now have st and end for all data for > dt violation
-      #  mutate(pnum = case_when(st_en == "st" ~ cur_group_rows())) %>% # add in row.number for st
-      #  tidyr::fill(pnum) %>% # fill in between st
-      #  mutate(Sec = consecutive_id(pnum)) %>% # consecutively number sections
-      #   dplyr::select(-c(cond2,pnum))
 
       # count the sections - if just a start and an end, then no extra data was between the st and end
       part2 = part1 %>% group_by(TagID, Sec) %>% summarise(n = n(), .groups="keep") %>% filter(n > 2) # part1 data LBBGU WA six birds, left 1350 rows (1538 for the rounded time version)
 
-      #part1[part1$Sec == 946,]
-
-      #st_en
-      #st_en[st_en$DateTime %in% as.POSIXct("2016-05-31 07:28:28", tz = "UTC"),]
-
       # then only way I can think of doing this is to add back into the full dataset, recalculate dt, and if
       # any remain below the threshold then retain them! Most should just drop out again
       part3 = left_join(part2, part1, by = c("TagID", "Sec")) %>% ungroup() %>% dplyr::select(-c(n, Sec, st_en)) # keeping only the sections with in between points
-
       part3 <- part3 %>% group_by(TagID) %>% filter(!duplicated(DateTime)) %>% ungroup()
 
       # add this back to the sub-sampled data
       # need to switch the date_time orig and DateTime columns as relabelled for rolling above
       fin <- new2 %>% dplyr::select(-c(DateTime, diff)) %>% rename(DateTime = "DateTime_orig")
-      #fin_extra <- part3  #%>% dplyr::select(-DateTime_orig)
 
       # lookup those rows in data
       fin_extra <- right_join(data, part3, by = c("TagID", "DateTime")) %>%
         mutate(dt = as.vector(difftime(lead(DateTime), DateTime, units = 'secs')) ) %>%
         group_by(TagID)
 
-      # fin columns switched around
-      #fin = fin %>% relocate(TagID) #%>% relocate(Type, .after = TagID) #%>% dplyr::select(-rn)
-
       # recalculate dt, drop out extra rows from simple filter
-      fin2 = rbind(fin, fin_extra) %>% group_by(TagID) %>% arrange(TagID, DateTime) %>%  #mutate(rn = 1:n())
-        #mutate(dt = as.vector(difftime(lead(DateTime), DateTime, units = 'secs')) ) %>%
+      fin2 = rbind(fin, fin_extra) %>% group_by(TagID) %>% arrange(TagID, DateTime) %>%
         mutate(dt = as.vector(difftime(DateTime, lag(DateTime), units = 'secs')) ) %>%
         filter(!duplicated(DateTime)) %>%
-        #mutate(dt = as.vector(difftime(lead(DateTime), DateTime, units = 'secs')) )
         mutate(dt = as.vector(difftime(DateTime, lag(DateTime), units = 'secs')) )
 
       # ------------------ #
       # the LAST fix WILL ALWAYS be dropped if you don't apply this dirty work around
-      #fin2$dt[length(fin2$dt)] <- dt
-      #dt_ = dt
-      #fin2 = fin2 %>% group_by(TagID) %>%
-      #  mutate(rn = row_number(),
-      #         dt = ifelse(rn == max(rn),dt_,dt)) %>% dplyr::select(-rn)
-
-      # But... if using the dt - lag(dt) then the above does not apply, instead it is the
-      # first in the list, so just make that equal to the next lag
       dt_ = dt
       fin2 = fin2 %>% group_by(TagID) %>%
         mutate(rn = row_number(),
-             dt = ifelse(rn == min(rn),lead(dt),dt),
-             dt = ifelse(is.na(dt), dt_, dt))
-
-      #fin2[525:535,]
-
+               dt = ifelse(rn == min(rn),lead(dt),dt),
+               dt = ifelse(is.na(dt), dt_, dt))
       # ------------------ #
-
 
       fin2 <- fin2 %>% filter(dt > 0) # prob unneccessary
 
@@ -646,35 +665,15 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL,
       fin2 <- new2 %>% dplyr::select(-DateTime, diff) %>% rename(DateTime = "DateTime_orig")
     }
 
-    #fin2 %>% relocate(dt, .after = Type) %>% mutate(dt = as.vector(difftime(lead(DateTime), DateTime, units = 'secs')) )
-    #t1 = as.POSIXct("2016-05-18 19:52:37", tz = "UTC")
-    #t2 = as.POSIXct("2016-05-18 18:51:13", tz = "UTC")
-    #difftime(t1,t2, unit = 'secs')
-
-    # check again for those below the minimum rate (filter(dt >= rateL) was too strict),
-    # and should be done with gapsection that retains strings of points
-    # allowing also use of function if lat long missing
-    #if(!exists("longitude", data)){fin2$longitude <- 1}
-    #if(!exists("latitude", data)){fin2$latitude <- 1}
     fin2 <- fin2 %>% gap_section(GAP = rateL, tol = 0, drop = FALSE, verbose = FALSE)
 
-    #if(!exists("longitude", data)){fin2 <- fin2 %>% select(-c(longitude))}
-    #if(!exists("latitude", data)){fin2 <- fin2 %>% select(-c(latitude))}
     if(!exists("gapsec", data)){fin2 <- fin2 %>% dplyr::select(-c(gapsec))}
     if(!exists("gap", data)){fin2 <- fin2 %>% dplyr::select(-c(gap))}
 
-    fin2 <- fin2 %>% # filter(dt >= rateL)
-      #mutate(dt = as.vector(difftime(lead(DateTime), DateTime, units = 'secs')) ) %>%
+    fin2 <- fin2 %>%
       mutate(dt = as.vector(difftime(DateTime, lag(DateTime), units = 'secs')) ) %>%
       arrange(TagID, DateTime) %>% tibble()
 
-    #lead(dt)-dt
-    #dt_ = dt
-    #fin2 = fin2 %>% group_by(TagID) %>%
-    #  mutate(rn = row_number(),
-    #         dt = ifelse(rn == max(rn),dt_,dt)) %>% dplyr::select(-rn)
-
-    #dt-lag(dt)
     dt_ = dt
     fin2 = fin2 %>% group_by(TagID) %>%
       mutate(rn = row_number(),
@@ -684,692 +683,611 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL,
     # STILL may be quicker fixes than rateL (e.g. dt = 300 tol = 0.2 from rounder process inserted BACK IN a fix in my tests)
     fin2 <- fin2[is.na(fin2$dt) | fin2$dt >= rateL,]
 
-    #any(is.na(fin2$dt))
-    #fin2[525:535,]
-
     if(drop_coarser){
 
-      #if(!exists("longitude", data)){fin2$longitude <- 1}
-      #if(!exists("latitude", data)){fin2$latitude <- 1}
-
       # drop any fixes > rateU
-      fin2 = fin2  %>% #%>% rename(DateTime_ = "DateTime", DateTime = "DateTime_orig")
-        gap_section(GAP = rateU, tol = 0, drop = TRUE, verbose = FALSE) %>% tibble() #%>%
-        #rename(DateTime_orig = "DateTime", DateTime = "DateTime_")
+      fin2 = fin2  %>% gap_section(GAP = rateU, tol = 0, drop = TRUE, verbose = FALSE) %>% tibble()
 
-      #as.vector(as.POSIXct("2014-05-21 05:42:31") - as.POSIXct("2014-05-21 05:36:21") )*60
-
-      #if(!exists("longitude", data)){fin2 <- fin2 %>% dplyr::select(-c(longitude))}
-      #if(!exists("latitude", data)){fin2 <- fin2 %>% dplyr::select(-c(latitude))}
       if(!exists("gapsec", data)){fin2 <- fin2 %>% dplyr::select(-c(gapsec))}
       if(!exists("gap", data)){fin2 <- fin2 %>% dplyr::select(-c(gap))}
 
-      #new2$difftime[nrow(new2)] <- ifelse(new2$difftime[nrow(new2)] < rateU & new2$dt[nrow(new2)] > rateU, new2$dt[nrow(new2)], new2$difftime[nrow(new2)])
-      #new2 <- new2 %>% filter(difftime < rateU | is.na(difftime)) # default DROP any fixes that are > rateU
     }
-
-
-    # last fix coarser remains
-#    if(drop_coarser){
-#
-#      fin2$difftime[1] <- ifelse(fin2$difftime[1] > rateU & fin2$dt[1] <= rateU, fin2$dt[1], fin2$difftime[1])
-#      fin2$difftime[1] <- ifelse(is.na(fin2$difftime[1]),fin2$dt[1],fin2$difftime[1])
-#      fin2 <- fin2[fin2$difftime < rateU,]
-#
-#      #### Dropping fixes greater than rateU and fort this also using gapsections
-#      # gapsection relabelling, dropping out orphan fixes, which just means this is a one line code rather than
-#      # allowing use of function if lat long missing
-#      #if(!exists("longitude", data)){fin2$longitude <- 1} # dealt with above
-#      #if(!exists("latitude", data)){fin2$latitude <- 1}
-#      # this time drop = TRUE, i.e. removing orphaned fixes from the rateU threshold breach
-#      fin2 <- tibble(gap_section(fin2, GAP = rateU, tol = 0, drop = TRUE, verbose = FALSE))
-#
-#      # missing last row if the end is OK
-#      #if(fin2$difftime[nrow(fin2)] < rateU){
-#      #  dates_to_search <- data$DateTime
-#      #  date_to_find <- fin2[nrow(fin2),]$DateTime + fin2[nrow(fin2),]$difftime
-#      #  extra_end_row <- data[dates_to_search %in% date_to_find,] %>% relocate(TagID) %>% mutate(dt = difftime)
-#      #  fin2 <- rbind(fin2,extra_end_row)
-#      #}
-#
-#      # what a mess this (tbh not sure if really needed if the gapsection checks are already done above:
-#      check_again <- lag(fin2$dt)
-#      check_again[1] <- ifelse(is.na(check_again[1]), fin2$dt[1], check_again[1])
-#      bool = check_again > rateU
-#      bool2 = rep(FALSE, length(bool))
-#      bool2[1] <- bool[1]
-#      bool2[length(bool2)] <- bool[length(bool)]
-#
-#      fin2 <- fin2[!bool2,]
-#    }
-#
-#    # return any variables inserted if were not in original data
-#    if(!exists("longitude", data)){ fin2 <- subset(fin2, select = -longitude) }
-#    if(!exists("latitude", data)){ fin2 <- subset(fin2, select = -latitude) }
-#    if(!exists("gap", data)){ fin2 <- subset(fin2, select = -gap) }
-#    if(!exists("gapsec", data)){ fin2 <- subset(fin2, select = -gapsec) }
 
     data2 <- fin2
 
-    # ----------------------------- #
-    # overall behaviour if dt rates are not possible! The function will return
-    # matches in dates or sequences even if they are not appropriate for a silly rate that may have been picked
-    # recheck validity of dt therefore needed post-hoc
-
-    # this is true ONLY if you are dropping coarser:
-    #if(drop_coarser){
-    #  all_check <- fin2$dt[!is.na(fin2$dt)]
-    #  w = which(all_check < rateU)
-    #  if(length(w) <= 1){
-    #    # i.e. if all are way greater than the rateU OR the last one fictitiously entered = orphan fix, then drop
-    #    data2 <- as_tibble(matrix(nrow = 0, ncol = length( names(fin2))), .name_repair = ~  names(fin2))
-    #  }
-    #}
-
-    #else{
-
-      # NOT SURE ABOUT THIS - IT CAUSE PROBLEMS ELSEWHERE
-      # SEEMS TO BE HANDLED ANYWAY ABOVE
-#      # if not dropping coarser, then....filter the ORIGINAL data and keep ONLY rates greater than
-#      # rateL - a bit of an odd situation
-#
-#      data_ <- data
-#      data_$difftime = as.vector(difftime(data_$DateTime, lag(data_$DateTime), units = 'secs'))
-#      data_$dt = as.vector(difftime(lead(data_$DateTime), data_$DateTime, units = 'secs'))
-#      data_$difftime[1] <- data_$dt[1]
-#      data_$dt[nrow(data_)] <- data_$difftime[nrow(data_)]
-#
-#      data_$difftime <- ifelse(data_$difftime < data_$dt,data_$dt,data_$difftime)
-#      data_ <- data_[data_$difftime >= rateL,]
-#      data2 <- data_
-#      data2 <- data2[names(data2) %in% names(data)]
-
-   # }
-
-    #data2[data2$TagID == 202,]
-
-    #if(fun){
-    #  if(drop_coarser){
-    #    if(exists("gapsec", fin2)){
-    #      data2 <- gap_section(data = fin2, GAP = rateU, tol = 0, unit = Unit, drop = TRUE, verbose = FALSE)
-    #    } else{
-    #      data2 = fin2
-    #    }
-    #  } else{
-    #    data2 = fin2
-    #  }
-    #} else{
-    #  data2 = fin2
-    #}
-
   }
 
-  # ------------------------------------- #
-  # 3. Addtional approach for boot sequencing, after much toil, most efficient was still
-  # using lists and applies rather than a tidyverse approach but I could be wrong.
+  # -------------------------------------------------------------------------------------------------------- #
+  # 3. Addtional approach for boot sequencing
 
+  # Worker function for checking violations in rateL after sampling under strict = FALSE condition
+  repair_rateL <- function(df_tv, picked_rn, rateL, Verbose = verbose) {
+    verbose <- Verbose
+    if(verbose){
+      message("Checking for rateL violations...")
+    }
+
+    # Subset picked rows
+    check <- df_tv[df_tv$rn %in% picked_rn, ]
+
+    # Compute time differences
+    check2 <- check %>%
+      group_by(TagID, !!!syms(unique(by))) %>%
+      mutate(dt = as.vector(difftime(lead(DateTime), DateTime, units = 'secs')),
+             tooquick = ifelse(dt < rateL, 1, 0),
+             tooquick = ifelse(is.na(tooquick), 0, tooquick))
+
+    too_quick <- check2[check2$tooquick == 1, ]
+    oks <- check2[check2$tooquick == 0, ]
+
+    if(nrow(too_quick) > 0){
+      if(verbose){message(nrow(too_quick), " rateL violations found, attempting repair...")}
+
+      # Identify segments needing repair
+      segs <- too_quick %>%
+        mutate(dt = as.vector(difftime(lead(DateTime), DateTime, units = 'secs'))) %>%
+        gap_section(., GAP = rateL, tol = 0, verbose = FALSE) %>%
+        group_by(TagID, !!!syms(unique(by)), gapsec) %>%
+        mutate(rn2 = row_number()) %>%
+        filter(rn2 == 1)
+
+      df2 <- data.table(oks)
+      df1 <- data.table(segs)
+
+      # Nearest previous
+      df1[, prev_idx := df2[.SD, on = "DateTime", roll = Inf, which = TRUE]]
+      df1[, prev_time := df2$DateTime[prev_idx]]
+
+      # Nearest next
+      df1[, next_idx := df2[.SD, on = "DateTime", roll = -Inf, which = TRUE]]
+      df1[, next_time := df2$DateTime[next_idx]]
+
+      df_raw <- as.data.table(df_tv)
+
+      # Loop through each hole to insert as many valid points as possible
+      reinsert_points <- lapply(1:nrow(df1), function(i){
+        prev_time_i <- df1$prev_time[i]
+        next_time_i <- df1$next_time[i]
+
+        # Candidate points in the hole (chronological order)
+        candidates <- df_raw[DateTime > prev_time_i & DateTime < next_time_i, ]
+        if(nrow(candidates) == 0) return(NULL)
+
+        inserted <- integer(0)
+        last_time <- prev_time_i
+
+        # Keep adding valid points sequentially until no more fit
+        candidate_rn <- candidates$rn
+        candidate_dt <- candidates$DateTime
+
+        idx_try <- 1
+        while(idx_try <= length(candidate_rn)){
+          t_candidate <- candidate_dt[idx_try]
+          dt_from_last <- as.numeric(difftime(t_candidate, last_time, units = "secs"))
+          dt_to_next <- as.numeric(difftime(next_time_i, t_candidate, units = "secs"))
+
+          if(dt_from_last >= rateL & dt_to_next >= rateL){
+            inserted <- c(inserted, candidate_rn[idx_try])
+            last_time <- t_candidate
+          }
+          idx_try <- idx_try + 1
+        }
+
+        df_raw[df_raw$rn %in% inserted, ]
+      })
+
+      reinserted <- bind_rows(reinsert_points)
+
+      if(verbose){
+        message(nrow(reinserted), " extra valid fixes inserted, meeting rateL condition (", rateL, " s)")
+      }
+
+      # Return combined picked rows with reinserted points
+      return(sort(c(oks$rn, reinserted$rn)))
+
+    } else {
+      if(verbose){message("No rateL violations found")}
+      return(sort(oks$rn))
+    }
+  }
+
+  # ======================================================= #
+  # 3a boot sequencer method, TagID/VAR/gapsec/segments
+  # ======================================================= #
   if(method == "boot_sequencer"){
 
-    data <- tibble(data) %>% arrange(TagID, DateTime)
+    message("***********************************************************************")
+    message("************************** Boot sequencer *****************************")
+    message("***********************************************************************")
+    message("~~~~~~~~~~~ Running ", n_boot, " boots ~~~~~~~~~~~")
 
-    if(is.null(by)){
-      data$var <- lubridate::year(data$DateTime)
-    } else{
-      data$var <- pull(data[,which(names(data) == by)])
-    }
-    data$var <- as.factor(data$var)
-
-    #######################################
-    # gapsections are needed to search within valid sections of data!
-    # as a lower level nesting under the var(or year) variable within TagID
-    # note this doesn't matter so much in the default methods of the function as fixes filter out across gaps whatever the case
-    # but for the sampler we need to know gapsections first for the validity check of points between dt[i] top dt[i+1] in the sequences
-
-    gapped <- gap_section(data, GAP=rateL, tol = 0.01, drop = FALSE, verbose = FALSE)
-
-    message("---- Segmenting data to desired degradation time steps ")
-    sections2sample = gapped %>% group_by(TagID, var, gapsec) %>%
-      summarise(date_start = min(DateTime), date_end = max(DateTime), .groups = "keep")  %>%
-      do( data.frame(., DateTime= seq(.$date_start, # macro variables in the do loop
-                                      .$date_end+dt, by =  paste(dt, Unit))) ) %>% ungroup() %>%
-      dplyr::select(-c(date_start,date_end))
-
-    # get rows in data other than main three
-    ign <- c("TagID","var","gapsec","DateTime")
-    nms = names(gapped)[which(!names(gapped) %in% ign)]
-    a = data.frame(matrix(NA,ncol = length(nms), nrow = nrow(sections2sample)))
-    names(a) <- nms
-    joiner = tibble(cbind(sections2sample,a))
-
-    # quick re-arrage of data
-    gapped = gapped %>% relocate(TagID) %>% relocate(var, .after = TagID) %>% relocate(gapsec, .after = var) %>% relocate(DateTime, .after = gapsec)
-
-    # make sure we know which columns are fake segmenting data
-    gapped$real <- 1
-    joiner$real <- 0
-
-    #### this is the issue!! We have no way of knowing if NO points were within the phases....
-    #### e.g. first point is at the starting fake sequence, then there is another e.g. 30 min fix
-    #### just after maybe the 9th, but no way should they be available for sampling!
-    #### it does fall out below...
-
-    gapped2 = tibble(rbind(gapped, joiner)) %>% arrange(TagID, var, gapsec, DateTime, real)
-
-    # segment in normal way
-    gapped2 = gapped2 %>% group_by(TagID, var) %>%
-      mutate(pnum = case_when(real == "0" ~ cur_group_rows())) %>% # add in row.number for when the slice was (prob is some slice option that could be more efficient actually)
-      tidyr::fill(pnum) %>% # fill the rows in between for segments
-      filter(real == 1) %>% # filter out the real = 0's?
-      mutate(Sec = consecutive_id(pnum)) %>% # consecutively number segments sensibly from start per bird/var
-      dplyr::select(-c(pnum, real)) %>% ungroup() %>% mutate(rn = row_number()) %>% relocate(c(Sec, rn), .after = DateTime)
-
-    # sorry this is complex - there may still be quicker fixes in there violating rateL condition
-    #gapped2 <- gapped2 %>% mutate(dt = as.vector(difftime(DateTime, lag(DateTime), units = 'secs')) )
-    #gapped2 <- gapped2[is.na(gapped2$dt) | gapped2$dt > rateL,]
-    #gapped2 <- gapped2 %>% mutate(dt = as.vector(difftime(lead(DateTime), DateTime, units = 'secs')) )
-
-    # MOST PROMISING APPROACH SO FAR
-    # this could be the answer, 3D arrays/lists!
-    # first pick secs 1 and 2 is a simple 2 d from a 2d array,
-    # therafter the next slice of the 3d array is for the next pair, being secs 2 and 3
-    # you will have picked e.g. sec 1_5 and 2_10; 2_10 then needs to be looked up in the ROWS of the next array Sec 2 vs 3
-    # so you have to select 2_10 and look at the VALID fixes for Sec 3 and so forth
-
-    # but cost of setting up these matrices....?
-    #gapped2_ft_onebird <- gapped2[gapped2$TagID == 5026,]
-    gapped2a <- gapped2
-    gapped2a$Sec2 <- paste(gapped2a$gapsec, gapped2a$Sec, sep = "_")
-    gapped2a = gapped2a %>% group_by(TagID, gapsec, var, Sec) %>% mutate(sec_id = row_number()) %>%
-      relocate(sec_id, .after = Sec) #mutate(sec_id = paste(gapsec, Sec, rn, sep = "_"))
-
-    #gapped2a[1960:2010,]
-
-    if(!is.null(seed)){
+    if(!is.null(seed)) {
       set.seed(seed)
     }
 
-    message("***************************************************************************")
-    message("********************* Boot approach for sequencer *********************")
-    message("***********************************************************************")
-    message("~~~~~~~~~~~ Running ", nboots, " boots")
+    # local copy + rn
+    df <- data %>% arrange(TagID, DateTime) %>% group_by(TagID) %>% mutate(rn = row_number())
 
-    #data = gapped2a
-    # run through all animals
-    gapped2a$top_lev = paste(gapped2a$TagID, gapped2a$var, sep = "_")
-    loop_thru <- unique(gapped2a$top_lev)
-    final_samp <- list()
+    # ------------------------------------------- #
+    # VAR HANDLING
+    if(is.null(by)){
+      use_var <- FALSE
+    } else{
+      if(!by %in% names(df)) stop("`by` column not found in data.")
+      df$var <- as.factor(df[[by]])
+      use_var <- TRUE
+    }
+    # ----------------------- #
 
-    #data_in =  data[data$TagID == 5377,]
+    tag_ids <- unique(df$TagID)
 
-    a = 1
-    coarser_fixes <- list()
-    for(a in 1:length(loop_thru)){
+    # Compute gapsecs once
+    # always uses the dt and tol values for segmenting, but rateL and rateU can be specified separately for random controls within segments
+    df <- gap_section(df, GAP = dt, tol = tol, verbose = FALSE)
 
-      message("Level ", loop_thru[a])
+    # Progress estimation
+    if(verbose){
+      if(use_var){
+        # average var count per tag
+        avg_vars <- max(1, length(unique(df$var)) / length(tag_ids))
+      } else{
+        avg_vars <- 1
+      }
+      total_steps <- length(tag_ids) * avg_vars * n_boot
+      pb <- progress_estimated2(total_steps)
+    }
 
-      gapped2_ft_onebird <- gapped2a[gapped2a$top_lev == loop_thru[a],]
-      gapped2_ft_onebird = gap_section(data = gapped2_ft_onebird, GAP = rateU, tol = 0, drop = TRUE, verbose = FALSE) %>% tibble()
+    boots_all <- vector("list", length(tag_ids))
+    names(boots_all) <- tag_ids
 
-      # there is a weird complication here - if we drop out coarser fixes this can leave
-      # odd sections I think - e.g. at the end... resulting in mess up of pairs
+    # ------------------------------------------- #
+    # TagID
+    # ------------------------------------------- #
+    #ti = 7
+    for(ti in seq_along(tag_ids)){
 
-      # remember the rownames of those you dropped!
-      orig = gapped2a[gapped2a$top_lev == loop_thru[a],]
-      bool = !orig$rn %in% gapped2_ft_onebird$rn
-      coarser_fixes[[a]] = orig[bool,]$rn
-      sec_list <- unique(gapped2_ft_onebird$Sec2)
+      tag <- tag_ids[ti]
+      df_tag <- df %>% filter(TagID == tag)
 
-      #tail(gapped2_ft_onebird)
+      # Determine var levels for this tag, if used
+      if(use_var){
+        vars_tag <- unique(df_tag$var)
+      } else{
+        vars_tag <- "NOVAR"
+        df_tag$var <- "NOVAR"
+      }
 
-      ############################### UNDER DEV
+      var_list <- vector("list", length(vars_tag))
+      names(var_list) <- as.character(vars_tag)
 
-      message("------ Assessing all valid paired combinations (dt > rateL) ------")
+      # ------------------------------------------- #
+      # VAR LOOP (or a single NOVAR)
+      # ------------------------------------------- #
+      # vi <- 1
+      for(vi in seq_along(vars_tag)){
 
-      ### mapply only works with > 1 pair! If there is only one valid pair
-      ### then we have nothing to compare against so have to take that!
+        v <- vars_tag[vi]
+        df_tv <- df_tag %>% filter(var == v)
 
-      if(length(sec_list) <= 1){
+        #data[data$TagID %in% "5377_stack_2",]
 
-        message("One or no pairs found, no bootstrap possible")
+        gapsecs <- sort(unique(df_tv$gapsec))
+        boot_list <- vector("list", n_boot)
 
-        } else{
+        #df_tv[df_tv$gapsec %in% 150,]
 
+        # ------------------------------------------- #
+        # BOOTS
+        # ------------------------------------------- #
+        for(b in seq_len(n_boot)){
 
-          paired = mapply(FUN = c, sec_list[-length(sec_list)], sec_list[-1], SIMPLIFY = FALSE)
-          paired2 = data.frame(do.call('rbind', paired), pair = 1:length(paired))
-          row.names(paired2) <- 1:nrow(paired2)
-          # long format putting all pairs together - one column
-          paired3 <- paired2 %>%  tidyr::pivot_longer(cols = c(`X1`,`X2`), names_to = "X1X2",
-                                                      values_to = "pair", names_repair = "minimal")
-          names(paired3) <- c("pair","X1X2","Sec2") # avoiding renaming warning returned in pivot_longer....probably a way to turn off but this just gets around it
-          paired3 <- paired3 %>% dplyr::select(-X1X2)
+          picked_rows <- integer(0)
+          last_time <- NA
 
-          paired4 = tibble(merge(paired3, gapped2_ft_onebird, by = "Sec2", all.x = TRUE)) %>%
-            arrange(TagID, var, pair, DateTime)
-          paired4a <- paired4[paired4$pair %in% unique(paired4$pair),]
+          # ------------------------------------------- #
+          # GAP LOOP
+          # ------------------------------------------- #
+          #gap = 1
+          for(gap in gapsecs){
 
-          # data.table seems fastest using C++
-          #https://stackoverflow.com/questions/47276418/expanding-a-list-to-include-all-possible-pairwise-combinations-within-a-group
-          # Code inspired by the above example, credit is here given here to that code
-          #x <- paired4a[paired4a$pair %in% c(4998),]
-          #x <- paired4a[paired4a$pair %in% 1:100,]
+            #df_tv[df_tv$gapsec %in% gap,]
 
-          ex <- subset(paired4a, select = c(DateTime, pair, Sec, sec_id, gapsec))
-          ex$Sec <- paste(ex$gapsec, ex$Sec, sep = "_")
-          # sec_id is the consecutive number of fixes WITHIN a section 'Sec'
-          #unique(ex$sec_id) # 32
-          #unique(ex$gapsec) # 6
-          #data.frame(ex[ex$pair == 4999,])
+            gap_rows <- which(df_tv$gapsec == gap)
+            gapped <- data.frame(df_tv[df_tv$gapsec %in% gap,])
 
-          ################## THIS NEEDED FURTHER WORK ###################### TOO SLOW
-          ################## BUT ON SECOND RUN IT SEEMS OK.... MAYBE MAKE SURE FRESH R SESSION?
+            if(length(gap_rows) == 0) next
 
-          ex$cc = paste(ex$Sec, ex$sec_id, sep = "__")
+            times <- df_tv$DateTime[gap_rows]
 
-          # the task is slow as data.table is having to do too much vectorisation in one go
-          # if this job is split up, the same result occurs
-          #ex_ <- ex[1:20000,]
-          #ex_ <- ex[1:10000,]
-          #nrow(test[pair == 535]) # 63 both times
+            # Define segment starts
+            seg_starts <- seq(min(times), max(times), by = paste(dt, Unit))
 
-          pairs2do <- unique(ex$pair)
-          tail(ex,10)
+            # ------------------------------------------- #
+            # SEGMENT LOOP
+            # ------------------------------------------- #
+            #i = 1
+            for(i in seq_along(seg_starts)){
+              #message(seg_starts[i])
+              # segment indices relative to gap_rows / times
+              times_id <- which(times >= seg_starts[i] & times < seg_starts[i] + dt)
+              if(length(times_id) == 0) next
 
-          start = Sys.time()
+              # option here to IGNORE the NA condition at the start of a run
 
-          if(length(pairs2do) > 100){
-
-            if(verbose){message("Subsetting combn process in data.table given number of pairs to do...")}
-            if(verbose){message("(For large data this process can take a few minutes per animal)")}
-            ## no as that splits up pairs - has to be done with pairs in mind then
-            rr = round(length(pairs2do) / split_ratio)
-            chs = c(seq(1,length(pairs2do),rr),length(pairs2do))
-
-            # progress bar
-            #i = 51
-            test_ <- test2a_ <- list()
-            if(verbose){cli::cli_progress_bar("Assessing pairs", total = length(chs))}
-            for(i in 2:length(chs)){
-              #if(verbose){message("pair group ", i-1, " / ", length(chs)-1)}
-              #if(verbose){message(round(((i-1) / (length(chs)-1)) * 100,0), " %...")}
-              if(verbose){cli::cli_progress_update()}
-
-              if(i > 2){
-                ex_ <- ex[ex$pair %in% ((chs[i-1]+1):chs[i]),]
+              if(blind){
+                last_time = NA
               } else{
-                ex_ <- ex[ex$pair %in% (chs[i-1]:chs[i]),]
+                if(!strict){
+                  if(i == 1){last_time = NA}
+                }
               }
-              test_[[i-1]] = data.table::setDT(ex_)[, {temp <- combn(cc, 2); temp2 <- combn(DateTime, 2); .(G1 = temp[1,], G2 = temp[2,], G3 = temp2[1,], G4 = temp2[2,])}, pair][!duplicated(data.table::data.table(pmax(G1, G2), pmin(G1, G2)))]
-              test_[[i-1]]$G3 <- as.POSIXct(as.numeric(test_[[i-1]]$G3), origin='1970-01-01', tz = "UTC")
-              test_[[i-1]]$G4 <- as.POSIXct(as.numeric(test_[[i-1]]$G4), origin='1970-01-01', tz = "UTC")
-              names(test_[[i-1]])[c(4,5)] <- c("DateTime_1", "DateTime_2")
 
-              # remove the WITHIN group pairs
-              rb = do.call('rbind',strsplit(test_[[i-1]]$G1, "__"))
-              rb2 = do.call('rbind',strsplit(test_[[i-1]]$G2, "__"))
-              test_[[i-1]]$Sec_1 <- rb[,1]
-              test_[[i-1]]$Sec_2 <- rb2[,1] # Sec_1 an Sec_2 below is the concatenation of the gapsection and the Sec 1 and 2's
-              test_[[i-1]]$rn <- 1:nrow(test_[[i-1]])
 
-              # Sec_no_1, Sec_no_2 = 1:n fixes per Sec i.e. sec_id
-              test_[[i-1]]$Sec_no_1 <- rb[,2]
-              test_[[i-1]]$Sec_no_2 <- rb2[,2]
+              # Filter by rateL using relative indices
+              #if(!is.na(last_time)){
+              #  time_check = as.numeric(times[times_id] - last_time, units = "secs")
+              #  valid_idx_rel <- times_id[time_check >= rateL & time_check <= rateU]
+              #  if(length(valid_idx_rel) == 0) next   # skip segment but DO NOT reset last_time
+              #} else {
+              #  valid_idx_rel <- times_id
+              #}
 
-              test_[[i-1]] <- test_[[i-1]][test_[[i-1]]$Sec_1 != test_[[i-1]]$Sec_2]
-              #test[pair == 4999]
+              if(!is.na(last_time)){
+                time_check = as.numeric(times[times_id] - last_time, units = "secs")
+                valid_time_ids <- times_id[time_check >= rateL & time_check <= rateU] # note here we check for last point being at least rateL AND and fixes > rateU
+              } else{
+                time_check = as.numeric(times[times_id] - seg_starts[i], units = "secs") # here we use seg_times[i] as essentially the last_time; the rateU check is pointless really as it is tied to the segment
+                valid_time_ids <- times_id[time_check <= rateU] # as above this is just for safety and rateU should always be satisfied for the segment
+              }
 
-              # ------------------------- #
-              ### datetime version (done above!)
-              #test2a_[[i-1]]
+              # here, if there is no valid fix, we have to forget the previous remembered time, because
+              # otherwise the sampler will always find nothing valid within the UPPER rate.
+              if(length(valid_time_ids) == 0) {
+                #message("No times")
+                last_time = NA
+                next
+              }
 
-              #test2a_ = data.table::setDT(ex_)[, {temp <- combn(DateTime, 2); .(G1 = temp[1,], G2 = temp[2,])}, pair][!duplicated(data.table::data.table(pmax(G1, G2), pmin(G1, G2)))]
-              #test2a_$G1 <- as.POSIXct(as.numeric(test2a_$G1), origin='1970-01-01', tz = "UTC")
-              #test2a_$G2 <- as.POSIXct(as.numeric(test2a_$G2), origin='1970-01-01', tz = "UTC")
-              #test2a_$rn <- 1:nrow(test2a_)
-              #names(test2a_)[c(2,3)] <- c("DateTime_1", "DateTime_2")
-              # add in the DateTimes
-              #test_[[i-1]] <- merge(test_[[i-1]], subset(test2a_, select = -pair), by = "rn")
+              #now we select these specific timeIDs as rowids in the full dataset
+              samples <- gapped[valid_time_ids,]$rn
+              pick <- if(length(samples) == 1) samples else sample(samples, 1)
 
-              # calculate dt
-              test_[[i-1]]$dt_ <- as.vector(difftime( test_[[i-1]]$DateTime_2,  test_[[i-1]]$DateTime_1, units = 'secs'))
+              picked_rows <- c(picked_rows, pick)
+              last_time <- df_tag$DateTime[pick] # this has to be from the full dataset as the rn's are relative to the entire tagID
 
-              # gapsection
-              test_[[i-1]]$gapsec = do.call('rbind',strsplit(test_[[i-1]]$Sec_1, "_"))[,1]
 
-              # TagID and var
-              test_[[i-1]]$TagID = unique(gapped2_ft_onebird$TagID)[1]
-              test_[[i-1]]$var = unique(gapped2_ft_onebird$var)[1]
 
+              # Map relative indices to absolute row numbers
+              #seg_idx <- gap_rows[valid_idx_rel]
+
+              #if(length(seg_idx) == 0) next  # safety check
+
+              # Randomly pick one fix from the valid ones
+              #pick_rel <- if(length(valid_idx_rel) == 1) valid_idx_rel else sample(valid_idx_rel, 1)
+              #pick <- if(length(seg_idx) == 1) seg_idx else sample(seg_idx, 1)
+
+              #print(paste0("THIS IS MY PICK: ", pick, " from ", seg_starts[i]))
+
+              #df_tv[pick,]
+
+              # Map back to absolute row numbers in df_tv
+              #pick <- gap_rows[pick_rel]
+              #picked_rows <- c(picked_rows, pick)
+
+              # Update last_time using absolute pick
+              #last_time <- df_tv$DateTime[pick]
             }
-            if(verbose){cli::cli_progress_done()}
+          }
 
-            test = do.call('rbind',test_)
-            #test2a = do.call('rbind',test2a_)
-            #tail(test)
-            #if(verbose){message("Done.")}
+          # convert to df rn values
+          #picked_rn <- df_tv$rn[picked_rows]
+
+          # ------------------------ #
+          # coarser fixes
+
+          #df_tag2 = tibble(simplify(gap_section(df_tag, GAP = dt, tol = tol, verbose = FALSE), keep = c("gapsec","dt","rn")))
+          #ogap = as.vector(which(table(df_tag2$gapsec) == 1))
+          #
+          ## get rns of these
+          #coarse_rn = df_tag2[df_tag2$gapsec %in% ogap,]$rn
+          #picked_pl_coarse <- c(picked_rn, coarse_rn)
+          #picked_pl_coarse <- sort(unique(picked_pl_coarse))
+
+          if(nrow(df_tv) > 1){
+            df_all <- gap_section(df_tv, GAP = dt, tol = tol, verbose = FALSE)
+          } else {
+            df_all <- df_tv
+            df_all$gapsec <- 1   # assign a default gapsec
+          }
+
+          singleton_rn <- df_all %>% group_by(gapsec) %>% filter(n() == 1) %>% pull(rn)
+          picked_rn <- sort(unique(c(df_tv$rn[picked_rows], singleton_rn)))
+
+          # ------------------------ #
+          # rateL violations under strict = FALSE
+
+          if(strict){
+            check = df_tv[df_tv$rn %in% picked_rn,]
+            check = check %>%
+              group_by(TagID, !!!syms(unique(by))) %>%
+              mutate(dt = as.vector(difftime(lead(DateTime), DateTime, units = 'secs')),
+                     tooquick = ifelse(dt < rateL,1,0),
+                     tooquick = ifelse(is.na(tooquick),0,tooquick))
+            # drop the rows that are violating rateL
+            picked_rn = check[check$tooquick == 0,]$rn
+            if(verbose){message("Strict removal checks took out ", length(df_tv$rn) - length(picked_rn), " fixes violating rateL (", rateL, " s)")}
+          } else{
+            ### try an insert others back in.
+            picked_rn <- repair_rateL(df_tv, picked_rn, rateL, Verbose = verbose_repair)
+          }
+
+          devcheck = TRUE
+          if(devcheck){
+            check = df_tv[df_tv$rn %in% picked_rn,]
+            check2 = check %>%
+              group_by(TagID, !!!syms(unique(by))) %>%
+              mutate(dt = as.vector(difftime(lead(DateTime), DateTime, units = 'secs')),
+                     tooquick = ifelse(dt < rateL,1,0))
+            #RakeRvis(Track(check2))
+            #check2[check2$tooquick == 1,] used for a check - no extra faster rates remaining after insertion
+            if(!all(is.na(check2[check2$tooquick == 1,]))){
+              warning("Faster dts remaining, dev check")
+            }
+          }
+
+          boot_list[[b]] <- list(picked = picked_rn, coarser = singleton_rn)
+
+          if (verbose) pb$tick()
+        } # end boot
+
+        var_list[[vi]] <- boot_list
+      } # end var level
+
+      boots_all[[ti]] <- var_list
+    }
+    data2 <- data
+  }
+
+  # ======================================================= #
+  # 3a boot rate method, TagID/VAR/rate/gapsec/segments
+  # ======================================================= #
+  if(method == "boot_rate"){
+
+    message("***********************************************************************")
+    message("************************* Boot rate sequencer *************************")
+    message("***********************************************************************")
+    message("~~~~~~~~~~~ Running ", n_boot, " boots ~~~~~~~~~~~")
+
+    if(!is.null(seed)) {
+      set.seed(seed)
+    }
+
+    # local copy + rn
+    df <- data %>% arrange(TagID, DateTime) %>% group_by(TagID) %>% mutate(rn = row_number())
+
+    # ------------------------------------------- #
+    # VAR HANDLING
+    if(is.null(by)){
+      use_var <- FALSE
+    } else{
+      if(!by %in% names(df)) stop("`by` column not found in data.")
+      df$var <- as.factor(df[[by]])
+      use_var <- TRUE
+    }
+    # ----------------------- #
+    #dt = 300
+
+    tag_ids <- unique(df$TagID)
+
+    # Progress estimation
+    if(verbose){
+      if(use_var){
+        # average var count per tag
+        avg_vars <- max(1, length(unique(df$var)) / length(tag_ids))
+      } else{
+        avg_vars <- 1
+      }
+      total_steps <- length(tag_ids) * avg_vars * n_boot
+      pb <- progress_estimated2(total_steps)
+    }
+
+    # Compute gapsecs once
+    #df <- gap_section(df, GAP = dt, tol = tol, verbose = FALSE)
+
+    boots_all <- vector("list", length(tag_ids))
+    names(boots_all) <- tag_ids
+
+    #tag = "4032_stack_1"
+
+    for(tag in tag_ids){
+      #message(tag)
+      df_tag <- df %>% filter(TagID == tag)
+
+      # assign rates to data.frame
+      df_tag <- assign_rates(df_tag, out = NULL, verbose=FALSE)  # use defaults for now
+
+      # get list of rates available:
+      rates = as.vector(na.omit(unique(df_tag$rate)))
+
+      # makes sure no "+"
+      #rates = gsub("[[:punct:]]", "", rates)  # no libraries needed
+
+      var_list <- list()
+
+      #v = "NOVAR"
+      for(v in if(is.null(by)) "NOVAR" else unique(df_tag[[by]])){
+        #message(v)
+
+        df_tv <- if(v == "NOVAR") df_tag else df_tag %>% filter(.data[[by]] == v)
+        boot_list <- vector("list", n_boot)
+
+        # b = 1
+        for(b in seq_len(n_boot)){
+          #message("boot: ",n_boot[b])
+
+          picked_rows <- integer(0)
+          last_time <- NA
+
+          # Loop over rates
+          # r = 1
+          for(r in 1:length(rates)){
+            #message("rate: ",rates[r])
+            df_rate <- df_tv[df_tv$rate %in% rates[r], ]
+
+            if(nrow(df_rate) == 1){
+              # Only one row, pick it automatically (also covered though under coarser orphaned fixes)
+              pick <- 1
+              picked_rows <- c(picked_rows, df_rate$rn[pick])  # use absolute row number
+              #last_time <- df_rate$DateTime[pick]
+              last_time <- NA
+              next  # go to next gapsec / segment
+            }
+            df_rate <- gap_section(df_rate, GAP = dt, tol = tol, verbose = FALSE)
+
+            # compute gap sections
+            gapsecs <- sort(unique(df_rate$gapsec))
+
+            # Loop over gap sections
+            # g = 1
+            for(g in gapsecs){
+              #message("gapsec: ",g)
+              #gap_rows <- which(df_rate$gapsec == g)
+
+              # gapsection numbers 1:n gaps for an ANIMAL - if there are multiple levels within an
+              # animal, e.g. by variable or then rate splits as well (!) this eill be 1:n per sub-group
+              # so yes if renaming the gapsec per slice ok, but we have to go back to the original 'rn' for indexing
+              gapped <- data.frame(df_rate[df_rate$gapsec %in% g,])
+
+              gap_rows <- which(df_rate$gapsec == g)
+              times <- df_rate$DateTime[gap_rows]
+
+              # Define segment starts
+              seg_starts <- seq(min(times), max(times), by = dt)
+
+              # Loop over segments
+              #i = 1
+              for(i in seq_along(seg_starts)){
+                times_id <- which(times >= seg_starts[i] & times < seg_starts[i] + dt) # index related to times
+                if(length(times_id) == 0) next
+
+                # within the sequence within the rate we need to NOT consider any last time
+                # from a previous rate block
+
+                # But.....note if going from a finer rate to a coarser rate, we could still end up with the
+                # rateL being violated. Needs a capture check at the end - going chronological again will
+                # end up with the same fixed sequence we are trying to avoid in the rate_boot
+
+                if(blind){
+                  last_time = NA
+                } else{
+                  if(i == 1){last_time = NA}
+                }
+
+                # ------------------------------------------- #
+                # Points VALID to pick within this segment
+                # First check point is far enough into segment from the last time picked in this rate sequence
+                # If this is the first point in the sequence, we allow a normal check without last_time]
+                # Then check filter by rateL and rateU within the time segment for valid fixes
+
+                if(!is.na(last_time)){
+                  time_check = as.numeric(times[times_id] - last_time, units = "secs")
+                  valid_time_ids <- times_id[time_check >= rateL & time_check <= rateU] # note here we check for last point being at least rateL AND and fixes > rateU
+                } else{
+                  time_check = as.numeric(times[times_id] - seg_starts[i], units = "secs") # here we use seg_times[i] as essentially the last_time; the rateU check is pointless really as it is tied to the segment
+                  valid_time_ids <- times_id[time_check <= rateU] # as above this is just for safety and rateU should always be satisfied for the segment
+                }
+
+                if(length(valid_time_ids) == 0) {
+                  #message("No times")
+                  last_time = NA
+                  next
+                }
+
+                #now we select these specific timeIDs as rowids in the full dataset
+                samples <- gapped[valid_time_ids,]$rn
+                pick <- if(length(samples) == 1) samples else sample(samples, 1)
+
+                picked_rows <- c(picked_rows, pick)
+                last_time <- df_tag$DateTime[pick] # this has to be from the full dataset as the rn's are relative to the entire tagID
+              }
+            }
+
+          }
+
+          # Coarser fixes: retain any singletons in the rate blocks
+
+          if(nrow(df_tv) > 1){
+            df_rate_all <- gap_section(df_tv, GAP = dt, tol = tol, verbose = FALSE)
+          } else {
+            df_rate_all <- df_tv
+            df_rate_all$gapsec <- 1   # assign a default gapsec
+          }
+
+          singleton_rn <- df_rate_all %>% group_by(gapsec) %>% filter(n() == 1) %>% pull(rn)
+          picked_rn <- sort(unique(c(df_tv$rn[picked_rows], singleton_rn)))
+
+          # ---------------------------------------------------------- #
+          # Check here for violations of rateL
+
+          if(strict){
+            check = df_tv[df_tv$rn %in% picked_rn,]
+            check = check %>%
+              group_by(TagID, !!!syms(unique(by))) %>%
+              mutate(dt = as.vector(difftime(lead(DateTime), DateTime, units = 'secs')),
+                     tooquick = ifelse(dt < rateL,1,0),
+                     tooquick = ifelse(is.na(tooquick),0,tooquick))
+
+            # drop the rows that are violating rateL
+            picked_rn = check[check$tooquick == 0,]$rn
+
+            if(verbose){message("Strict removal checks took out ", length(df_tv$rn) - length(picked_rn), " fixes violating rateL (", rateL, " s)")}
 
           } else{
 
-            # combn is faster, but DateTimes lose formatting, so doing twice - may be a better way
-            test = data.table::setDT(ex)[, {temp <- combn(cc, 2); temp2 <- combn(DateTime, 2); .(G1 = temp[1,], G2 = temp[2,], G3 = temp2[1,], G4 = temp2[2,])}, pair][!duplicated(data.table::data.table(pmax(G1, G2), pmin(G1, G2)))]
+            ### try an insert others back in.
+            picked_rn <- repair_rateL(df_tv, picked_rn, rateL, Verbose = verbose_repair)
 
-            #test2a = data.table::setDT(ex)[, {temp <- combn(DateTime, 2); .(G1 = temp[1,], G2 = temp[2,])}, pair][!duplicated(data.table(pmax(G1, G2), pmin(G1, G2)))]
-
-            ######
-            test$G3 <- as.POSIXct(as.numeric(test$G3), origin='1970-01-01', tz = "UTC")
-            test$G4 <- as.POSIXct(as.numeric(test$G4), origin='1970-01-01', tz = "UTC")
-            names(test)[c(4,5)] <- c("DateTime_1", "DateTime_2")
-
-            # remove the WITHIN group pairs
-            rb = do.call('rbind',strsplit(test$G1, "__"))
-            rb2 = do.call('rbind',strsplit(test$G2, "__"))
-            test$Sec_1 <- rb[,1]
-            test$Sec_2 <- rb2[,1] # Sec_1 an Sec_2 below is the concatenation of the gapsection and the Sec 1 and 2's
-
-            test$rn <- 1:nrow(test)
-            test2a$rn <- 1:nrow(test2a)
-
-            # Sec_no_1, Sec_no_2 = 1:n fixes per Sec i.e. sec_id
-            test$Sec_no_1 <- rb[,2]
-            test$Sec_no_2 <- rb2[,2]
-
-            test <- test[test$Sec_1 != test$Sec_2]
-            #test[pair == 4999]
-
-            # add in the DateTimes
-            #test <- merge(test, subset(test2a, select = -pair), by = "rn")
-
-            # calculate dt
-            test$dt_ <- as.vector(difftime(test$DateTime_2, test$DateTime_1, units = 'secs'))
-
-            # gapsec
-            test$gapsec = do.call('rbind',strsplit(test$Sec_1, "_"))[,1]
-
-            # add in TagID and var
-            test$TagID = unique(gapped2_ft_onebird$TagID)[1]
-            test$var = unique(gapped2_ft_onebird$var)[1]
           }
 
-          end = Sys.time()
-          total_time <- round(as.vector(difftime(end,start, units = "mins")),2)
-          if(verbose){message("Pair processing: ", total_time, " mins ellpased")}
-
-          # 4032 tests (original before further process included)
-          # split_ratio = 100, 3.52816 mins
-          # split_ratio = 25, 3.914343 mins
-          # split_ratio = 50, 4.004487 mins
-
-          # 4.12 with full process (sr = 50)
+          devcheck = TRUE
+          if(devcheck){
+            check = df_tv[df_tv$rn %in% picked_rn,]
+            check2 = check %>%
+              group_by(TagID, !!!syms(unique(by))) %>%
+              mutate(dt = as.vector(difftime(lead(DateTime), DateTime, units = 'secs')),
+                     tooquick = ifelse(dt < rateL,1,0))
 
 
-          #### NOT THE POINTS HERE WITH dt's much greater than dt are the first fixes WITHIN
-          # their gapsection so are valid as initial fixes to consider I think
-          # we already filtered out dt > rateU above...potentially...
-          # i.e. this code still works in pairs ACROSS gapsecs
+            #RakeRvis(Track(check2))
+            #check2[check2$tooquick == 1,] used for a check - no extra faster rates remaining after insertion
 
-          # back in the tidyverse from data.table
-          # most importantly, REMOVE any invalid pairings that violate lower dt
+            if(!all(is.na(check2[check2$tooquick == 1,]))){
+              warning("Faster dts remaining, dev check")
+            }
+          }
+          # ---------------------------------------------------------- #
 
-          if(verbose){message("Finishing up pairs...")}
+          boot_list[[b]] <- list(picked = picked_rn, coarser = singleton_rn)
 
-          test <- tibble(test) %>% dplyr::select(-c(rn, G1, G2)) %>% arrange(TagID, DateTime_1) %>%
-            filter(!is.na(dt_) & dt_ >= rateL)
+          if (verbose) pb$tick()
+        }
 
-          # relable pairings just in case any drop out, prob shouldn't be any
-          test <- test %>% mutate(pair = consecutive_id(pair)) #%>% mutate(pair = as.factor(pair))
-
-          #################
-          test <- unique(test) # don't understand this - end of the data duplicates, not tracked down why
-
-          #tail(test)
-          # now we ONLY have valid pairings
-
-          #2016-08-17 17:13:56
+        var_list[[v]] <- boot_list
       }
 
-      #tail(test)
-      # ------------------------------------------------------------- #
-      # boot routine as a while condition, takes advantage of slice_sample() vectorisation
-      # ------------------------------------------------------------- #
-      message("------ Bootstrap routine ------")
-      boot_list <- list()
 
-      start = Sys.time()
+      boots_all[[tag]] <- var_list
+    } ###
 
-      for(b in 1:nboots){
-
-        message("Boot ", b)
-
-        # as above if only one pairing then that is the answer!
-        if(length(sec_list) <= 1){
-
-          boot_list[[b]]  <- gapped2_ft_onebird$rn
-
-          #tail(gapped2_ft_onebird)
-          #gapped2_ft_onebird[nrow(gapped2_ft_onebird),]
-
-        } else{
-
-          # add in the last row as the section will be missed from the slice!
-          last_row <- test[nrow(test),]
-          last_row$DateTime_1 <- last_row$DateTime_2
-          last_row$DateTime_2 <- last_row$DateTime_1 + last_row$dt_ # fake second DateTime
-          last_row$pair <- last_row$pair+1
-          last_row$Sec_no_2 <- 1
-          # the last row sec 1 has to equal the sec2 from the row before
-          last_row$Sec_no_1 <- test[nrow(test),]$Sec_no_2
-          #last_row$rn <- test[nrow(test),]$rn + 1
-
-          test <- rbind(test,last_row)
-
-          #tail(test)
-          #test[nrow(test)-1,]
-          #test_use <- test
-
-          # do an initial sample across all pairs
-          test2 = test %>% group_by(pair) %>% slice_sample(n = 1)
-          #test2[nrow(test2),]
-          test2$match = test2$Sec_no_2 == c(test2$Sec_no_1[-1],NA)
-          test2 <- test2 %>% relocate(match,.after = Sec_no_2)
-          # last match should always be TRUE (nothing to compare against)
-          test2$match <- ifelse(is.na(test2$match),TRUE,test2$match)
-
-          #tail(test2)
-
-          # also from test2 at this point if remembering COARSER fixes, the ones that are
-          # invalid should they be added to the coarser fixes?? Not sure. The whole
-          # point of this is to assess any TOO QUICK fix pairs from the random selection
-          # so the removal of them is warranted also from the coarse group....I think...
-
-          # while FALSES remain in the list...
-          while(any(!test2$match)){
-
-            #check = test2[test2$pair %in% c(869,870,871),]
-
-            # go down the Secs and if Sec_no_2 != Sec_no_1
-            # resample....
-
-            # this will massively narrow it down
-
-            #test2[test2$pair == 744,]
-            #test2[test2$pair == 745,]
-
-            # while they are all false, keep going!?
-            dones = test2[test2$match,]
-            notdones = test2[!test2$match,]
-
-            #notdones[notdones$pair == 744,]
-
-            #dones[dones$pair %in% c(36,37),]
-            #test[test$pair %in% c(36,37),]
-
-            # this is far better, but could still be lengthy
-            # if say you did manage to have all 10 s data, then this would be a chance game
-            # and may only reduce a bit, but here we have lots of five min and 10 s data
-            # so pairs where there are only two possible points (i.e. already on that rate)
-            # will be selected
-            # However, the issue is that adjustment will impact already matching pairs!!
-
-            # so this is confusing, we have those that no not match the CURRENT pair and the next
-            # but the current pair IS what was sampled, so the NEXT pair is the one we want to
-            # resample based on the section 2 of the previous.
-            # So if pair 6 is "not matching", then we need to resample the 7th
-
-            ##### here referring BACK to test i..e the full set of AVAILABLE VALID pairs
-            test0 <- test[test$pair %in% (notdones$pair+1),]
-
-            #test0[test0$pair == 745,]
-
-            # KEY POINT we need to select ALL the Sec_no_2s from the pair+1s right? i.e. resample the next pair along?
-            notdones$pair1 <- notdones$pair+1
-            nd_sub <- notdones %>% ungroup() %>% dplyr::select(pair1,Sec_no_2) %>% # rename pair1 as pair for merge
-              rename(pair = "pair1", Sec_no_2_pairbefore = "Sec_no_2")
-
-            #nd_sub[nd_sub$pair == 745,]
-
-            # then select the test0 pair+1s with Sec1 = Sec2
-            #test <- test %>% ungroup()
-            test_again <- tibble(merge(test0, nd_sub, by = "pair")) %>% relocate(Sec_no_2_pairbefore, .after = "Sec_no_2") %>%
-              filter(Sec_no_1 == Sec_no_2_pairbefore) # SLIM DOWN TO THOSE MATCHING
-
-            #### if NONE to test again, then the loop is complete! i.e. will be conditions where it is impossible
-
-            if(nrow(test_again) == 0){
-
-              test2$match = TRUE # this will end the loop! set everything to valid
-            } else{
-
-              #test_again[test_again$pair == 745,] # so no matching available pair...
-
-              # and then resample from those
-              test3 = test_again %>% group_by(pair) %>% slice_sample(n = 1) %>% dplyr::select(-Sec_no_2_pairbefore)
-
-              #test3[test3$pair == 745,] # none
-
-              # need to drop those with no possible matches OUT from .... where...? dones, not dones?
-              # if NO matches are found, set the previous section match to TRUE in original sample,
-              # so it doesn't try and find again!
-
-              #######
-
-              # put the other ones that were not matching but were available to be resampled (FALSE added but will be reassessed)
-              test_a <- test3 %>% mutate(match = FALSE) %>% relocate(match, .after = Sec_no_2)
-
-              # remove the original picks and replace with these
-              test_b <- test2 # test2 is the first sample of all the pairs
-              test_b <- test_b[!test_b$pair %in% test_a$pair,]
-
-              test2a <- rbind(test_a, test_b) %>% ungroup() %>% arrange(pair,DateTime_1) %>% group_by(pair)
-
-              ## REASSES THE matches between consecutive pairs
-              test2a$match = test2a$Sec_no_2 == c(test2a$Sec_no_1[-1],NA)
-
-              # BUT.....need to set the PREVIOUS pair of these back to TRUE as they were missing:
-              pairs_to_adj <- nd_sub$pair[which(!nd_sub$pair %in% test3$pair)] -1
-              test2a[test2a$pair %in% pairs_to_adj,]$match = TRUE
-
-              # last match again always TRUE
-              test2a$match <- ifelse(is.na(test2a$match),TRUE,test2a$match)
-
-              #test2a[test2a$pair %in% c(744,745),]
-
-              # THEN REMOVE the ones in the NEXT section that could not be matched from the sample....
-              test2a <- test2a[!test2a$pair %in% (pairs_to_adj+1),]
-
-              test2 <- test2a
-
-            }
-
-          }
-
-          # merge in info from full data
-          dc_sampled <- subset(test2, select = c(DateTime_1, TagID, var)) %>% rename(DateTime = "DateTime_1")
-          data_ <- left_join(dc_sampled, gapped2a, by = c("TagID", "DateTime", "var")) %>% dplyr::select(-c(var, top_lev, Sec2)) %>% relocate(DateTime,.after = TagID)
-
-          #tail(data_)
-
-          data_ = gap_section(data = data_, GAP = rateU, tol = 0, drop = TRUE, verbose = FALSE) %>% tibble()
-
-          boot_list[[b]]  <- data_$rn # storage of row.numbers
-        }
-
-        }
-      names(boot_list) <- 1:nboots
-
-      final_samp[[a]] <- boot_list
-
-      end = Sys.time()
-      total_time <- round(as.vector(difftime(end,start, units = "mins")),2)
-      if(verbose){message("Bootstrapping took: ", total_time, " mins")}
-
-    # end bird/var top level
-    }
-    names(final_samp) <- loop_thru
-    names(coarser_fixes) <- loop_thru
-
-    # and add back the data supplied by the function, with row.numbers you
-    #boot_dat = run_all_bird_boots(data = gapped2a, n = nboots)
-
-    gapped2a <- gapped2a %>% ungroup() %>% dplyr::select(-c(Sec2, top_lev, var, Sec, sec_id)) %>% group_by(TagID) # assuming this detailed info of the exact sections will not be needed
-
-    data2 <- structure(.Data = gapped2a, class = c("Track", "grouped_df", "tbl_df","tbl","data.frame"))
-
-    # don't attempt to set attribute here yet - a below process over-writes it!
-    #if(is.null(attr(data2, "sub_samp") )){
-    #  attr(data2, "sub_samp") <- "sub_samp"
-    #}
-    #
-    #attr(attr(data2, "sub_samp"), "boots") <- final_samp
-    #attr(attr(data2, "sub_samp"), "coarser") <- coarser_fixes
+    data2 <- data
   }
 
-  # 44243 for rounding date version, 44237 for the sequence version, NOT BAD! given they will never match of course
-
-  #data.frame(data2[1:100,])
-  #tibble(data2[data2$TagID == 4032,])
-  #BTOTrackingTools::assign_rates(BTOTrackingTools::Track(data2))
-  #
-  #fin2$dt_check <- as.vector(difftime(c(fin2$DateTime[-1],NA),fin2$DateTime,units=Unit))
-  #subset(fin2, select = c(dt, dt_check))
-  #
-  # first idea was way too lengthy as a silly loop across all rows
-  #i <<- 1
-  #func <- function(x){
-  #  ch <- r1[r1$TagID %in% x$TagID & r1$DateTime > x$DateTime_orig & r1$DateTime <  x$DateTime_orig2,]$DateTime
-  #  ii <- i +1
-  #  print(ii)
-  #  i <<- ii
-  #  if(length(ch) > 0){
-  #    kp <- data.frame(
-  #      TagID  = rep(x$TagID, length(ch)),
-  #      DateTime = rep(x$DateTime, length(ch)), # the snap2grid time for this fix
-  #      DateTime_orig = ch,
-  #      diff = rep(x$diff,length(ch)),
-  #      dt = rep(x$dt,length(ch))
-  #    )
-  #  }
-  #}
-  #test = new2. %>% group_split(TagID, DateTime_orig) %>%
-  #  purrr::map_df(~.x %>% func) %>%
-  #  ungroup() %>% rbind(.,new2) %>% arrange(TagID, DateTime_orig) %>% # append to the sub-sampled data above, sort by TagID DateTime_orig
-  #  group_by(TagID) %>%
-  #  mutate(dt = as.vector(difftime(DateTime_orig, lag(DateTime_orig), units= 'secs'))) %>% # recalculating dt with some rather basic nudge up adjustments
-  #  ungroup() %>%
-  #  mutate(dt = c(dt[-1],NA), dt = if_else(is.na(dt), 0, dt))
-  # the above takes too long. This will of course have all the dt values retained from coarser rates also included in the dataset
-  # even in purr this is just a loop across all 17K data.frame elements!
-
-  # ------------------------------------------- #
+  # ======================================================= #
   #### Finalisation
+  # ======================================================= #
   data2 <- data2 %>% group_by(TagID)
 
-  #### the gapsection function has been called a lot, therefore set back to default, or last used
-  #### check data attributes on input
-  ##### we need to re-run gap_section as it will have been set to a small value meaning trip
-  ##### evaluation will be impossible
-  ##### for now running the default? ideally need these darn attributes working properly
-
-  # from potential use of clean_GPS
+  # set gapsection back to default settings if exist
   attr_test = attr(attr(data2, "general"), "GAP") # these are not working at the moment - likely attributes are lost from tbl conversion!!
 
   if(nrow(data2) > 0){
@@ -1381,20 +1299,18 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL,
 
     if(!exists("gap", data)){data2 <- data2 %>% dplyr::select(-gap) }
     if(!exists("gapsec", data)){data2 <- data2 %>% dplyr::select(-gapsec) }
-    #data2 <- data2 %>% dplyr::select(-rn) # MUST RETAIN rns for boot_seq option!
 
   }
 
-  #attributes(data)
   if(nrow(data2) > 2){
     data2 <- structure(.Data = data2, class = c("Track", "grouped_df", "tbl_df","tbl","data.frame"))
   }
 
-  # --------------------------------------------------------- #
+  # ======================================================= #
   # assign attributes that may have been present at the start
   data2 <- give_attributes(data2, attr_list)
 
-  # --------------------------------------------------------- #
+  # ======================================================= #
   #### retain attributes of the choices made
   if(is.null(attr(data2, "sub_samp") )){
     attr(data2, "sub_samp") <- "sub_samp"
@@ -1409,11 +1325,16 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL,
   attr(attr(data2, "sub_samp"), "l_tol") <- l_tol
   attr(attr(data2, "sub_samp"), "by") <- by
 
-  if(!is.null(final_samp)){
-    attr(attr(data2, "sub_samp"), "boots") <- final_samp
-  }
-  if(!is.null(coarser_fixes)){
-    attr(attr(data2, "sub_samp"), "coarser") <- coarser_fixes
+  if(method %in% c("boot_sequencer", "boot_rate")){
+
+    attr(data2, "sub_samp_boots") <- list(
+      method = "boot_sequencer",
+      boots = boots_all,
+      dt = dt, tol = tol,
+      rateL = rateL, rateU = rateU,
+      by = by,
+      use_var = use_var
+    )
   }
 
   return(data2)
@@ -1422,62 +1343,88 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.4, u_tol=NULL,
 
 #' @rdname sub_samp
 #' @export
-retrieve_boots <- function(data, drop_coarser = TRUE, verbose = TRUE){
+retrieve_boots <- function(data, animal = NULL, include_coarser = FALSE, verbose = TRUE) {
 
-  if(attr(attr(data, "sub_samp"), "method") != "boot_sequencer"){
-    stop("This function is only relevant for the boot sampler from the sub_samp function.")
+  # Check for sub_samp_boots
+  if (is.null(attr(data, "sub_samp_boots"))) {
+    stop("Data does not have a 'sub_samp_boots' attribute. Run sub_samp() first.")
   }
 
-  # extract the row numbers per animal (and var) and boot
-  # names of the list under stored boots = $`5026_2014`$`2` e.g. animal_year_boot number
-  # sorry, was a bit convoluted to keep var level in there as well separate
+  sub_samp <- attr(data, "sub_samp_boots")
+  boots_attr <- sub_samp$boots
+  by_var_name <- sub_samp$by
 
-  boot_dat = attr(attr(data, "sub_samp"), "boots")
-
-  if(verbose){
-    message("Retrieiving boot sub_samp data for ", length(boot_dat), " animals, for ", length(boot_dat[[1]]), " boots")
+  # Animals to process
+  anims <- unique(data$TagID)
+  if (!is.null(animal)) {
+    if (!(animal %in% anims)) stop("Animal '", animal, "' not found in TagID")
+    anims <- animal
   }
 
-  i = 1
-  anim_list <- list()
+  # Verbose
+  if (!is.null(by_var_name) && by_var_name != "") {
+    all_levels <- unique(unlist(lapply(boots_attr, names)))
+    if (verbose) message("Boots generated by '", by_var_name, "' over levels: ", paste(all_levels, collapse = ", "))
+  } else if (verbose) {
+    message("No 'by' variable used; NOVAR sampling only.")
+  }
 
-  for(i in 1:length(boot_dat)){
+  if (verbose) {
+    message("Include coarser fixes below resampling rate? ", ifelse(include_coarser, "YES", "NO"))
+  }
 
-    b = 1
+  # Ensure absolute row numbers exist
+  data <- data %>% arrange(TagID, DateTime) %>% mutate(rn = row_number())
+
+  final_list <- list()
+
+  #tag = "506_stack_1"
+  for (tag in anims) {
+    tag_df <- data[data$TagID == tag, ]
+    tag_boots <- boots_attr[[tag]]
+
     boot_list <- list()
-    if(verbose){cli::cli_progress_bar(paste0("Retrieving boots for animal ", i), total = length(boot_dat[[1]]))}
-    for(b in 1:length(boot_dat[[1]])){
-      #print(b)
 
-      if(verbose){cli::cli_progress_update()}
+    # Determine if by-variable used
+    var_names <- names(tag_boots)
+    by_used <- !(length(var_names) == 1 && var_names == "NOVAR")
 
-      boot_list[[b]] = data[data$rn %in% boot_dat[[i]][[b]],]
+    if (!by_used) {
+      # NOVAR mode
+      nboots <- length(tag_boots$NOVAR)
+      for (b in seq_len(nboots)) {
+        inds <- tag_boots$NOVAR[[b]]$picked
+        if (!include_coarser) inds <- setdiff(inds, tag_boots$NOVAR[[b]]$coarser)
 
-      # if coarser = TRUE get the coarser fixes too and add in
-      if(!drop_coarser){
-        coarser_rn = attr(attr(data, "sub_samp"), "coarser")
-        coarser = data[data$rn %in% coarser_rn[[i]],]
-        boot_list[[b]] <- rbind(boot_list[[b]], coarser) %>% arrange(TagID, DateTime)
+        # Use absolute row numbers directly
+        boot_df <- tag_df[inds, , drop = FALSE]
+        boot_df$boot <- b
+        boot_list[[b]] <- as_tibble(boot_df)
       }
-      boot_list[[b]]$boot <- b
+    } else {
+      # BY-variable mode
+      for (var_val in var_names) {
+        var_boots <- tag_boots[[var_val]]
+        nboots <- length(var_boots)
 
+        for (b in seq_len(nboots)) {
+          inds <- var_boots[[b]]$picked
+          if (!include_coarser) inds <- setdiff(inds, var_boots[[b]]$coarser)
+
+          # Pick exact rows
+          boot_df <- tag_df[inds, , drop = FALSE]
+          boot_df$boot <- b
+          boot_list <- append(boot_list, list(as_tibble(boot_df)))
+        }
+      }
     }
-    if(verbose){cli::cli_progress_done()}
-    anim_list[[i]] <- do.call('rbind', boot_list)
 
+    final_list[[tag]] <- bind_rows(boot_list)
   }
 
-
-  anim_list <- do.call('rbind', anim_list)
-
-  # issue with Track class not liking two rows of data on print (bug that ideally needs fixing)
-  if(length(unique(anim_list$DateTime)) <= 2){
-    anim_list <- anim_list %>% relocate(boot, .after = rn)
-  } else{
-    anim_list <- anim_list %>% relocate(boot, .after = rn) %>% structure(.Data = ., class = c("Track", "grouped_df", "tbl_df","tbl","data.frame"))
-  }
-  return(anim_list)
-
+  result <- bind_rows(final_list)
+  rownames(result) <- NULL
+  return(result)
 }
 
 

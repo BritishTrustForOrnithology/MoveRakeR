@@ -11,7 +11,8 @@ assign_rates(
   group_after_gap = FALSE,
   breaks = c(1, 60, 100, 300, 600, 900, 1200, 1800, 3600, 7200, 10800),
   tol = c(0, 0.5, rep(0.4, 2), rep(0.3, 5), rep(0.2, 2)),
-  out = "summary"
+  out = "summary",
+  verbose = FALSE
 )
 }
 \arguments{

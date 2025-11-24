@@ -1,13 +1,13 @@
 README
 ================
 Chris Thaxter
-03/10/2025
+24/11/2025
 
 <!-- README.md is generated from README.Rmd. Please edit that file, but only with package maintainer's permission -->
 
 # MoveRakeR
 
-### Current version: 1.1.2.9000
+### Current version: 1.1.3
 
 [![DOI](https://zenodo.org/badge/948019784.svg)](https://doi.org/10.5281/zenodo.15275175)
 
@@ -42,7 +42,8 @@ magrittr and viridisLite.
 
 ## Installation
 
-Please install `MoveRakeR` by using:
+`MoveRakeR` is not yet available on CRAN therefore please install it by
+using:
 
 ``` r
 devtools::install_github('BritishTrustForOrnithology/MoveRakeR', build_vignettes = TRUE)
@@ -57,16 +58,22 @@ will be added to show the overall layout and general usage of the
 package, initial read in and data handling, data manipulation, and
 defining trips.
 
+## Data
+
+An example dataset will shortly be added to the package for a small
+number of example Lesser Black-backed Gulls *Larus fuscus* tracked from
+a breeding colony in the UK.
+
 ## Usage
 
 `MoveRakeR` was borne out of seabird tracking work. Much of the focus of
-`MoveRakeR` is on movements of tracked animals from a central place,
+the package is on movements of tracked animals from a central place,
 used within numerous papers to date (e.g. Thaxter et al. 2015, Langley
 et al. 2021, Clewley et al. 2023, Thaxter et al. 2025, O’Hanlon et
 al. 2025). The `MoveRakeR` pipeline requires a dataset with the
 following columns: *TagID*, *DateTime*, *latitude* and *longitude*. The
-`MoveRakeR` process is built around a `Track` class object. This is not
-a strict requirement but aids in visualisation of printing, plotting and
+processing is built around a `Track` class object. This is not a strict
+requirement but aids in visualisation of printing, plotting and
 summarising.
 
 ``` r
@@ -78,15 +85,19 @@ plot(data) # slower for large datasets
 tabulate_history(data)
 ```
 
-The `MoveRakeR` package includes a number of data sourcing functions
-that allow data to be read into R from databases, for which the two
-currently implemented are MoveBank through the `read_track_MB()`
-function, and the University of Amsterdam Bird-tracking System database
-(UvA-BiTS) (Bouten et al. 2013), using the `read_track_UvA()` function.
-For the UvA-BiTS connection, you will need to first follow the steps
-outlined under `?read_track_UvA` to set up an ODBC connection using R
-package `RODBC`. The MoveBank login details are also required for use
-and create this calling:
+The workflow within `MoveRakeR` and the further accompanying
+visualisation package `RakeRvis` is depicted below.
+
+![](README_files/Workflow_schematic_revised.png)
+
+A number of data sourcing functions allow data to be read into R from
+databases, for which the two currently implemented are MoveBank through
+the `read_track_MB()` function, and the University of Amsterdam
+Bird-tracking System database (UvA-BiTS) (Bouten et al. 2013), using the
+`read_track_UvA()` function. For the UvA-BiTS connection, you will need
+to first follow the steps outlined under `?read_track_UvA` to set up an
+ODBC connection using R package `RODBC`. The MoveBank login details are
+also required for use and create this calling:
 
 ``` r
 library(RODBC)
@@ -131,10 +142,19 @@ for neater visualisation using `leaflet`, `leafgl` and `mapdeck`, with
 further option to either load data or download data from MoveBank or
 UvA-BiTS.
 
-Although this is of course up to the user, `MoveRakeR` also provides
-`leaflet` mapping options as two simpler R `Shiny` standalone apps that
-can be called upon. The first of these, `plot_leaflet()` and can simply
-allow visualisation of tracked animals, via:
+``` r
+library(RakeRvis)
+RakeRvis(data)
+```
+
+<img src="README_files/leafgl_3.JPG" width="100%" style="display:block; margin:0; padding:0;">
+<img src="README_files/leafgl_3_bottom2.png" width="100%" style="display:block; margin-bottom:10px; padding:0;">
+
+Although it is of course up to the user, `MoveRakeR` also provides some
+other built-in `leaflet` mapping options by way of two simpler R `Shiny`
+standalone apps that can be called upon. The first of these,
+`plot_leaflet()` and can simply allow visualisation of tracked animals,
+via:
 
 ``` r
 plot_leaflet(data)
@@ -142,19 +162,14 @@ plot_leaflet(data)
 
 ![](README_files/plot_leaflet.JPG)
 
-in `plot_leaflet()` there are further options for plotting shapes,
-additional point shape layers (using the `sf` package), and options to
-*plotby* a different variable, e.g. a year, cohort, behaviour etc that
-you may have in your data; further coloration and point/line options are
-available. This function is a work in progress and replicated perhaps
-other in further packages such as in the `bayesmove` package (Cullen
-2020), and `ExMove` (Langley et al. 2024) but helps to have such a tool
-built in.
-
-A further extension to this app is provided separately in `MoveRakeR`
-through the `plot_leaflet_trips()` function. This function visualises
-individual trips of animals in more detail with further tabs for data
-summaries.
+In `plot_leaflet()`, as also in `RakeRvis`, there are further options
+for plotting shapes, additional point shape layers (using the `sf`
+package), and options to *plotby* a different variable, e.g. a year,
+cohort, behaviour etc that you may have in your data; further coloration
+and point/line options are available. A further extension to this app is
+provided separately in `MoveRakeR` through the `plot_leaflet_trips()`
+function. This function visualises individual trips of animals in more
+detail with further tabs for data summaries.
 
 A generic S3 `plot` function for is also available for Track objects,
 which uses base R graphics and can be overlain on top static maps and
@@ -186,6 +201,8 @@ e.g. battery and solar charging after deployment to check sustainability
 of sampling protocols, and plotted alongside GPS data. Further options
 also exist to source acceleration and pressure data from UvA-BiTS
 directly into R.
+
+![](README_files/plotVo_example.png)
 
 ## Cleaning and identifying spurious data
 
@@ -445,6 +462,32 @@ newdata <- data %>%
   offshore(shape = shape_sf, crop = TRUE, buffer_extent = 10000, p4s = 3035) %>%
   dist2coast(shape = shape_sf, crop = TRUE, buffer_extent = 50000, p4s = 3035)
 ```
+
+## Licensing
+
+### Software License (Code)
+
+The `MoveRakeR` R package source code is released under the MIT License.
+This permits free use, modification, and redistribution of the code,
+including for commercial purposes.
+
+### Data License (Included Datasets)
+
+Any datasets included within this package are licensed separately under
+the Creative Commons Attribution–NonCommercial 4.0 International (CC
+BY-NC 4.0) license.
+
+This means:
+
+- You are free to use, share, and adapt the data, but
+- Commercial use of the data is not permitted, and
+- Attribution is required when the data are used or redistributed.
+
+The non-commercial data license applies only to the included datasets
+and does not restrict use of the package code itself.
+
+For full license texts, see: LICENSE (MIT license for code), and
+inst/extdata/data-license.txt (CC BY-NC 4.0 license for data).
 
 ## References
 
