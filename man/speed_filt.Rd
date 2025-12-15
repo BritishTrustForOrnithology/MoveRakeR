@@ -8,9 +8,16 @@
 speed_filt(
   data,
   sp_thres = 50,
-  annotate = FALSE,
+  hybrid = FALSE,
+  method = c("none", "mcconnell", "flexi_clip", "flexi_vec"),
+  points_each_side = 2,
+  include_centre = TRUE,
+  fun = NULL,
+  fun_args = list(),
+  annotate = TRUE,
   hasgaps = TRUE,
   verbose = TRUE,
+  fall_back = TRUE,
   detailed_verbose = FALSE
 )
 
@@ -21,22 +28,51 @@ traj_speed(data, within_gap = FALSE)
 
 \item{sp_thres}{The value (m/s) upon which to carry out the filter assessment, defaults to 50 m/s.}
 
-\item{annotate}{TRUE or FALSE (default) for whether to annotate (TRUE) or filter (FALSE) the data by the sp_thres condition.}
+\item{hybrid}{Logical, as to whether to use a hybrid speed filter, using both raw
+trajectory speed and a smooth/RMS filter; defaults to FALSE giving trajectory speed filtered using raw data.
+If set to TRUE, the default is then the hybrid approach with the mcconnell filter.}
+
+\item{method}{One of four options relating to whether smoothing in the trajectory speed is required.
+This is one of "none" (default), no smoothing, and three further method names relating to root mean square
+calculations stemming from the McConnell et al. (1992) approach, used either directly as that "mcconnell"
+or two further flexible extensions to the RMS with "flexi_clip" adjusting number of points (points_each_side)
+within the filter at the edges to avoid NAs, and "flexi_vec" as a faster vectorised form but that has potential edge variations to flexi_clip,
+with 'include_centre' consideration for the midpoint (excluded from mcconnell); for more details on
+method arguments, see \code{traj_speed_sm()}.}
+
+\item{points_each_side}{integer, default = 2. As in see \code{traj_speed_sm()}, for RMS methods the number of points either side for "flexi_clip" and "flexi_vec".}
+
+\item{include_centre}{logical, default TRUE. As in see \code{traj_speed_sm()}, for RMS methods whether to include the centre point in "flexi_clip" and "flexi_vec".}
+
+\item{fun}{As in \code{traj_speed_sm()}, the name of a bespoke function argument supplied, default NULL. This
+overrides choices in \code{method}, \code{points_each_side} and \code{include_centre}.}
+
+\item{fun_args}{As in \code{traj_speed_sm()}, arguments to be passes to \code{fun} as a list(), default empty list, activated if fun is not NULL
+and overrides any choices in method, points_each_side and include_centre.}
+
+\item{annotate}{Logical default TRUE for whether to annotate (TRUE) or filter (FALSE) the data by the sp_thres condition.}
 
 \item{hasgaps}{TRUE (default) or FALSE whether to check for existing gaps having been defined already in the data,
-and if found use those gaps, if not reverting to \code{gap_section} defaults; FALSE also takes the \code{gap_section} defaults.}
+and if found use those gaps, if not reverting to \code{gap_section} defaults; FALSE also takes the \code{gap_section()} defaults.}
 
 \item{verbose}{TRUE (default) or FALSE whether to provide within-function messaging.}
 
 \item{detailed_verbose}{TRUE or FALSE (default) whether more detailed messaging is to be provided.}
 
-\item{within_gap}{For the \code{traj_speed} function, this checks for existence of gapsec column, if not, it fails. As the
-\code{traj_speed} function is called from within \code{speed_filt}, which itself always uses a gapsection even if it is function defaults,
-this allows \code{traj_speed} to be used without fail.}
+\item{within_gap}{For the \code{traj_speed()} function, this checks for existence of gapsec column, if not, it fails. As the
+\code{traj_speed} function is called from within \code{speed_filt()}, which itself always uses a gapsection even if it is function defaults,
+this allows \code{traj_speed()} to be used without fail.}
+
+\item{fallback}{logical, default TRUE. If a smoothing method or fun is used, yet too-few data are available in a section of points,
+i.e. TagID/gapsec, the traj_speed smooth values may all be NA. This fallback option allows a defaulting back to using
+raw 'unsmoothed' trajectory speed to continue use in the filter (if TRUE), otherwise if FALSE, the \code{speed_filt()} will
+skip the small section of points entirely.}
 }
 \value{
 Either an annotated dataset with an additional column of 'speed_rm' (1,0) for whether data were 'flagged', or a filtered
-dataset with such rows having been removed.
+dataset with such rows having been removed. In the case of the hybrid annotation approach, two additional columns are included
+detailing annotation of rows from the raw trajectory speed ('speed_rm_raw') and RMS/smooth functions ('speed_rm_sm'), respectively, with the
+'speed_rm' representing a '1' where either of those additional columns is a '1'.
 }
 \description{
 Annotate or filter data that is apparently too fast for real animal movement based on a pre-defined threshold.
@@ -45,16 +81,16 @@ Annotate or filter data that is apparently too fast for real animal movement bas
 A common task when dealing with GPS movement data is to consider fixes in the dataset that
 may be moving much faster than expected based on the upper limit of known movement speeds for the study animal.
 There are such filters available in a variety of R packages, each with their own methodology that the user is
-also directed to, such as \code{trip::speedfilter} and trip::sd() (Sumner et al. 2009, Sumner 2011).
+also directed to, such as \code{trip::speedfilter()} and trip::sd() (Sumner et al. 2009, Sumner 2011).
 Comparisons to other functions in neighbouring R packages will likely
 give slightly different results. As with all such annotation and filter functions, care is needed to make sure the results are as expected, and
-it should be stressed the MoveRakeR function \code{speed_filt} is not a filter by a speed value
-The MoveRakeR approach provides further options alongside these other R packages and works by iteratively remove GPS fixes that violate a threshold.
-This is particularly useful should several consecutive erroneous points be identified (i.e. displaced from where they should be).
+it should be stressed the \code{speed_filt()} is not a direct filter by a speed value as such. The \code{speed_filt()} function works
+by iteratively removing GPS fixes that violate the upper speed threshold. This process is particularly useful
+should several consecutive erroneous points be identified (i.e. displaced from where they should be).
 Caution is also needed when considering GPS sampling rates as maximum finer-scale (or coarser-scale) changes between consecutive
 fixes could vary among different scales. Finer scale sampling for stationary animals may reflect natural GPS error that
 could yield otherwise erroneous travel speeds and so may need considering rate-by-rate. This pattern can also
-be examined further using the function \code{speed_jit}.
+be examined further using the function \code{speed_jit()}. Alternatively, smoothing can be explored (see below).
 
 Here the default value in the speed filter is 50 m/s and this will depend on the species studied.
 The value should be chosen wisely as mentioned above, taking a value well within the natural bounds of movement
@@ -62,20 +98,101 @@ of the animal will result in fixes being dropped that are otherwise valid due to
 It is recommended therefore that a conservative value be selected above the maximum known speed of the animal, again paying
 attention to artefacts that could occur by sampling rate.
 
-The \code{speed_filt} uses the function \code{traj_speed} to compute trajectory speed between consecutive fixes
-within animals. This computation can be carried out 'within_gap' should gaps already be present in the data.
+The raw trajectory speed filter (default) is sensitive to single bad spikes, small short-scale GPS jitter and
+possibly projection artefacts. This is ideal for catching obvious spikes in the data that may be enough alone.
+However, the raw trajectory approach may not capture instances where there may be localised jitter and
+several fixes in a row may be slightly 'wrong'. In this case, considering a further smooth or RMS (root mean square)
+is useful to answer a slightly different question in that: "is there sustained implausible movement in the
+neighbourhood for this fix?". And so further options are available to use RMS or smoothing of trajectory speed
+instead of or alongside (preferable) to the default setting of using the raw trajectory speed values.
+For more information see \code{traj_speed_sm}. Using RMS/smoothing alongside the raw traj. speed integrates information
+from multiple adjacent fixes (if McConnell, = 2 fixes either side excluding the current fix), which dampens the
+one-off GPS noise and reflects local movement context. As above, this can help identify if the raw traj speed is
+not wrong but there is sustained local inconsistency. McConnell exudes the centre point to avoid double-counting
+the error i.e. a bad fix can inflate it's own smoothed value, so this asks whether the neighbours around the fix
+imply unrealistic movement. This is therefore a context detector not a spike detector.
+
+Methods are available to compute the root mean square over varying moving window sizes with options of how
+to treat edge conditions and inclusion/exclusion of window centre-points (noting the above), as well as
+bespoke functions that can be fed through to the filter. However, \strong{beware of using the smoothing/RMS options
+alone with dropping fixes}.
+
+Also beware if identifying spikes in erroneous points excluding the centre-point. It is included as a flexible option here whether to do so
+but the McConnell was designed to identify transient spikes in speed, not to smooth over the exact point itself.
+The idea is to compute a local RMS around a point, but using its neighbors to avoid the spike “contaminating”
+its own value. Therefore, use the \code{include_centre} option with caution.
+
+If method = "none", i.e. no smoothing, the \code{speed_filt} uses the function \code{traj_speed()} to compute trajectory speed between consecutive fixes
+within animals. Otherwise, if smoothing is used, the \code{traj_speed_sm()} function is used.
+The computations can be carried out 'within_gap' should gaps already be present in the data.
+
+Annotate is set to TRUE by default as it may be up to the user how to proceed having flagged fixes, e.g. whether
+just the traj speed and RMS/smoother trend revelers are sufficient on their own. Setting annotate to FALSE will drop
+any fixes flagged.
+
+Note: The same speed threshold ceiling is applied to both raw and smoothed trajectory speeds.
+Depending on the degree of smoothing, this may result in some high-speed spikes being missed or excessive points
+being flagged. Users may wish to adjust the threshold when using hybrid filtering.
+In hybrid mode, note that points flagged in the raw and smoothed trajectories may not overlap much;
+the combined speed_rm column (either/or) can therefore be larger than either speed_rm_raw or speed_rm_sm
+individually, indicating that relatively few points are flagged by both methods simultaneously."
 }
 \examples{
 ### loading a raw data format
 indata <- yourdata # data.frame with a minimum of columns named TagID, DateTime, longitude, latitude
 data <- Track(indata)
 
-dat_speed_fil = speed_filt(data, annotate = TRUE, detailed_verbose = FALSE)
+#### Default, no hybrid traj_speed + smooth or RMS
+# hybrid is FALSE by default and method = "none", i.e. to just use raw traj speed, with annotate = TRUE
+dat_speed_fil = speed_filt(data, detailed_verbose = TRUE) # fastest of course
 
+# lowering the speed ceiling:
+dat_speed_fil2 = speed_filt(data, detailed_verbose = FALSE, sp_thres = 35)
+
+# example DROPPING the fixes
+test2b = speed_filt(data, annotate = FALSE, detailed_verbose = TRUE)
+nrow(test2b)
+nrow(data)
+
+##### Hybrid activation:
+dat_speed_fil = speed_filt(data, hybrid = TRUE, annotate = TRUE, detailed_verbose = FALSE) # hybrid filter mconnell + raw traj speed
+
+attr(dat_speed_fil, "speed_filt")
+sum(dat_speed_fil$speed_rm) # n = X fixes that could be dropped (annotate = TRUE)
+
+# Or smoothing on its own without raw traj_speed considered at all (method indicating smoothed, or rather RMS wanted):
+dat_speed_fil = speed_filt(data, hybrid = FALSE, method = "mcconnell", annotate = TRUE, detailed_verbose = FALSE) # hybrid filter mconnell + raw traj speed
+
+# lowering the speed ceiling:
+dat_speed_fil2 = speed_filt(data, hybrid = TRUE, annotate = TRUE, detailed_verbose = FALSE, sp_thres = 35)
+
+# obviously use with caution as a single ceiilng is used for hybrid
+sum(dat_speed_fil2$speed_rm)
+sum(dat_speed_fil2$speed_rm_raw)
+sum(dat_speed_fil2$speed_rm_sm)
+
+# e.g. a too low threshold will bring more raw fixes into play that may be legitimate.
+# see notes in details.
+
+# use of traj_speed() and traj_speed_sm() direct on data
 data_ = traj_speed(dat_speed_fil, within_gap = FALSE) # use of traj_speed
+data_ = traj_speed_sm(dat_speed_fil, within_gap = FALSE) # use of traj_speed_sm using defaults
 
-attr(data_, "speed_filt")
-sum(dat_speed_fil$speed_rm) # n = X fixes dropped
+### Options using other built in RMS
+
+test1 = speed_filt(data, detailed_verbose = TRUE) # <--- default method = "mcconnell" + raw traj_speed
+
+# other similar hybrid options with the other methods:
+test2 = speed_filt(data, method = "flexi_clip", detailed_verbose = TRUE)
+test3 = speed_filt(data, method = "flexi_vec", detailed_verbose = TRUE)
+test4 = speed_filt(data, method = "mcconnell", detailed_verbose = TRUE)
+
+# bespoke smoothing with a specified function, e.g. rolling median:
+funr <- function(x, y, k = 5){
+  frollapply(y, n = k, FUN = median, align = "center", fill = NA)
+}
+test5 = speed_filt(data, hybrid = TRUE, detailed_verbose = TRUE, fun = funr, fun_args = list(k = 5)) # smoother and raw traj
+test6 = speed_filt(data, hybrid = FALSE, detailed_verbose = TRUE, fun = funr, fun_args = list(k = 5)) # just the smoother
 
 # Compare also to other functions from other packages
 # e.g. the trip package and function trip::speedfilter()
@@ -90,6 +207,10 @@ test_sp_filt <- trip::speedfilter(data_in_trip, max.speed = 50*3.6, test = FALSE
 data_in_trip$outlier <- ifelse(test_sp_filt,1,0)
 
 }
+\references{
+McConnell, B. J. and Chambers, C. and Fedak, M. A. (1992) Foraging ecology of southern elephant seals in
+relation to the bathymetry and productivity of the southern ocean. \emph{Antarctic Science}, \strong{4}, 393-398.
+}
 \seealso{
-\link{turn_filt}
+\link{turn_filt}, \link{traj_speed_sm}
 }
