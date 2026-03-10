@@ -1,45 +1,55 @@
 #' Cleaning the tracking data
 #'
-#' \code{clean_GPS} is provided to allow some basic cleaning of the raw tracking data to be
+#' \code{clean_track} is provided to allow some basic cleaning of the raw tracking data to be
 #' carried out, i.e. after having read in the raw data using
-#' \code{\link{read_track_UvA}} and/or \code{\link{read_track_MB}}. \code{clean_GPS} is used
-#' to take out less certain positional fixes, filter out fixes associated with unrealistic trajectory speeds, and further
-#' define date-time sections (strings of points) where tags were deemed have valid recording in relation to the programmed GPS sampling rate.
+#' \code{\link{read_track_UvA()}} and/or \code{\link{read_track_MB()}}. \code{clean_track()} is used
+#' to address a variety of issues with tracking data such as (1) sampling issues like including data duplicates,
+#' missing data, errant spatio-temporal data spans, numbers of fixes per animal, and gaps between valid strings
+#' of points; as well as (2) further issues relating to measurement error and unrealistic movement trajectories.
 #'
 #' @details
 #'
 #' \strong{Introduction}
 #'
-#' A single function \code{clean_GPS} is provided that cycles through ten main steps to either annotate
-#' potential 'bad' data rows, or filter such rows, thus 'cleaning' the GPS data.
+#' A wrapper function \code{clean_track()} is provided that cycles through several main steps to either annotate
+#' potential 'bad' data rows, or filter such rows, thus 'cleaning' the GPS data. As an initial upfront disclaimer,
+#' \code{clean_track()} calls many other \code{MoveRakeR} functions and each of these can be also used in
+#' their own right outside of \code{clean_track()}. Therefore, the \code{clean_track()} wrapper may be more useful once you are sure the process
+#' of annotating or filtering data is "locked in" and you have done all the necessary checks. \code{clean_track()}
+#' may therefore be more useful as a workflow-tidier, or if you are just certain of how to clean the data then that's totally fine.
+#' As always, this is a gradient from fully open code (i.e. outside of \code{MoveRakeR}) to using
+#' the \code{MoveRakeR}-family of functions through to then using the fully-wrapped up process of \code{clean_track()}.
 #'
 #' There many reasons why (here focusing on GPS) animal-borne telemetry locations may have error, such as
 #' internal firmware settings of tags e.g. connection parameters with satellites, sampling rate
 #' of tags, number of satellites, satellites position in the sky, along with external factors
 #' such as temperature, humidity etc. Here, we assume the user is mainly interested in 2D space,
-#' so we retain all vertical information in columns \code{altitude} and \code{altitude_agl}. Further filters for such
-#' z-dimension columns may be needed by the user.
+#' so we retain all vertical information in columns \code{altitude} and \code{altitude_agl}. Further
+#' filters for such z-dimension columns may be needed by the user.
 #'
-#' Instead here, we carry out basic cleaning to annotate or filter fixes that may be identified less reliable.
-#' The steps within \code{clean_GPS} are often very simple trivial data manipulations, provided here as a convenience tool.
-#' The user may wish to break out of the \code{clean_GPS} workflow entirely. Annotation is also at the heart of \code{clean_GPS}
-#' as it is expected that other functions from neighbouring R packages may come in handy to assess alongside this process.
+#' Here, we carry out basic cleaning to annotate or filter fixes that may be identified less reliable.
+#' The steps within \code{clean_track} are often more simple trivial data manipulations, that can be accomplished in your own way
+#' However, many of these steps can quickly get more complicated than originally intended. \code{MoveRakeR} therefore
+#' is there to help if that is the case. Annotation is also at the heart of \code{clean_track}
+#' as it is expected that other functions from neighbouring R packages may come in handy to assess
+#' alongside this process.
 #'
 #' \strong{The general process}
 #'
-#' Within \code{clean_GPS}, there are four main 'groups' of cleaning defined here:
+#' Within \code{clean_track}, there are four main 'groups' of cleaning defined here:
 #'
-#' 1. Location and date timestamp issues, such as duplicate data and NA data for location;
+#' 1. Duplicate and missing data Location and spatio-temporal spans of data;
 #' 2. Sample size and minimum numbers of animals and fixes per animal, and data gaps between points;
 #' 3. Error covariates, such a number of satellites, dilution of precision or other accuracy measures;
 #' 4. Further location filters based on speed/ and/or turning angle (building on 2. above);
 #'
-#' Under each one of these banners, \code{clean_GPS} handles:
+#' Under each one of these banners, \code{clean_track} handles (in certain order):
 #' Location and timestamp issues
 #' - Missing location - any missing latitude/longitude information (NAs) are first identified and flagged/filtered;
 #' - Missing data - Label/drop rows where all columns in the data are NA.
-#' - Duplicate date time stamps - if duplicate rows are found and the annotate argument is TRUE, the data are returned early
-#' (before any speed or tuning filters that requires such non-duplication of DateTimes);
+#' - Duplicate date issues - using the function \code{duplicate_track()} duplicate rows are either annotated or resolved.
+#' - Data spans are assessed using the \code{tag_spans()} function, which can assess errant future dates, specific dates
+#' supplied by the user, and a priori spatial extent expectations.
 #'
 #' Sample sizes and data gaps
 #' - Minimum number of GPS fixes per animal;
@@ -53,17 +63,17 @@
 #' - Bespoke accuracy filters via available columns in the data, via the \code{filt_err()} function.
 #'
 #' Speed and turning angle filters
-#' - Trajectory (ground) speed filter, that calls both \code{traj_speed} to calculate speeds within identified gap sections, and \code{speed_filt} to
+#' - Trajectory (ground) speed filter, that calls both \code{traj_speed()} to calculate speeds within identified gap sections, and \code{speed_filt()} to
 #' carry out labeling/filtering of points beyond unrealistic perceived animal travel speeds. Root-mean square or
-#' other smoothing operations can be fed through to \code{traj_speed} via \code{clean_GPS};
-#' - A turning angle filter, using function \code{turn_filt} to annotate/filter fixes more ore less than a modulus(radians) turning angle between successive fixes.
+#' other smoothing operations can be fed through to \code{traj_speed()} via \code{clean_track()};
+#' - A turning angle filter, using function \code{turn_filt()} to annotate/filter fixes more ore less than a modulus(radians) turning angle between successive fixes.
 #' The turning filter also depends on \code{adehabitatLT::as.ltraj} for efficiently computing turning angles and
 #' should be used with a high degree of caution given GPS location of stopped animal movement reflects GPS noise.
 #'
 #'
 #' \strong{Further details}
 #'
-#' The defaults of \code{clean_GPS} should not be relied upon 'out-of-the-box'. Selection of parameters should be carefully
+#' As a bove, the defaults of \code{clean_track()} should ideally not be relied upon 'out-of-the-box'. Selection of parameters should be carefully
 #' considered and scutinised (i.e. raking) through the use of the \code{ShinyRakeR} app.
 #'
 #' Contexts will likely vary greatly and will be highly species- specific.
@@ -76,13 +86,13 @@
 #' expanded to consider instances where several fixes in a row may be slightly 'wrong' but falling below the extreme outlying cases
 #' identified via raw trajectory speed. It may therefore be necceassary to ask a slightly different question:
 #' "is there sustained implausible movement in the' neighbourhood for this fix?".
-#' Further arguments can therefore be supplied to \code{clean_GPS} to address this, by using
+#' Further arguments can therefore be supplied to \code{clean_track} to address this, by using
 #' a root mean square or smoothing of trajectory speed, which alongside the raw trajectory speed amounts to a "hybrid" approach
 #' to isolate individual bad spikes as well as local context-dependent neighbourhood error. See also \code{trip::speedfilter}
 #' for a similar approach.
 #'
 #' Trajectory speed filters naturally have drawbacks as they are tied intrinsically to the sampling rate of the tag. Information
-#' on instantaneous speed may be preferable, although not provided in \code{clean_GPS} as a filtering/annotating option.
+#' on instantaneous speed may be preferable, although not provided in \code{clean_track} as a filtering/annotating option.
 #' Coarser GPS sampling rates may make it harder to discern potentially erroneous fixes given a wider time elapsed over what the animal could have been doing and
 #' at very fine spatio-temporal scales, i.e. with fast sampling less than 60 seconds, a small change in GPS position has a greater influence on trajectory speed
 #' than for coarser sampling schedules. It may therefore be needed to investigate the error potential in traj_speed calculations at these finer scale
@@ -90,10 +100,10 @@
 #' using the \code{tspeed_jit} function. Note this may be resolved partly by considering a root mean square/smoothing
 #' operation within the speed filter (see examples), increasing robustness over different sampling regimes.
 #'
-#' The \code{clean_GPS} workflow in \code{MoveRakeR} is not the first of its kind to have dealt with such similar issues.
+#' The \code{clean_track} workflow in \code{MoveRakeR} is not the first of its kind to have dealt with such similar issues.
 #' There are a number of packages that have functions that may be of use to consider as annotation of the data alongside
-#' \code{clean_GPS}, such as function \code{trip::sda} and \code{trip::speedfilter} that have methods for speed/turning angle point assessment;
-#' the function in s \code{MoveRakeR::clean_GPS} differ for trajectory speed in using a while loop to sequentially assess potentially
+#' \code{clean_track}, such as function \code{trip::sda} and \code{trip::speedfilter} that have methods for speed/turning angle point assessment;
+#' the function in s \code{MoveRakeR::clean_track} differ for trajectory speed in using a while loop to sequentially assess potentially
 #' erroneous fixes that may be above the maximum speed for the species, as strings of erroneous points can occur, thus being displaced
 #' from where they likely should have been; hence the  \code{MoveRakeR::speed_filt} by design also considers a displacement effect indirectly.
 #'
@@ -102,25 +112,21 @@
 #' biases, and so the user is also directed to other packages such as \code{trip}, \code{traipse}, \code{move/move2} and \code{AMT}.
 #'
 #' \emph{NOTE as of v 1.1.3.90000}
-#' At present \code{clean_GPS} handles duplicate timestamps in a rather basic way and so
-#' methods for duplicate data are currently being revised within a new function (to be brought into \code{clean_GPS})
-#' that will consider further complexity and decision-making options such as:
-#' - retaining highest accuracy row for duplicate data if duplicate timestamps are found
-#' - handling of duplicate timestamps but non-identical location data
-#' - what to do with future or past data
-#' - how to handle a complex quirk of 'jump backs' in time resulting in duplicate timelines (and not necessarily identical timestamps)
+#' \code{clean_track()} used to be called \code{clean_GPS()} in previous \code{MoveRakeR} releases.
+#' The function is the same, this is just a name change, and users can still
+#' call \code{clean_GPS()}, but please consider that older name deprecated.
 #'
 #' \strong{Wider discussion on data cleaning/raking}
 #'
 #' There are different coding approaches to tackle cleaning of GPS data. It is fully appreciated users may have their own
 #' approaches to do this. If these process are done in 'open code', following the \code{ExMove} workflow (Langley et al. 2024)
 #' this is useful starting point. The user may then hit repeatable issues we all face, for which the functions in
-#' \code{MoveRakeR} seek to simplify and capture to avoid overly verbose coding. These functions are then
-#' brought together in \code{clean_GPS} as an overall wrapper. In between these steps, there is also the
+#' \code{MoveRakeR} seek to simplify and capture to avoid verbose coding. These functions are then
+#' brought together in \code{clean_track()} as an overall wrapper. In between these steps, there is also the
 #' defined 'raking' of data to explore what happens if you choose option X, or parameter Y, i.e. how much data
 #' is dropped, do these exclude certain individuals or time periods etc. Data cleaning can be seen on a continuum of approaches ranging
 #' from the fully open-code approaches (that may result in repeated coding of the same sorts of issues), to a fully wrapped up
-#' approach of \code{MoveRakeR::clean_GPS} as a single function for which use 'out-of-the-box') is risky without first delving into the
+#' approach of \code{MoveRakeR::clean_track} as a single function for which use 'out-of-the-box') is risky without first delving into the
 #' error present in the data. It is also recognised that \code{MoveRakeR} is coded around examples on real GPS data for which we
 #' have detected. However, there may be unknown issues we have not yet come across, that a user may switch to open coding of
 #' data cleaning. Do feel free to get in touch if there are any steps that could be included.
@@ -155,12 +161,12 @@
 #' hence to use this option, the necessary arguments must be specified for that function. These are the names
 #' of the variables to use via \strong{nms}, the lower bound via \strong{vals_l}, the upper bound via
 #' \code{vals_u}, and optionally the \strong{inclusive} argument, for the upper and lower bound condition. These arguments
-#' are supplied to \code{filt_err} via the dots (...) argument within \code{clean_GPS}. Note also,
+#' are supplied to \code{filt_err} via the dots (...) argument within \code{clean_track}. Note also,
 #' if custom_filt is TRUE, checks are first made for use of prior built-in filters via the number of satellite, pdop,
 #' hdop and flt_switch checks, and if any duplicate column names are found in the 'nms' argument those having been
 #' used already, these are omitted from the custom filter.
 #' @param hasgaps A logical vector whether the data being fed in already has gap sections defined from another process.
-#' If FALSE, \code{clean_GPS} will assign its own gap sections based on the values in GAP and tol.
+#' If FALSE, \code{clean_track} will assign its own gap sections based on the values in GAP and tol.
 #' @param GAP Numeric integer in seconds. The function can label sections of assumed continuous GPS recording
 #' for the individual animal, using the \code{\link{gap_section}} function.
 #' The argument \code{GAP} here is the cut-off i.e. temporal hiatus between two
@@ -174,31 +180,40 @@
 #' @param drop_single_gap logical defaults to FALSE, but user can specify TRUE to annotate/retain single gap sections
 #' that by default get removed from the speed filter as isolated fixes that are at too coarser rate.
 #' as determined by the \code{GAP} argument. This replaces the previous 'drop' argument in MoveRakeR <1.0.2.
-#' @param dup_DT logical defaulting to TRUE to flag/remove duplicate DateTimes, but note that this will flag/remove
-#' any duplicated rows if you are working with trips that 'come-and-go' from a central place.
-#' See function: \code{add_cag_trips}. However also note that if you select to flag duplicate DateTimes and not
-#' remove them i.e. annotate = TRUE, the function will stop because the speed filter requires them to be unique.
-#' Hence this check is the last one made before the speed filter, so other annotations can be flagged.
-#' @param speed_filt logical defaulting to TRUE as to whether to use the speed filter.
-#' \code{clean_GPS} calls the \code{speed_filt} function to do this, and in turn further arguments can be fed
-#' through to \code{speed_filt} from \code{clean_GPS} via the dots (...) argument; these include the option to
+#' @param duplicates logical defaulting to TRUE to call \code{duplicate_track()} to address data duplicates
+#' Also note that this will flag/remove any duplicated rows if you are working with trips that 'come-and-go'
+#' from a central place; see function: \code{add_cag_trips}.
+#' @param dup_method Corresponding to \code{duplicate_track()} argument. Global conflict–resolution
+#' dup_method used for all duplication steps unless overridden by a further method-specific duplication call (see examples).
+#' dup_method is one of \code{"best_quality"}, \code{"first"}, \code{"last"}, \code{"random"}, or step-specific dup_methods
+#' where applicable. Defaults to "random" if nothing is provided; further formal arguments for \code{duplicate_track()}
+#' can be passed via the '...' of \code{clean_track()}.
+#' @param tagspans logical defaulting to TRUE to call \code{tag_spans()} whether to consider a priori reasons why
+#' data may be erroneous in time or space; further formal arguments for \code{duplicate_track()}
+#' can be passed via the '...' of \code{tag_spans()}.
+#' @param measure corresponds to the equivalent argument in \code{tag_spans()} one of c("spatial", "temporal") fro
+#' consideration of temporal and/or spatial extent flagging or resolving.
+#' @param speed_filt logical defaulting to TRUE as to whether to use the speed filter and call \code{speed_filt()}.
+#' \code{clean_track} calls the \code{speed_filt} function to do this, and in turn further arguments can be fed
+#' through to \code{speed_filt} from \code{clean_track} via the dots (...) argument; these include the option to
 #' use further root mean square or smoothing options such as through the \strong{method} argument of \code{speed_filt}
 #' and whether to use both raw trajectory speed and the 'smoothed' version via the \strong{hybrid} argument.
-#' @param sp_thres Numeric value for the minimum threshold (m/s) to be used in the speed filter, which requires
+#' @param sp_thres As supplied to \code{speed_filt()}. A numeric value for the minimum threshold (m/s) to be used in the speed filter, which requires
 #' inspection and will vary by species. This will depend on the sampling resolution
 #' of your data. The function then uses a while loop to remove all points not
 #' meeting the threshold level until all offending fixes are removed.
-#' @param turnFilt An optional filter, default set to NULL (no filter applied) to annotate or filter greater or lesser than a certain turning angle of the animal,
-#' but beware for GPS fixes for a stationary animal, turning angles represent GPS error that can be erratic, so this may
+#' @param turnFilt An optional filter, default set to NULL (no filter applied) to annotate or filter using \code{turn_filt()};
+#' turning angles greater or lesser than a certain "turn_filt" turning angle provided are flagged/filtered,
+#' but beware for GPS fixes for a stationary animal, as turning angles represent GPS error that can be erratic, and so this may
 #' need further behavioural consideration. If supplied, turn_filt should be a single value with a maximum of pi, that
 #' represents the modulus of the radian turning angle; note also that if turn_filt_dir = "less_than" and turn_filt = pi, then
 #' all fixes would be removed; A value of  turn_filt = pi/4 and turn_filt_dir = "less_than" would retain all fixes less_than turn_filt.
-#' @param turnFilt_dir As with turn_filt, a direction indicating greater or lesser than the turn_filt value to annotate/retain values.
+#' @param turnFilt_dir As supplied to \code{turn_filt()}, a direction indicating greater or lesser than the turn_filt value to annotate/retain values.
 #' @param annotate Logical defaulting to FALSE, in which case data will be \strong{filtered}, however if TRUE, data
-#' will be \code{annotated} instead retaining all rows, and different columns will be added for each of the \code{clean_GPS}
+#' will be \code{annotated} instead retaining all rows, and different columns will be added for each of the \code{clean_track}
 #' manipulation steps representing rows flagged under each condition (see 'Value' section).
 #' @param attrib Logical set to FALSE if detailed attributes should be attached
-#' for numbers of fixes removed in various stages from \code{clean_GPS}.
+#' for numbers of fixes removed in various stages from \code{clean_track}.
 #' These can be accessed afterwards using: attr(data, "data_summary").
 #' @param reproject As above, a logical value whether or not to reproject lat-long WGS84
 #' coordinates to the new desired projection as specified via, \code{p4s}.
@@ -214,61 +229,75 @@
 #'
 #' @return The function returns a tibble format with a \code{Track} class.
 #' Resultant output depends on the argument \code{annotate}; if TRUE, then data are filtered for
-#' the required processing steps selected in \code{clean_GPS}, with additional columns in the objects if not already included:
+#' the required processing steps selected in \code{clean_track}, with additional columns in the objects if not already included:
 #' including: \strong{dt}, time difference (secs) between consecutive GPS fixes,
 #' \strong{gap}, a binary (1,0) for fixes where a gap was identified and \strong{gapsec}
 #' as a numeric integer of sequentially-labelled gapsection strings of telemetry fixes. If the \code{annotate} argument is
 #' TRUE, then various columns can be added flagging as a 1 or 0 (some with NA conditions) whether a fix
 #' was labelled as 'incorrect' through the thresholds supplied. These columns are named accordingly for conditions:
-#' - tid_rm (minimum no. animals)
-#' - NA_latlong_rm (lat/long point NA)
-#' - all_NA_rm (NA rows)
-#' - sat_NA (NA of rows without satellites)
-#' - sat_rm (number of satellites)
-#' - flt_rm (flt_switch)
-#' - gps_pdop_rm (pdop)
-#' - gps_hdop_rm (hdop)
-#' - singlegap_rm ('isolated' gapsections)
-#' - dup_rm (duplicate DateTimes)
-#' - speed_rm (speed filter)
-#' - angle_rm (angle filter)
-#' - combined_rm, A combined remove column using conditions across all annotation rows
-#' - if using the 'custom_filt' argument, any additional columns used will be flagged with a suffix "_rm" and
-#' included in the condition across all columns within 'combined_rm'.
+#' - tid_rm (minimum no. animals);
+#' - NA_latlong_rm (lat/long point NA);
+#' - all_NA_rm (NA rows);
+#' - sat_NA (NA of rows without satellites);
+#' - sat_rm (number of satellites);
+#' - flt_rm (flt_switch);
+#' - gps_pdop_rm (pdop);
+#' - gps_hdop_rm (hdop);
+#' - singlegap_rm ('isolated' gapsections);
+#' - dup_rm (duplicate DateTimes);
+#' - speed_rm (speed filter);
+#' - angle_rm (angle filter);
+#' - if using the 'custom_filt' argument, any additional columns used will be flagged with a suffix "_rm";
+#' - if using the duplication method, then a further five columns ar possible relating to specific
+#' issues identified from the duplication process: dup_parallel_rm (parallel issue), dup_time_rm (same DateTime, different coordinates),
+#' dup_coords_rm (same coordinates, different DateTime), dup_time_coords_rm (both DateTime and coords the same)
+#' and all_dup_rm (all row duplicates);
+#' - if using tagspans a further six columns are possible: future_date_rm (future date found), temporal_date_rm (dates exceed supplied range),
+#' minx_rm (< minx), miny_rm (< miny), maxx_rm (> maxx), maxy_rm (> maxy)
+#' and then depending on conditions returned:
+#' - 'combined_rm' is the result of the combined flags (1,0,NA) across all "_rm" columns.
 #'
 #' @examples
 #'
 #' indata <- yourdata # data.frame with a minimum of columns named TagID, DateTime, longitude, latitude
 #' data <- Track(indata) # optional to convert to in-house class (most functions will still run on non track data but generic S3 methods will not be available for plot and summary)
-#' data <- data %>% clean_GPS() # accepting the defaults of the clean_GPS function
-
+#' data <- data %>% clean_track() # accepting the defaults of the clean_track function
+#'
+#' ############################### DISCLAIMER ####################################
+#' # clean_track() is a wrapper for several other MoveRakeR functions
+#' # It is advisable to carry out piecemeal checks of data before using clean_track() but thereafter if
+#' # the filtering or annotating process is "locked in" and you are sure of the steps used, then
+#' # clean_track() could be useful as shorthand to help clean up workflows
+#'
 #' # --------------------------------------------------------------------------- #
 #' # Example of basic use
 #' # --------------------------------------------------------------------------- #
 #' # as an annotation tool:
-#' data_an <- clean_GPS(data,
-#'          min_fix = 5, min_fix_when = "after_NA",       # keep birds with 5 fixes or more, after NA annotation applied
-#'          NA_latlong = TRUE,                            # drop NA lat-longs
-#'          sat_check = TRUE, drop_sats=3,                # drop fixes with 3 satellites
-#'          flt_switch = FALSE,                           # ignored here
-#'          pdop = 6, hdop = 6,                           # drop any rows above a value of 6
-#'          hasgaps = FALSE, GAP = 28800, tol = 0,        # no gaps previously defined, use an 8 h gap + zero tolerance
-#'          drop = FALSE,                                 # keep all gap sections identified with 1 fix (but note these are dropped anyway in speed filter if we are not annotating!)
-#'          dup_DT = TRUE,                                # remove duplicate DateTimes
-#'          speedFilt = TRUE, sp_thres = 50,              # speed filter activated with a maximum of 50 m/s
-#'          turnFilt = NULL, turnFilt_dir = "less_than",  # No angle turning filter used
-#'          annotate = TRUE, attrib = TRUE,               # no annotation = dropping rows not meeting conditions, attributes of no. rows per stage retained as an attribute in final data
-#'          reproject = FALSE, p4s = 3035,                # no reprojection of lat longs
-#'          verbose = TRUE, detailed_verbose = FALSE)     # simple messaging used
+#' data_an <- clean_track(data,
+#'  min_fix = 0, min_fix_when = "after_NA",                       # keep birds with 5 fixes or more, after NA annotation applied
+#'  NA_latlong = TRUE,                                            # drop NA lat-longs
+#'  sat_col = "satellites_used", sat_check = TRUE, drop_sats = 3, # drop fixes with 3 satellites
+#'  pdop_check = FALSE, pdop_val = 7, pdop_col = "gps.pdop",      # drop any rows above a value of 7 IF pdop_check TRUE
+#'  hdop_check = FALSE, hdop_val = 7, hdop_col = "gps.hdop",      # drop any rows above a value of 7 IF hdop_check TRUE
+#'  flt_switch = FALSE,                                           # flt_switch custom argument, ignored here
+#'  custom_filt = FALSE,                                          # should any custom filtering be done, no here but nms, vals_l, vals_u would then be needed (see below)
+#'  hasgaps = FALSE, GAP = 28800, tol = 0.2,                      # no gaps previously defined, if TRUE use GAP and tol args to redefine
+#'  drop_single_gap = FALSE,                                      # keep all gap sections identified with 1 fix (note these are dropped anyway in speed filter if not annotating)
+#'  duplicates = TRUE, dup_method = "random",                     # activate duplicate filter, defaulting to a random pick in dup_method
+#'  tagspans = TRUE, measure = c("spatial", "temporal"),          # activate the tagspans data checks (default spatial and temporal)
+#'  speedFilt = TRUE, sp_thres = 50,                              # activate basic speed filtering using only raw GPS traj speed - see further options for smoothed and RMS consideration
+#'  turnFilt = NULL, turnFilt_dir = "less_than",                  # no use of turn filter under default
+#'  annotate = TRUE,                                              # default is usually FALSE but TRUE annotates rather than filters
+#'  attrib = TRUE, reproject = FALSE, p4s = 3035,                 # attributes and p4s conditions
+#'  verbose = TRUE, detailed_verbose = FALSE)                     # verbosity
 #'
-#' #' # check out where fixes where dropped:
+#' # If you are NOT annotating, you can check where fixes were dropped via:
 #' attr(data_an,"data_summary")
-#'
-#' # If annotating the data, switching annotate to TRUE above, additional rows flagging conditions would be added
-#' data_an$combined_rm # the combined row
+#' # otherwise you can assess this using the '_rm' columns in the annotated dataset:
+#' data_an$combined_rm # the combined annotation column
 #'
 #' # --------------------------------------------------------------------------- #
-#' # Further use of custom filtering via the dots(...) argument of clean_GPS()
+#' # Further use of custom filtering via the dots(...) argument of clean_track()
 #' # --------------------------------------------------------------------------- #
 #' # The below call activates 'custom_filt' and looks for columns speed_accuracy, flag ("wrong" or "correct"), and satellites_used
 #' # but... notices how sat_check is already TRUE and satellites_used is specified there so would be ignored by
@@ -277,9 +306,12 @@
 #' # If the flag column is "wrong", then these would be dropped. vals_l and vals_u are best supplied as lists if multiple
 #' # columns are to be used.
 #'
-#' cust_filt = clean_GPS(data,
+#' data$flag <- "0" # IF YOU DO NOT HAVE A FLAG COLUMN (used in this example), otherwise filt_err() will fail.
+#'
+#' cust_filt = clean_track(data,
 #'                 sat_check = TRUE, drop_sats=3, sat_col = "satellites_used",
-#'                 annotate = FALSE,
+#'                 duplicates = TRUE,  tagspans = TRUE,
+#'                 annotate = FALSE, # <--- i.e. dropping data that are flagged as errant
 #'                 pdop_check = TRUE, pdop_val = 9, pdop_col = "gps.pdop",
 #'                 hdop_check = TRUE, hdop_val = 9, hdop_col = "gps.hdop",
 #'                 custom_filt = TRUE,
@@ -296,8 +328,9 @@
 #'  return(flag)
 #' }
 #'
-#' cust_filt2 = clean_GPS(data,
+#' cust_filt2 = clean_track(data,
 #'                 sat_check = TRUE, drop_sats=3, sat_col = "satellites_used",
+#'                 duplicates = TRUE,  tagspans = TRUE,
 #'                 annotate = FALSE,
 #'                 pdop_check = TRUE, pdop_val = 9, pdop_col = "gps.pdop",
 #'                 hdop_check = TRUE, hdop_val = 9, hdop_col = "gps.hdop",
@@ -309,9 +342,9 @@
 #'                 speedFilt = TRUE, sp_thres = 50)
 #'
 #' # --------------------------------------------------------------------------- #
-#' # Speed filter further option via the dots(...) argument of clean_GPS()
+#' # Speed filter further option via the dots(...) argument of clean_track()
 #' # --------------------------------------------------------------------------- #
-#' # Similar to the use of the 'custom_filt' argument above, the speed filterer in clean_GPS can also accept
+#' # Similar to the use of the 'custom_filt' argument above, the speed filterer in clean_track can also accept
 #' # further arguments via '...' that are fed through to speed_filt(). In the example below we annotate the data
 #' # and use the speed filterer but also specify that we want to consider a hybrid approach using raw
 #' # trajectory speed AND the root mean square "mcconnell" method; this uses two fixes either side back and forward (excluding the current fix)
@@ -319,21 +352,65 @@
 #' # sustained implausible fixes around the current fix indicating local neighbourhood inconsistency
 #' # as well as 'spikes' in the data from the raw trajectory filter.
 #'
-#' cust_speed = clean_GPS(data,
+#' cust_speed = clean_track(data,
 #'                 sat_check = TRUE, drop_sats=3, sat_col = "satellites_used",
+#'                 duplicates = TRUE,  tagspans = TRUE,
 #'                 annotate = FALSE,
 #'                 pdop_check = TRUE, pdop_val = 7, pdop_col = "gps.pdop",
 #'                 hdop_check = TRUE, hdop_val = 7, hdop_col = "gps.hdop",
 #'                 speedFilt = TRUE, sp_thres = 50, method = "mcconnell", hybrid = TRUE) # <------ supplied to speed_filt() via '...'
 #'
 #' # --------------------------------------------------------------------------- #
-#' # Outside of the clean_GPS() function
+#' # Duplicates
 #' # --------------------------------------------------------------------------- #
-#' # clean_GPS() is a wrapper for several other MoveRakeR functions and so this can be
-#' # broken apart if the user wants even more control over the process and in particular the ORDER in
-#' # which different cleaning steps are applied.
+#' # This calls the duplicates_track() function
+#' # However the only global argument for this process in clean_track() is
+#' # dup_method = c("random", "best_quality", "first", "last", "mean")
+#' # But you can make use of duplicates_track() by specifying any argument that function needs by just
+#' # specifying them in the clean_track() function which will be fed through as above with other process via the "..."
 #'
-#' # Example, using the speed filter, outside of clean_GPS() with annotation:
+#' # You can use the single functions anyway but for example specifically using
+#' # "best quality" as the dup_method BUT then also adding which columns through further variables:
+#'
+#' data_dups = clean_track(data, duplicates = TRUE, annotate = TRUE,
+#'   dup_method = "best_quality",
+#'   quality_vars = c("satellites_used", "accuracy", "pdop", "hdop"),
+#'   quality_directions = c(1,1,-1,-1)
+#' )
+#'
+#' # or even more bespoke, using a specific method that is allowed for a particular dup_method
+#' # these are passed through the 'dots' of the duplicate_track() essentially double-dotted from clean_track():
+#' data_dups = clean_track(data, duplicates = TRUE,
+#'   dup_method_same_time = "centroid",
+#'   annotate = FALSE,
+#'   verbose = TRUE # default
+#' )
+#' # which should show "Using dup_method: centroid" in the Duplicate data checker if verbose is TRUE
+#'
+#' # --------------------------------------------------------------------------- #
+#' # Tag data spans
+#' # --------------------------------------------------------------------------- #
+#' # Tag data span checks are computed using the tag_spans() function
+#' # This also makes use of a single global argument in clean_track() but as above
+#' # clean_track() accepts the necessary further functions within tag_spans():
+#'
+#' data_tagspans <- clean_track(data,
+#'     tagspans = TRUE,
+#'     measure = c("spatial", "temporal"), # <- general summaries in tag_spans() cannot be used for clean_track()
+#'     xra = c(-10,5), yra = c(25,65),
+#'     dates = c("2014-01-01 00:00:01", "2021-12-31 23:59:59"),
+#'     annotate = FALSE
+#'   )
+#'
+#' # --------------------------------------------------------------------------- #
+#' # Outside of the clean_track() function
+#' # --------------------------------------------------------------------------- #
+#' # As noted above, clean_track() is a wrapper for several other MoveRakeR functions
+#' # It is advisable to carry out piecemeal checks of data before using clean_track()
+#' # If the user wants maximal control over the process and in particular the ORDER in
+#' # which different cleaning steps are applied then best to do outside of clean_track()
+#'
+#' # Example, using the speed filter, outside of clean_track() with annotation:
 #'
 #' # define gapsections
 #' data <- gap_section(data,GAP=28800, tol = 0.2)
@@ -341,11 +418,16 @@
 #' # use speed filter, with the above gaps, annotating the data
 #' data_speed_filt <- speed_filt(data, annotate = TRUE, verbose = TRUE, detailed_verbose = TRUE)
 #'
-#' # setting that part of clean_GPS to FALSE, to annotate with other elements e.g. nsats
-#' data_2 <- clean_GPS(data_speed_filt, speed_filt = FALSE, annotate = TRUE, hasgaps = TRUE) # using gaps already present in the data
+#' # setting that part of clean_track to FALSE, to annotate with other elements e.g. nsats
+#' data_2 <- clean_track(data_speed_filt, speed_filt = FALSE, annotate = TRUE, hasgaps = TRUE) # using gaps already present in the data
 #'
-#' # Clean_GPS also gives a message if some satellite count data are found to be NA
+#' # clean_track also gives a message if some satellite count data are found to be NA
 #' # and these data are retained in the filter of number of satellites.
+#'
+#' # See also processes for
+#' #duplicate_track(data)
+#' #tag_spans(data)
+#' #filt_err(data)
 #'
 #' # can also summarise the data, using a further function summary
 #' #summary(data)
@@ -363,7 +445,7 @@
 #' @seealso [MoveRakeR::read_track_MB], [MoveRakeR::tspeed_jit], [MoveRakeR::read_track_UvA], [MoveRakeR::gap_section], [MoveRakeR::summary]
 #'
 #' @export
-clean_GPS <- function(data,
+clean_track <- function(data,
                       min_fix = 0,
                       min_fix_when = c("after_NA", "after_all"),
                       NA_latlong = TRUE,
@@ -373,12 +455,10 @@ clean_GPS <- function(data,
                       flt_switch = FALSE,
                       custom_filt = FALSE,
                       hasgaps = FALSE, GAP = 28800, tol = 0.2, drop_single_gap = FALSE,
-                      dup_DT = TRUE,
-                      # TO BE ADDED WITHIN A NEW FUNCTION dupDT():
-                      #illegal_DT = TRUE, # checks for DateTimes in the past (will be through ... in clean_GPS)
-                      #spans_dates = NULL, # OR checks for timestamps within a window
-                      #dates = c("2014-01-01 00:00:01", "2021-12-31 23:59:59"),
-
+                      duplicates = TRUE, # will do a default check of issues but resolving (annotate = FALSE), requires feed in of necessary duplicate_track() args; deafults to random picks
+                      dup_method = c("random", "best_quality", "first", "last", "mean"), # for duplicate_track()
+                      tagspans = TRUE, # will use default of tag_spans to ONLY check for future dates, unless ... is used feeding to tag_spans
+                      measure = c("spatial", "temporal"), # for tag_spans()
                       speedFilt = TRUE, sp_thres = 50, # plus any additional columns for ... fed to speed_filt()
                       turnFilt = NULL, turnFilt_dir = c("less_than", "greater_than"),
                       annotate = FALSE, attrib = TRUE,
@@ -392,7 +472,7 @@ clean_GPS <- function(data,
 
   if(exists("drop", inherits = FALSE)){
     drop_single_gap = drop # legacy code of drop from previous funcion version retained
-    message("Newer version of clean_GPS() in MoveRakeR v 1.02+ uses 'drop_single_gap' instead of 'drop'")
+    message("Newer version of clean_track() in MoveRakeR v 1.02+ uses 'drop_single_gap' instead of 'drop'")
     cat(rep(" ",  getOption("width")), "\n", sep = "")
   }
 
@@ -412,8 +492,8 @@ clean_GPS <- function(data,
   ##########
   if(verbose){
     message(strrep("*", getOption("width")))
-
-    message("*************** Object of ", length(unique(data$TagID)), " animals, ", nrow(data), " rows ***************")
+    message(centre_line(paste0("Object of ", length(unique(data$TagID)), " animals, ", nrow(data), " rows")))
+    message(strrep("*", getOption("width")))
 
     if(annotate){
       message("----- ANNOTATING FLAGGED FIXES IDENTIFIED AS OUTLIERS -----")
@@ -466,8 +546,12 @@ clean_GPS <- function(data,
       message("----- Processing single gapsection fixes -----")
     }
 
-    if(dup_DT){
-      message("----- Assessing presence of duplicate DateTime stamps for fixes -----")
+    if(duplicates){
+      message("----- Assessing presence of duplicate DateTimes and locations -----")
+    }
+
+    if(tagspans){
+      message("----- Assessing a priori tag_spans for xy and DateTime validity -----")
     }
 
     if(speedFilt){
@@ -489,19 +573,15 @@ clean_GPS <- function(data,
       message("----- Reprojecting GPS fixes using sf crs: ", p4s, " -----")
     }
 
-    message(strrep("*", getOption("width")))
+    #message(strrep("*", getOption("width")))
 
 
   }
-
 
   # ------------------------------------------------------------------------------------------------------- #
 
   # the real gao being used (potentially given selections)
   GAP = GAP+(GAP*tol)
-
-  data_dp <- tibble(data)
-  #data_dp <- tibble(BTOTTdata::LBBGWalB201416[[1]][[1]])
 
   # # # # #
   #0. Initial tally of data length (primarily a summary for if annotate == FALSE)
@@ -516,14 +596,17 @@ clean_GPS <- function(data,
 
   data_dp$rn <- 1:nrow(data_dp)
 
+
   # ------------------------------------------------------------------- #
-  # 1. Remove any NA lat longs
+  # 1. Remove any NA lat longs, obviously not correct
   # ------------------------------------------------------------------- #
 
   if(NA_latlong){
     # remove any NA latitude or longitudes
 
-    if(verbose){message("----- NA_latlong checker -----")}
+    if(verbose){
+      message(centre_line("NA_latlong checker"))
+      }
 
     if(annotate){
       # annotate the rows
@@ -563,7 +646,7 @@ clean_GPS <- function(data,
 
       # # # # #
       # count the total remaining data after dropping or even if nothing dropped....
-      data_s <- data_dp %>% count(TagID) %>% rename(NA_latlong_n = n) %>% left_join(data_s, by = "TagID")
+      data_s <- data_dp %>%  ungroup() %>% group_by(TagID) %>% count(TagID) %>% rename(NA_latlong_n = n) %>% left_join(data_s, by = "TagID")
 
       if(verbose){
 
@@ -584,9 +667,11 @@ clean_GPS <- function(data,
 
 
   # ------------------------------------------------------------------- #
-  # 2. Removes rows that are completely NA across all columns
+  # 2. Remove rows that are completely NA across all columns
   # ------------------------------------------------------------------- #
-  if(verbose){message("----- NA all row checker -----")}
+  if(verbose){
+    message(centre_line("NA all row checker"))
+    }
 
   if(annotate){
 
@@ -610,7 +695,6 @@ clean_GPS <- function(data,
     }
 
 
-
   } else{
 
     n_as_is <- nrow(data_dp)
@@ -622,7 +706,7 @@ clean_GPS <- function(data,
     }
 
     # # # # #
-    data_s <- data_dp %>% count(TagID) %>% rename(all_NA_n = n) %>% left_join(data_s, by = "TagID")
+    data_s <- data_dp %>% ungroup() %>% group_by(TagID) %>% count(TagID) %>% rename(all_NA_n = n) %>% left_join(data_s, by = "TagID")
 
     if(verbose){
 
@@ -640,13 +724,116 @@ clean_GPS <- function(data,
 
   }
 
-  # -------------------------------------------------------------- #
-  # 3a. Birds with too few fixes (before all other tests)
   # ------------------------------------------------------------------- #
+  # 3. Assess duplicates
+  # ------------------------------------------------------------------- #
+  # I am now billing this as a very early thing that should be done in the processing, as it could be that
+  # you have two parallel data streams which should be checked before any "arrange(TagID, DateTime)" ....
+
+  # test
+  #data_dp <- data
+  #data_s <- data_dp %>% count(TagID)
+  #data_dp = duplicate_track(data, dup_method = "first",annotate = FALSE)
+  #n_as_is <- nrow(data_dp)
+
+  if(duplicates){
+
+    if(verbose){
+      message(centre_line("Duplicate data checker"))
+      }
+
+    dup_method <- match.arg(dup_method)
+
+    ##############
+    dup_method_overrides <- c(
+      "dup_method_parallel",
+      "dup_method_same_time",
+      "dup_method_same_loc",
+      "dup_method_exact"
+    )
+
+    dot_args <- list(...)
+    override_args <- dot_args[names(dot_args) %in% dup_method_overrides]
+
+    # in duplicate_track() NULLs are handled via missing(var) and validation errors if is.null(var)
+    # this means NULL is not allowed in duplicate_track() but may be in other functions, but here therefore:
+    override_args <- override_args[!vapply(override_args, is.null, logical(1))]
+
+    dot_args <- list(...) # capture all dots
+    dup_args <- names(formals(duplicate_track)) # formal arguments of duplicate_track
+    dup_dot_args <- dot_args[names(dot_args) %in% dup_args]  # only keep those relevant to duplicate_track
+    args <- c("quality_vars", "quality_fun", "quality_directions", "centroid_fun", "time_fun") # args we want to manage / populate defaults for
+    defaults <- lapply(formals(duplicate_track)[args], eval) # get evaluated defaults from duplicate_track
+    dup_dot_args <- modifyList(defaults, dup_dot_args) # merge user-supplied with defaults (user-supplied takes precedence)
+    dup_dot_args <- dup_dot_args[!vapply(dup_dot_args, is.null, logical(1))] # as above
+
+    n_as_is <- nrow(data_dp)
+
+    # safer:
+    call_args <- c(
+      list(
+        data = data_dp,
+        dup_method = dup_method,
+        annotate = annotate,
+        verbose = verbose
+      ),
+      dup_dot_args,
+      override_args
+    )
+
+    data_dp <- do.call(duplicate_track, call_args)
+
+    if(annotate){
+
+      # rename the duplicate_track() returned columns
+      # parallel_issue = dup_parallel_rm
+      # dup_time_issue = dup_time_rm
+      # dup_coords_issue = dup_coords_rm
+      # dup_time_coords_issue = dup_time_coords_rm
+      # all_dup_issue = all_dup_rm
+
+      # New <- Old
+      data_dp <- data_dp %>% rename(dup_parallel_rm = parallel_issue,
+                                     dup_time_rm = dup_time_issue,
+                                     dup_coords_rm = dup_coords_issue,
+                                     dup_time_coords_rm = dup_time_coords_issue,
+                                     all_dup_rm = all_dup_issue)
+
+      rm_cols_created <- c(rm_cols_created, "dup_parallel_rm", "dup_time_rm", "dup_coords_rm", "dup_time_coords_rm", "all_dup_rm")
+
+    } else{
+
+      # simple sum up of already reduced tibble
+      # overall duplicate tally = just the total rows minus those dropped overall from the
+      # way duplicate_track() does things sequentially (not providing breakdown of where things dropped here)
+
+      data_s <- data_dp %>% ungroup() %>% group_by(TagID) %>% count(TagID) %>% rename(dup_n = n) %>% left_join(data_s, by = "TagID")
+
+      if(verbose){
+
+        n_found <- n_as_is - sum(data_s$dup_n)
+        pc <- round((n_found / n_as_is)*100, 2)
+
+        if(n_found > 0){
+          message("- Removing ", n_found, " rows with duplicate data issues, (", ifelse(pc < 1, "< 1 %", paste0(pc, "%")), " data)")
+        } else{
+          message("- No duplicate data issues found (nothing to remove)")
+        }
+      }
+
+    }
+  }
+
+  # ------------------------------------------------------------------- #
+  # 4a. Birds with too few fixes (before all other tests)
+  # ------------------------------------------------------------------- #
+  # debatable when this should come in
 
   if(min_fix_when == "after_NA"){
 
-    if(verbose){message("----- min animal fix checker (before other tests) -----")}
+    if(verbose){
+      message(centre_line("Min animal fix checker (before other tests)"))
+      }
 
     if(min_fix > 0){
 
@@ -682,7 +869,7 @@ clean_GPS <- function(data,
         data_dp <- data_dp %>% dplyr::filter(tid_rm == 0L)
 
         # # # # #
-        data_s <- data_dp %>% count(TagID) %>% rename(tid_rm_n_before = n) %>% left_join(data_s, by = "TagID")
+        data_s <- data_dp %>% ungroup() %>% group_by(TagID) %>% count(TagID) %>% rename(tid_rm_n_before = n) %>% left_join(data_s, by = "TagID")
         # # # # #
 
         if(verbose){
@@ -717,16 +904,119 @@ clean_GPS <- function(data,
 
 
   # ------------------------------------------------------------------- #
-  # 4 Remove <x satellites, check for NAs
+  # 5. Tag spans
+  # ------------------------------------------------------------------- #
+  # carry out some similar checks to tag_spans from rake()
+
+  if(tagspans){
+
+    if(verbose){
+      message(centre_line("Tag spans checker"))
+      }
+
+    if(length(measure) == 1){
+
+      if(measure == "general"){
+
+        if(verbose){
+          message("- The general summary element of tag_spans() is meaningless for clean_track(), skipping ...")
+        }
+
+      }
+
+    }
+
+    if(length(measure) > 1){
+      if(any(measure == "general")){
+        w = which(measure == "general")
+        measure = measure[-w]
+      }
+
+      dot_args <- list(...) # capture all dots
+      tag_span_args <- names(formals(tag_spans)) # formal arguments of duplicate_track
+      tag_span_dot_args <- dot_args[names(tag_span_args) %in% tag_span_args]  # only keep those relevant to duplicate_track
+
+      args <- c("xra", "yra", "dates", "buffer_days", "tz") # args we want to manage / populate defaults for
+
+      defaults <- lapply(formals(tag_spans)[args], eval) # get evaluated defaults from duplicate_track
+      tag_span_dot_args <- modifyList(defaults, tag_span_dot_args) # merge user-supplied with defaults (user-supplied takes precedence)
+
+      n_as_is <- nrow(data_dp)
+
+      # general summary is meaningless in clean_track(), so only allowing only annotate TRUE/FALSE
+      data_dp <- tag_spans(data_dp,
+                           measure = measure,
+                           xra = tag_span_dot_args$xra,
+                           yra = tag_span_dot_args$yra,
+                           dates = tag_span_dot_args$dates,
+                           buffer_days = tag_span_dot_args$buffer_days,
+                           tz = tag_span_dot_args$tz,
+                           annotate = annotate,
+                           verbose=verbose,
+                           messages = FALSE # hard-coded
+      )
+
+
+      if(annotate){
+
+        #rename variables
+        rename_map <- c(
+          future_date_rm       = "future_issue",
+          temporal_date_rm     = "temporal_issue",
+          minx_rm              = "minx_issue",
+          miny_rm              = "miny_issue",
+          maxx_rm              = "maxx_issue",
+          maxy_rm              = "maxy_issue"
+        )
+
+        # Only keep rename pairs where the *old* column exists
+        rename_map_existing <- rename_map[rename_map %in% names(data_dp)]
+
+        data_dp <- data_dp %>%  rename(!!!rename_map_existing)
+
+        rm_cols_created <- c(rm_cols_created, names(rename_map_existing)
+        )
+
+      } else{
+
+        # simple sum up of already reduced tibble via annotate = FALSE in tag_spans() above
+
+        data_s <- data_dp %>% ungroup() %>% group_by(TagID) %>% count(TagID) %>% rename(dup_spans = n) %>% left_join(data_s, by = "TagID")
+
+        if(verbose){
+
+          n_found <- n_as_is - sum(data_s$dup_spans)
+          pc <- round((n_found / n_as_is)*100, 2)
+
+          if(n_found > 0){
+            message("- Removing ", n_found, " rows with data violating spatio-temporal checks, (", ifelse(pc < 1, "< 1 %", paste0(pc, "%")), " data)")
+          } else{
+            message("- No data issues that violate spatio-temporal checks found (nothing to remove)")
+          }
+        }
+
+      }
+
+    }
+
+  }
+
+  # ------------------------------------------------------------------- #
+  # 6 Remove <x satellites, check for NAs
   # ------------------------------------------------------------------- #
 
   # first check if there are numeric data in the "satellites_used" column to work with
   if(sat_check){
 
-    if(verbose){message("----- min satellite count checker -----")}
+    if(verbose){
+      message(centre_line("Min satellite count checker"))
+      }
 
     if(!any(names(data_dp) %in% sat_col)){
-      warning("No satellite data column found matching that supplied under dat_col, skipping this step! ...")
+      if(verbose){
+        message("- No satellite data column found matching that supplied under dat_col, skipping this step! ")
+      }
+      warning("No satellite data column found matching that supplied under 'dat_col'")
     } else{
 
       #data_dp <- data
@@ -789,11 +1079,15 @@ clean_GPS <- function(data,
 
         # Count remaining sats per TagID (dynamic)
         sat_n <- data_dp %>%
+          ungroup() %>%
+          group_by(TagID) %>%
           dplyr::filter(sat_rm != 1 | is.na(sat_rm)) %>%
           count(TagID, name = "sat_n")
 
         # Count NA sats
         sat_NA <- data_dp %>%
+          ungroup() %>%
+          group_by(TagID) %>%
           dplyr::filter(sat_NA == 0) %>%
           count(TagID, name = "sat_NA")
 
@@ -842,12 +1136,14 @@ clean_GPS <- function(data,
   }
 
   # ------------------------------------------------------------------- #
-  # 5. Flt_switch - switch != 0 removed if Move data
+  # 7. Flt_switch - switch != 0 removed if Move data
   # ------------------------------------------------------------------- #
 
   if(flt_switch){
 
-    if(verbose){message("----- flt_switch checker -----")}
+    if(verbose){
+      message(centre_line("flt_switch checker"))
+      }
 
     if(!exists("Type", data)){
       warning("No Type column found but 'flt_switch' is TRUE; if you have MoveBank data and want values flt_switch != 0 removed, add in a column called 'Type' with 'MoveBank' for all values: this allows assessment of the 'flt_switch' column (here an underscore not dot)")
@@ -884,7 +1180,7 @@ clean_GPS <- function(data,
           subset(Type != "MoveBank" | flt_switch != -99) # DROP THE -99s if the column is called Movebank
 
         # # # # #
-        data_s <- data_dp %>% count(TagID) %>% rename(flt_n = n) %>% left_join(data_s, by = "TagID")
+        data_s <- data_dp %>% ungroup() %>% group_by(TagID) %>% count(TagID) %>% rename(flt_n = n) %>% left_join(data_s, by = "TagID")
 
         if(verbose){
 
@@ -906,7 +1202,7 @@ clean_GPS <- function(data,
   }
 
   # ------------------------------------------------------------------- #
-  # 6a. pdop
+  # 8a. pdop
   # check for existence of pdop named column or variants
   #data_dp <- Track(data_raw)
   # ------------------------------------------------------------------- #
@@ -920,7 +1216,9 @@ clean_GPS <- function(data,
 
   if(pdop_check){
 
-    if(verbose){message("----- pdop checker -----")}
+    if(verbose){
+      message(centre_line("Dilution of precision: pdop checker"))
+      }
 
     if(!any(names(data) %in% pdop_col)){
       warning("No pdop data column found matching that supplied under pdop_col, skipping this step! ...")
@@ -958,6 +1256,8 @@ clean_GPS <- function(data,
 
         # count up the rows meeting the condition
         data_s <- data_dp %>%
+          ungroup() %>%
+          group_by(TagID) %>%
           count(TagID) %>%
           rename(gps_pdop_n = n) %>%
           left_join(data_s, by = "TagID")  %>%
@@ -986,13 +1286,15 @@ clean_GPS <- function(data,
   }
 
   # ------------------------------------------------------------------- #
-  # 6b. hdop
+  # 8b. hdop
   # check for existence of hdop named column or variants
   # ------------------------------------------------------------------- #
 
   if(hdop_check){
 
-    if(verbose){message("----- hdop checker -----")}
+    if(verbose){
+      message(centre_line("Dilution of precision: hdop checker"))
+      }
 
     if(!any(names(data) %in% hdop_col)){
       warning("No hdop data column found matching that supplied under hdop_col, skipping this step! ...")
@@ -1029,6 +1331,8 @@ clean_GPS <- function(data,
         n_as_is <- nrow(data_dp)
 
         data_s <- data_dp %>%
+          ungroup() %>%
+          group_by(TagID) %>%
           count(TagID) %>%
           rename(gps_hdop_n = n) %>%
           left_join(data_s, by = "TagID")  %>%
@@ -1058,13 +1362,15 @@ clean_GPS <- function(data,
   data_dp <- data_dp %>% ungroup()
 
   # ------------------------------------------------------------------- #
-  # 7. Accuracy via custom filtering/flagging
+  # 9. Accuracy via custom filtering/flagging
   # ------------------------------------------------------------------- #
   # bespoke accuracy routine alongside other variables
 
   if(custom_filt){
 
-    if(verbose){message("----- Custom filt_err checker -----")}
+    if(verbose){
+      message(centre_line("Custom error column checker"))
+      }
 
     # capture dot arguments
     dot_args <- list(...)
@@ -1172,7 +1478,7 @@ clean_GPS <- function(data,
       # proceed to custom filter if nms length > 0
       if(length(nms) > 0){
 
-        rm_cols_created <- c(rm_cols_created, paste0(nms, "_rm")) # remember choices for grand clean_GPS() annotation
+        rm_cols_created <- c(rm_cols_created, paste0(nms, "_rm")) # remember choices for grand clean_track() annotation
 
         data_dp <- filt_err(
           data = data_dp,
@@ -1222,6 +1528,8 @@ clean_GPS <- function(data,
             data_dp0 <- data_dp %>% dplyr::filter(!!sym(rm_col) == 0 | is.na(!!sym(rm_col) ))
 
             data_s <- data_dp0 %>%
+              ungroup() %>%
+              group_by(TagID) %>%
               count(TagID) %>%
               rename(!!count_col := n) %>%
               left_join(data_s, by = "TagID")  %>%
@@ -1260,12 +1568,16 @@ clean_GPS <- function(data,
   }
 
   # ------------------------------------------------------------------- #
-  # 8/9. Assign gapsections (via 'gap' identification)
+  # 10. Assign gapsections (via 'gap' identification)
   # ------------------------------------------------------------------- #
   # tolerance already added above
   # drop assessment separated below
 
+  if(verbose){
+    message(centre_line("Checking gapsections in data"))
+  }
   if(!hasgaps){
+    if(verbose){message("- No gapsections found, using supplied GAP and tol values")}
     data_dp <- gap_section(data_dp, GAP=GAP, tol = 0, drop_single_gap=FALSE, verbose = FALSE, attr = FALSE)
   } else{
 
@@ -1283,11 +1595,13 @@ clean_GPS <- function(data,
 
 
   # ------------------------------------------------------------------- #
-  # 8/9. if drop = TRUE then drop OUT single gapsection fixes as cannot be assessed in the speed filter
+  # 11. if drop = TRUE then drop OUT single gapsection fixes as cannot be assessed in the speed filter
   # ------------------------------------------------------------------- #
   if(drop_single_gap){
 
-    if(verbose){message("----- Single gapsection checker -----")}
+    if(verbose){
+      message(centre_line("Single gapsection checker"))
+      }
 
     if(annotate){
 
@@ -1321,7 +1635,7 @@ clean_GPS <- function(data,
         ungroup()
 
       # # # # #
-      data_s <- data_dp %>% count(TagID) %>% rename(singlegap_n = n) %>% left_join(data_s, by = "TagID")
+      data_s <- data_dp %>% ungroup() %>% group_by(TagID) %>% count(TagID) %>% rename(singlegap_n = n) %>% left_join(data_s, by = "TagID")
       #data_sr <- data_dp %>%  count(TagID)
       # # # # #
 
@@ -1341,53 +1655,14 @@ clean_GPS <- function(data,
 
   }
 
-  # ------------------------------------------------------------------- #
-  # 10. Filter out duplicated DateTimes
-  # not sure if needed but this would drop out any added extra tripnumbering rows!
-  # ------------------------------------------------------------------- #
-
-  # This needs a revision as there are cases when duplicate DateTimes are not just repeats of a DateTime
-  # for the same GPS location, there may be varies location for the same timestamp,
-  # and then we have issues of the strings of overlapping DateTimes that are only possible to detect if data a
-  # are ordered in a true raw form. Plus other data rows that may vary for the same locs and DTs...
-
-
-  # but also in this step we should have AFTER this processing, whether any illegal future dates remain,
-  # or if dates are way in the past beyond a threshold the user sets
-
-  #illegal_DT = TRUE, # checks for DateTimes in the past
-  #spans_dates = NULL, # OR checks for timestamps within a window
-
-
-  if(dup_DT){
-
-    if(verbose){message("----- Duplicate DateTime/location checker -----")}
-
-    if(annotate){
-      data_dp <- data_dp %>%
-        group_by(TagID) %>%
-        mutate(dup_rm = if_else(duplicated(DateTime) | duplicated(DateTime, fromLast = TRUE), 1L, 0L)) %>%
-        ungroup()
-
-      rm_cols_created <- c(rm_cols_created, "dup_rm")
-
-      data_dp <- give_attributes(data_dp, attr_list) #??
-
-    } else{
-      data_dp = data_dp %>% dplyr::filter(!duplicated(DateTime))
-
-      # # # # #
-      # count the total remaining data after dropping or even if nothing dropped....
-      data_s <- data_dp %>% count(TagID) %>% rename(dup_n = n) %>% left_join(data_s, by = "TagID")
-      #data_uq <- data_dp %>%  count(TagID)
-      # # # # #
-    }
-
-  }
 
   # ------------------------------------------------------------------- #
   # reproject or if internal X column not found, project data as UTM metres needed for dist cals ideally below in adehabitat
   if(reproject | !exists("X",data_dp)){
+
+    if(verbose){
+      message(centre_line("Reprojecting xy data to chosen p4s"))
+    }
 
     data_sf <- sf::st_as_sf(data_dp, coords = c("longitude", "latitude"), crs = 4326)
     data_sf <- sf::st_transform(data_sf, p4s)
@@ -1400,12 +1675,13 @@ clean_GPS <- function(data,
   }
 
   # ------------------------------------------------------------------- #
-  # 11. Trajectory speed filter
+  # 12. Trajectory speed filter
   # ------------------------------------------------------------------- #
   if(speedFilt){
 
-    if(verbose){message("----- Custom speed filter -----")}
-
+    if(verbose){
+      message(centre_line("Custom trajectory speed assessment"))
+      }
 
     dot_args <- list(...) # capture all dots
     speed_args <- names(formals(speed_filt)) # formal arguments of speed_filt
@@ -1433,17 +1709,14 @@ clean_GPS <- function(data,
 
     rm_cols_created <- c(rm_cols_created, "speed_rm") # speed_rm flag for grand annotation checking below
 
-    # speed filter row check if not annotating
     if(!annotate){
-      # # # # #
-      #data_s$spe_n <- data_dp %>% count(TagID) %>% .$n
-      data_s <- data_dp %>% count(TagID) %>% rename(speed_n = n) %>% left_join(data_s, by = "TagID")
-      # # # # #
 
-      if(sum(data_s$n) - nrow(data_dp) > 0){
-        if(verbose){message("~@~@~@~@~@ Dropped ", sum(data_s$n) - nrow(data_dp), " fixes after all choices ~@~@~@~@~@")}
+      data_s <- data_dp %>% ungroup() %>% group_by(TagID) %>% count(TagID) %>% rename(speed_n = n) %>% left_join(data_s, by = "TagID")
+
+      if(sum(data_s$speed_n) - nrow(data_dp) > 0){
+        if(verbose){message("~@~@~@~@~@ Dropped ", sum(data_s$n) - nrow(data_dp), " fixes after all speed filt choices ~@~@~@~@~@")}
       } else{
-        if(verbose){message("~@~@~@~@~@ No fixes dropped :) ~@~@~@~@~@")}
+        if(verbose){message("~@~@~@~@~@ No fixes dropped from speed filter :) ~@~@~@~@~@")}
       }
 
     }
@@ -1451,11 +1724,13 @@ clean_GPS <- function(data,
   }
 
   # ------------------------------------------------------------------- #
-  # 12. Turning angle filter
+  # 13. Turning angle filter
   # ------------------------------------------------------------------- #
   if(!is.null(turnFilt)){
 
-    if(verbose){message("----- Custom turning angle filter -----")}
+    if(verbose){
+      message(centre_line("Custom turning angle assessment"))
+      }
 
     data_dp <- turn_filt(data_dp, turnFilt = turnFilt, turnFilt_dir = turnFilt_dir,
                          annotate = annotate, verbose = verbose, hasgaps = TRUE) # using pre-identified gaps from step #6
@@ -1466,22 +1741,26 @@ clean_GPS <- function(data,
 
     if(!annotate) {
 
-        # # # # #
-        # count tally
-        #data_s$ang_rm <- tibble(ltraj_df) %>% count(TagID) %>% .$n
-        data_s <- data_dp %>% count(TagID) %>% rename(angle_n = n) %>% left_join(data_s, by = "TagID")
-        # # # # #
+        data_s <- data_dp %>% ungroup() %>% group_by(TagID) %>% count(TagID) %>% rename(angle_n = n) %>% left_join(data_s, by = "TagID")
+
+        if(sum(data_s$angle_n) - nrow(data_dp) > 0){
+          if(verbose){message("~@~@~@~@~@ Dropped ", sum(data_s$n) - nrow(data_dp), " fixes after all turn filt choices ~@~@~@~@~@")}
+        } else{
+          if(verbose){message("~@~@~@~@~@ No fixes dropped from turn filter :) ~@~@~@~@~@")}
+        }
 
     }
   }
 
   # ------------------------------------------------------------------- #
-  # 13. Birds with too few fixes (before all other tests)
+  # 14. Birds with too few fixes (before all other tests)
   # ------------------------------------------------------------------- #
 
   if(min_fix_when == "after_all"){
 
-    if(verbose){message("----- min animal fix checker (after other tests) -----")}
+    if(verbose){
+      message(centre_line("Min animal fix checker (after other tests)"))
+      }
 
     if(min_fix > 0){
 
@@ -1517,7 +1796,7 @@ clean_GPS <- function(data,
         data_dp <- data_dp %>% dplyr::filter(tid_rm == 0L)
 
         # # # # #
-        data_s <- data_dp %>% count(TagID) %>% rename(tid_rm_n_after = n) %>% left_join(data_s, by = "TagID")
+        data_s <- data_dp %>% ungroup() %>% group_by(TagID) %>% count(TagID) %>% rename(tid_rm_n_after = n) %>% left_join(data_s, by = "TagID")
         # # # # #
 
         if(verbose){
@@ -1553,22 +1832,12 @@ clean_GPS <- function(data,
 
   ##########################################################
   # if selecting to annotate, search for annotate labelled columns and flag a combined version of all...
-  #
-  #1. NA_latlong: NA_latlong_rm
-  #2. Duplicated rows all_NA_rm
-  #3. N sats: sat_rm
-  #4. Fltswitch flt_rm
-  #5. a/b gps_pdop_rm, gps_hdop_rm
-  #6. (gapsection)
-  #7. drop in gapsection style (orphaned gaps): singlegap_rm
-  #8. dup_DT (DateTimes) dup_rm
-  #9. speed filter: speed_rm
-  #10. turn filter: angle_rm
-
-  # the above cases should all be created when: rm_cols_created <- c(rm_cols_created, VAR) is called
 
   if(annotate){
 
+    if(verbose){
+      message(centre_line("Building combined row flag column"))
+    }
     # Detect all columns that end with "_rm"
     #cols <- grep("_rm$", names(data_dp), value = TRUE) # this is dangerous if the user already has such columns
 
@@ -1591,9 +1860,7 @@ clean_GPS <- function(data,
                                   fifelse(rowSums(mat == 0, na.rm = TRUE) > 0, 0L, NA_integer_))]
     }
 
-
   }
-
 
   ##########################################################
   if(nrow(data_dp) > 0){
@@ -1605,6 +1872,7 @@ clean_GPS <- function(data,
   if(exists("rn", data_dp)){ data_dp <- data_dp %>% dplyr::select(-c(rn)) }
   if(exists("rn2", data_dp)){ data_dp <- data_dp %>% dplyr::select(-c(rn2)) }
 
+
   if(!is.null(data_dp)){
 
     if(!annotate){
@@ -1614,7 +1882,6 @@ clean_GPS <- function(data,
     }
 
   }
-
   # --------------------------------------------------------- #
   # assign attributes that may have been present at the start
   data_dp <- give_attributes(data_dp, attr_list)
@@ -1622,52 +1889,65 @@ clean_GPS <- function(data,
   # --------------------------------------------------------- #
   #### retain attributes of the choices made
   # main attribute entry for the function
-  # this only modifies general attributes alongside clean_gps
+  # this only modifies general attributes alongside clean_track
   if(is.null(attr(data_dp, "general") )){
     attr(data_dp, "general") <- "general"
   }
-  if(is.null(attr(data, "clean_gps") )){
-    attr(data_dp, "clean_gps") <- "clean_gps"
+  if(is.null(attr(data, "clean_track") )){
+    attr(data_dp, "clean_track") <- "clean_track"
   }
 
   # sub_attributes for arguments
   attr(attr(data_dp, "general"), "GAP") <- get("GAP")
-  attr(attr(attr(data_dp, "general"), "GAP"),"function") <- "clean_gps"
+  attr(attr(attr(data_dp, "general"), "GAP"),"function") <- "clean_track"
 
   attr(attr(data_dp, "general"), "unit") <- "secs"
-  attr(attr(attr(data_dp, "general"), "unit"),"function") <- "clean_gps"
+  attr(attr(attr(data_dp, "general"), "unit"),"function") <- "clean_track"
 
   attr(attr(data_dp, "general"), "drop_single_gap") <- get("drop_single_gap")
-  attr(attr(attr(data_dp, "general"), "drop_single_gap"),"function") <- "clean_gps"
+  attr(attr(attr(data_dp, "general"), "drop_single_gap"),"function") <- "clean_track"
 
   attr(attr(data_dp, "general"), "p4s") <- get("p4s")
-  attr(attr(attr(data_dp, "general"), "p4s"),"function") <- "clean_gps"
+  attr(attr(attr(data_dp, "general"), "p4s"),"function") <- "clean_track"
 
-  attr(attr(data_dp, "clean_gps"), "drop_sats") <- get("drop_sats")
-  attr(attr(data_dp, "clean_gps"), "sp_thres") <- get("sp_thres")
-  attr(attr(data_dp, "clean_gps"), "sat_check") <- get("sat_check")
-  attr(attr(data_dp, "clean_gps"), "flt_switch") <- get("flt_switch")
-  attr(attr(data_dp, "clean_gps"), "min_fix") <- get("min_fix")
-  attr(attr(data_dp, "clean_gps"), "min_fix_when") <- get("min_fix_when")
-  attr(attr(data_dp, "clean_gps"), "NA_latlong") <- get("NA_latlong")
-  attr(attr(data_dp, "clean_gps"), "dup_DT") <- get("dup_DT")
-  attr(attr(data_dp, "clean_gps"), "annotate") <- get("annotate")
-  attr(attr(data_dp, "clean_gps"), "turn_filt") <- get("turn_filt")
-  attr(attr(data_dp, "clean_gps"), "turn_filt_dir") <- get("turnFilt_dir")
+  # this will never capture all that you could feed into the function for "..." in at least 4 functions.
+  attr(attr(data_dp, "clean_track"), "drop_sats") <- get("drop_sats")
+  attr(attr(data_dp, "clean_track"), "sp_thres") <- get("sp_thres")
+  attr(attr(data_dp, "clean_track"), "sat_check") <- get("sat_check")
+  attr(attr(data_dp, "clean_track"), "flt_switch") <- get("flt_switch")
+  attr(attr(data_dp, "clean_track"), "min_fix") <- get("min_fix")
+  attr(attr(data_dp, "clean_track"), "min_fix_when") <- get("min_fix_when")
+  attr(attr(data_dp, "clean_track"), "NA_latlong") <- get("NA_latlong")
+  attr(attr(data_dp, "clean_track"), "duplicates") <- get("duplicates")
+  attr(attr(data_dp, "clean_track"), "dup_method") <- get("dup_method")
+  attr(attr(data_dp, "clean_track"), "annotate") <- get("annotate")
+  attr(attr(data_dp, "clean_track"), "turn_filt") <- get("turn_filt")
+  attr(attr(data_dp, "clean_track"), "turn_filt_dir") <- get("turnFilt_dir")
 
-  data_dp <- structure(.Data = data_dp, class = c("Track","grouped_df", "tbl_df","tbl","data.frame"))
+
+
+  #class(data_dp) <- c("Track", "tbl_df", "tbl", "data.frame")
+  data_dp <- structure(.Data = data_dp, class = c("Track", "grouped_df","tbl_df","tbl","data.frame"))
+
+  if(verbose){
+    message("Done.")
+    message(strrep("*", getOption("width")))
+  }
   return(data_dp)
 
 }
 
+#' @rdname clean_track
+#' @export
+clean_GPS <- clean_track
 
-#' @rdname clean_GPS
+#' @rdname clean_track
 #' @export
 get_attributes <- function(data){
 
   assign_rates_attr <- attr(data, "assign_rates")
   general_attr <- attr(data, "general")
-  clean_GPS_attr <- attr(data, "clean_gps")
+  clean_track_attr <- attr(data, "clean_track")
   define_trips_attr <- attr(data, "define_trips")
   sub_samp_attr <- attr(data, "track_subsamp")
   rake_one_attr <- attr(data, "rake_outlie")
@@ -1679,7 +1959,7 @@ get_attributes <- function(data){
   attr_list <- list()
   attr_list[[1]] <- if(!is.null(assign_rates_attr)){assign_rates_attr } else{NA}
   attr_list[[2]] <- if(!is.null(general_attr)){general_attr}else{NA}
-  attr_list[[3]] <- if(!is.null(clean_GPS_attr)){clean_GPS_attr}else{NA}
+  attr_list[[3]] <- if(!is.null(clean_track_attr)){clean_track_attr}else{NA}
   attr_list[[4]] <- if(!is.null(define_trips_attr)){define_trips_attr}else{NA}
   attr_list[[5]] <- if(!is.null(sub_samp_attr)){sub_samp_attr}else{NA}
   attr_list[[6]] <- if(!is.null(rake_one_attr)){rake_one_attr}else{NA}
@@ -1687,7 +1967,7 @@ get_attributes <- function(data){
   attr_list[[8]] <- if(!is.null(turn_filt_attr)){turn_filt_attr}else{NA}
   attr_list[[9]] <- if(!is.null(trip_stats_attr)){trip_stats_attr}else{NA}
 
-  names(attr_list) <- c("assign_rates_attr", "general_attr", "clean_GPS_attr",
+  names(attr_list) <- c("assign_rates_attr", "general_attr", "clean_track_attr",
                         "define_trips_attr", "sub_samp_attr", "rake_outlie_attr",
                         "speed_filt_attr", "turn_filt_attr",
                         "trip_stats_attr")
@@ -1696,7 +1976,7 @@ get_attributes <- function(data){
 
 }
 
-#' @rdname clean_GPS
+#' @rdname clean_track
 #' @export
 give_attributes <- function(data, attr_list){
 
@@ -1705,7 +1985,7 @@ give_attributes <- function(data, attr_list){
 
   if(!is.na(attr_list[[1]])){  attr(data, "assign_rates") <- attr_list[[1]]}
   if(!is.na(attr_list[[2]])){  attr(data, "general") <- attr_list[[2]]}
-  if(!is.na(attr_list[[3]])){  attr(data, "clean_gps") <- attr_list[[3]]}
+  if(!is.na(attr_list[[3]])){  attr(data, "clean_track") <- attr_list[[3]]}
   if(!is.na(attr_list[[4]])){  attr(data, "define_trips") <- attr_list[[4]]}
   if(!is.na(attr_list[[5]])){  attr(data, "track_subsamp") <- attr_list[[5]]}
   if(!is.na(attr_list[[6]])){  attr(data, "rake_outlie") <- attr_list[[6]]}
