@@ -56,15 +56,17 @@
 #' Of course these two steps are not mutually exclusive.
 #'
 #' Regarding potential sources of error and bias, these may include dealing with duplicate records, missing (NA) location data, and constraining the amount of data per animal to
-#' a certain number of records over set time periods. It may also be worthwhile checking out other packages such as the
-#' \code{move2} package liaising directly with Movebank (Kranstauber et al. 2024) for these issues. Further consideration of a minimum number of fixes per animal
-#' may be needed. These elements can be dealt with in open code, but are uncovered through the \code{\link{rake}} and \code{\link{clean_GPS}} functions.
+#' a certain number of records over set time periods. At the outset an initial task is to assess data duplication. This
+#' is needed first as data may contain issues that may render ordering by DateTimes within bird ids problematic if not dealt with.
+#' A function \code{\link{duplicate_track}} is provided to handle complex cases of data duplication, including parallel data streams. Further consideration of a minimum number of fixes per animal
+#' may be needed. These elements can be dealt with in open code, but are uncovered through the \code{\link{rake}} and \code{\link{clean_track}} functions.
 #' A further Shiny app is also included \code{\link{ShinyRakeR}} that can be used to flag (i.e. annotate) the data for different perceived biases, helping to rake the data and
 #' see how these issues may stack up in a final filtering overarching step. Within that same app, and also in the \code{rake} function, the
 #' user can also check the timeline of tag deployments and density of animals tracked over time through \code{\link{tag_timeline}}, and therefore assess the temporal
 #' spread of the tracking data and sample sizes over the study duration. Spatial or temporal outliers may be rather obvious by eye, and
 #' these can also be assessed in the \code{rake} function or through direct use of the \code{\link{tag_spans}} function for proportion of data per tag
-#' that may be erroneous from an a priori expectation of spatio-temporal coverage.
+#' that may be erroneous from an \emph{a priori} expectation of spatio-temporal coverage. The \code{clean_track} function should be
+#' seen as a final end point usage once you are happy that sources of bias have been properly investigated and dealt with.
 #'
 #' It is also important to assess the degree of location error and potential bias present in the data.
 #' GPS locations (xy horizontal dimension) may be subject to positional errors that arise from a number of sources; for example signal interference,
@@ -75,9 +77,10 @@
 #' location (minimum of three for a valid xy position and four for a vertical position) and therefore a minimum threshold of satellites
 #' available for a fix may be useful to consider. If information on satellite configuration position in the sky is
 #' available (DOP) then this may be worth examining. GPS can sometimes give highly inaccurate
-#' locations that are clearly impossible for the animal to have obtained, removed in a consecutive way, through the \code{\link{speed_filt}} function
-#' and in turn within \code{ShinyRakeR} and \code{clean_GPS} so that
-#' displacement of such fixes are also captured. There are a variety of further R packages that also have other speed filter methods, such as the \code{trip}
+#' locations that are clearly impossible for the animal to have obtained, removed in a consecutive way, through the definition of speed through
+#' \code{traj_speed} called by the overarching \code{\link{speed_filt}} function and in turn used within \code{ShinyRakeR} and \code{clean_track}.
+#' Thus, displacement of such fixes are also captured. The sister function \code{traj_speed_sm} can also handle averaging/smoothing options such as root mean square, also
+#' called from the main \code{speed_filt} function. There are a variety of further R packages that also have other speed filter methods, such as the \code{trip}
 #' package. Nevertheless, the approach is to use a maximum travel speed for the animal beyond which fixes are deemed impossible and would therefore be erroneous.
 #' This may be complicated however, for very fine-scale (or perhaps very coarse) movements, so the sampling rate of the tag may also need considering
 #' - see function \code{\link{tspeed_jit}}.
@@ -99,7 +102,7 @@
 #' annotation of the dataset to flag up such 'gapiness' and prevent calculations being made across timespans the user considers to be uncharacteristic of a continuous monvement pattern.
 #' These gaps in deployments can be viewed/detected at the day-level within \code{tag_timeline}. Having these strings of fixes identified id useful as a large temporal gap
 #' may have missed a considerable amount of activity of the animal, particularly if distance-based metrics such as total distance
-#' travelled are concerned. The function \code{\link{gap_section}} specifies the gap to label in the data; this gap definition is also allowed in \code{clean_GPS}. Additional operations
+#' travelled are concerned. The function \code{\link{gap_section}} specifies the gap to label in the data; this gap definition is also allowed in \code{clean_track}. Additional operations
 #' such as consideration of what to do with such isolated fixes resulting from placement as a single gapsection are also provided, which is also available for consideration in the \code{ShinyRakeR} interactive tool.
 #'
 #' @section Manipulation, summary, trip-level simple analyses:
