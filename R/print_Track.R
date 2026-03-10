@@ -38,6 +38,8 @@
 #' @method print Track
 print.Track <- function(x, len = 6, ...){
 
+    x <- strip_tbl_classes(x)
+
     colfind <- c("TagID", "DateTime", "longitude", "latitude")
 
     # get user-defined printing options
@@ -67,6 +69,77 @@ print.Track <- function(x, len = 6, ...){
         set_options_mR(Print_method = "data.frame", Print_type = "all")
       }
     }
+
+    # -------------------------------------------------------------------------- #
+    ##### zero rows fixes:
+    .all_zero <- function(x) all(vapply(x, nrow, integer(1)) == 0)
+
+    .all_zero_TMS <- function(x){
+      all(vapply(x, function(stack){
+        all(vapply(stack, nrow, integer(1)) == 0)
+      }, logical(1)))
+    }
+
+    if((is_Track(x) && nrow(x) == 0) ||
+        (is_TrackStack(x) && .all_zero(x)) ||
+        (is_TrackMultiStack(x) && .all_zero_TMS(x))){
+
+      # Determine class
+      Class <- if(is_Track(x)) "Track" else if (is_TrackStack(x)) "TrackStack" else "TrackMultiStack"
+
+      # Colours & page-width
+      w <- getOption("width")
+      lcol <- switch(Class,
+                     Track = 36,
+                     TrackStack = 33,
+                     TrackMultiStack = 31)
+
+      # Header text
+      header_text <- switch(Class,
+                            Track = sprintf("A Track object (0 rows, %d columns) containing %d TagIDs:",
+                                            ncol(x), length(get_TagIDs(x, verbose = FALSE))),
+                            TrackStack = sprintf("A TrackStack <list> of %d Track objects (all empty)",
+                                                 length(x)),
+                            TrackMultiStack = sprintf("A TrackMultiStack <list><list> of %d TrackStack objects (all empty)",
+                                                      length(x)))
+
+      # Print header
+      cat(paste0("\033[1;", lcol, "m", header_text, "\033[0m\n"))
+      cat(paste0("\033[1;", lcol, "m", paste(rep("—", w), collapse = ""), "\033[0m\n"))
+
+      # Body text per class
+      body_text <- switch(Class,
+                          Track = "<0 rows>",
+                          TrackStack = "<all Track objects have 0 rows>",
+                          TrackMultiStack = {
+                            N_stacks <- length(x)
+                            N_tracks <- sum(vapply(x, length, integer(1)))
+                            paste0("<all ", N_tracks, " Track objects in ", N_stacks, " stacks have 0 rows>")
+                          })
+
+      cat("\033[0;32m", body_text, "\033[0m\n")  # green text
+
+      # Optional: per-stack detail for TrackMultiStack
+      if(Class == "TrackMultiStack"){
+        for(s in seq_len(length(x))){
+          cat(sprintf("\033[0;34mStack %d: %d Track objects, all 0 rows\033[0m\n",
+                      s, length(x[[s]])))
+        }
+      }
+
+      # Footer separator
+      cat(paste0("\033[1;", lcol, "m", paste(rep("—", w), collapse = ""), "\033[0m\n"))
+
+      # Restore global settings
+      set_options_mR(pm, pt)
+      return(invisible(x))
+    }
+
+
+    # --------------------------------- #
+    # PROCEED
+
+
 
     #if(is(x, "Track")){
     #  set_options_mR(Print_method = pm, Print_type = pt)
@@ -180,6 +253,7 @@ print.Track <- function(x, len = 6, ...){
       }
 
     } else
+
     if(is_TrackMultiStack(x)){
 
         take_this <- 1; ST <- 1
@@ -241,6 +315,7 @@ print.Track <- function(x, len = 6, ...){
         gtid[[i]] <- get_TagIDs(x[[i]], verbose = FALSE)
       }
     } else
+
     if(is_Track(x)){
         data <- x
         Class <- "Track"
@@ -551,6 +626,7 @@ print.Track <- function(x, len = 6, ...){
     ff <- data.frame(t(types))
     colnames(ff) <- colnames(toprint)
     rownames(ff) <- paste(rep(" ",max(nchar(rownames(toprint)))),collapse="")
+    #rownames(ff) <- paste(rep(" ", max(0, nchar(rownames(toprint)), na.rm = TRUE)), collapse = "")
     toprint <- rbind(toprint,ff)
 
     ### only format the layout if "subset" print type chosen (as above)
@@ -590,8 +666,52 @@ print.Track <- function(x, len = 6, ...){
     set_options_mR(pm,pt)
 }
 
+#' Strip tibble classes from Track objects
+#'
+#' Internal helper to remove `"tbl_df"` and `"grouped_df"` classes
+#' from Track, TrackStack, or TrackMultiStack objects.
+#'
+#' @param x An object that may have tibble classes
+#' @return The same object with tibble classes removed
+#' @keywords internal
+strip_tbl_classes <- function(x){
 
+  # Base Track object
+  if(inherits(x, c("tbl_df", "grouped_df", "tbl"))){
+    # Keep only Track/TrackStack/TrackMultiStack classes, drop tibbles
+    track_classes <- intersect(class(x), c("Track","TrackStack","TrackMultiStack"))
+    class(x) <- c(track_classes, "data.frame")
+    # Ungroup if it was grouped
+    #x <- dplyr::ungroup(x)
+  }
 
+  # For TrackStack (list of Tracks)
+  if(inherits(x, "TrackStack") && is.list(x)){
+    x <- lapply(x, strip_tbl_classes)
+  }
+
+  # For TrackMultiStack (list of TrackStacks)
+  if(inherits(x, "TrackMultiStack") && is.list(x)){
+    x <- lapply(x, function(stack) lapply(stack, strip_tbl_classes))
+  }
+
+  return(x)
+}
+
+#' Subsetting for Track objects
+#'
+#' Ensures Track class is preserved when subsetting.
+#'
+#' @param x A Track object
+#' @param i Row indices
+#' @param j Column indices
+#' @param drop Logical, whether to drop dimensions
+#' @export
+`[.Track` <- function(x, i, j, drop = FALSE) {
+  out <- NextMethod()
+  class(out) <- class(x)
+  out
+}
 
 
 
