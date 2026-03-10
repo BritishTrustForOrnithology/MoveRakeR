@@ -10,8 +10,8 @@
 #' or has an approximation of it, and therefore sudden jumps in the GPS can be identified easily. Note also,
 #' these jumps are the very same fixes that would be identified under the \code{speed_filt} function.
 #'
-#' Note that the xra and yra arguments are only a guide of what you may expect to be incorrect.
-#' This is an intentionally simplistic first pass of the data.
+#' Note that the default of \code{tag_spans} is NULL for xra, yra and dates arguments, resulting in only
+#' a check of future errant dates. This is an intentionally simplistic first pass of the data.
 #'
 #' @param data Input data object, with required columns: TagID, DateTime, longitude, latitude.
 #' @param measure One of three options, "general", "spatial", and/or "temporal", with any combination allowed. This
@@ -19,17 +19,29 @@
 #' being the overall bounding xy box, within which animals had most and least fixes, which animals were
 #' at the extremes of the bounding box, which animals were
 #' tracked longest and for the least amount of time; (2) the spatial quality, i.e. any fixes outside
-#' and which birds had such fixes occuring outside the supplied xra and yra, and (3) temporal quality being either an errant DateTime in the future beyond the current date or outside
-#' bounds of supplied DateTimes.
-#' a data in the past.
+#' and which birds had such fixes occurring outside the supplied xra and yra, and (3) temporal quality being
+#' either an errant DateTime in the future beyond the current date or outside bounds of supplied DateTimes.
 #' @param xra The expected limits of acceptable data in the x longitude dimension (WGS84),
-#' supplied as a two-length vector c(min,max), c(-10,5).
+#' supplied as a two-length vector c(min,max), c(-10,5). Defaults to NULL.
 #' @param yra The expected limits of acceptable data in the y latitude dimension (WGS84),
-#' supplied as a two-length vector c(min,max), defaulting to c(25,65).
+#' supplied as a two-length vector c(min,max), e.g.c(25,65). Defaults to NULL.
 #' @param dates The expected valid range of dates over which the dataset was collected, supplied as a
-#' two-length vector c(min,max) as character YYYY-MM-DD HH:MM:SS format, defaulting to c("2014-01-01 00:00:01", "2021-12-31 23:59:59").
-#' @param buffer_days A buffer in days for flagging dates as a temporal flag either side of the 'dates' time window.
-#' @param max_show The maximum number of individual animals to show in the messaging print out.
+#' two-length vector c(min,max) as character YYYY-MM-DD HH:MM:SS format,
+#' e.g. c("2014-01-01 00:00:01", "2021-12-31 23:59:59"). Defaults to NULL, resulting in only a future data check.
+#' @param buffer_days A buffer in days for flagging dates as a temporal flag either side of the 'dates' time window
+#' defaulting to 2 days.
+#' @param max_show The maximum number of individual animals to show in the messaging print out, default = 3.
+#' @param mode Character string specifying the operation mode:
+#'   \itemize{
+#'     \item \code{"summary"}: summarises the data as a simple listed output (default);
+#'     \item \code{"resolve"}: filters out any problematic rows identified;
+#'     \item \code{"annotate"}: annotates problematic rows as a 1,0 without resolving.
+#'   }
+#' @param annotate Boolean (default FALSE) for legacy compatibility with other MoveRakeR functions using annotate = TRUE
+#' to annotate extra columns with row flags and FALSE to filter them out keeping only "good" rows. Superseded by the
+#' use of the mode argument, which also includes "summary". If \code{TRUE} and \code{mode}
+#' is not supplied, equivalent to \code{mode = "annotate"}.
+#' @param verbose Logical. If \code{TRUE}, default, detailed progress messages are printed.
 #' @param messages Whether printed console messages are to be returned to the user, a Boolean defaulting to TRUE.
 #' @param msg_col A numeric value for the colour to be used in console graphics.
 #' The colour of the print out in the console, depending on your taste and whether black or white backgrounds
@@ -65,6 +77,19 @@
 #'
 #' @examples
 #'
+#' # only checking for errant future data and returning a simple general summary
+#' dat <- tag_spans(data) # all measures by default triggered
+#'
+#' # only general summary.Track() style output
+#' dat <- tag_spans(data, measure = "general")
+#'
+#' # specific check of ONLY future datetime as no date ranges specified
+#' dat <- tag_spans(data, measure = "temporal")
+#'
+#' # no spatial checks requested nothing returned
+#' dat <- tag_spans(data, measure = "spatial")
+#'
+#' # full use
 #' dat <- tag_spans(data, measure = c("general","spatial", "temporal"),
 #'     msg_col = 33,
 #'     xra = c(-10,5), yra = c(25,65), max_show = 3,
@@ -76,19 +101,44 @@
 #'
 #' @export
 tag_spans <- function(data, measure = c("general", "spatial", "temporal"),
-                      xra = c(-10,5),
-                      yra = c(25,65),
-                      dates = c("2014-01-01 00:00:01", "2021-12-31 23:59:59"), buffer_days = 2,
+                      xra = NULL, #c(-10,5),
+                      yra = NULL, #c(25,65),
+                      dates = NULL, #c("2014-01-01 00:00:01", "2021-12-31 23:59:59"),
+                      buffer_days = 2,
                       tz = "UTC",max_show = 3,
+                      mode = c("summary", "annotate", "resolve"),
+                      annotate = FALSE,
+                      verbose = TRUE,
                       messages = TRUE,  msg_col = 33){
 
-  cat(rep(" ",  getOption("width")), "\n", sep = "")
-
   if(messages){
+    cat(rep(" ",  getOption("width")), "\n", sep = "")
     cat("\033[", msg_col, "m", strrep("*", getOption("width")), "\033[0m\n", sep = "")
     rule_centre("Data span checks", col = msg_col, char = "*")
     cat("\033[", msg_col, "m", strrep("*", getOption("width")), "\033[0m\n", sep = "")
     cat(rep(" ",  getOption("width")), "\n", sep = "")
+  }
+
+  # -------------------------------------------- #
+  # Backward-compatible mode handling vs annotate
+  # -------------------------------------------- #
+
+  mode_provided <- !missing(mode)
+  annotate_provided <- !missing(annotate)
+
+  if(mode_provided){
+    mode <- match.arg(mode)
+
+    if(annotate_provided){
+      warning(
+        "`mode` and `annotate` were both supplied; `mode` takes precedence",
+        call. = FALSE
+      )
+    }
+
+  } else{
+    # Legacy behaviour
+    mode <- if(isTRUE(annotate)) "annotate" else "resolve"
   }
 
   # instead of using the MoveRakeR summary, here we provide the user further information for which
@@ -96,15 +146,16 @@ tag_spans <- function(data, measure = c("general", "spatial", "temporal"),
 
   # ------------------------------------------------------------------------ #
   # Overall initial summary of numbers of birds, fixes, starts/ends
+  # ------------------------------------------------------------------------ #
 
   if("general" %in% measure){
 
     if(messages){
       rule_centre("Overall data summary", col = msg_col)
+      cat(rep(" ",  getOption("width")), "\n", sep = "")
     }
-    cat(rep(" ",  getOption("width")), "\n", sep = "")
 
-    overall <- summary(Track(data), verbose = FALSE)
+     overall <- summary(Track(data), verbose = FALSE)
 
     if(messages){
 
@@ -162,6 +213,9 @@ tag_spans <- function(data, measure = c("general", "spatial", "temporal"),
 
 
   # ------------------------------------------------------------------------ #
+  # SPATIAL
+  # ------------------------------------------------------------------------ #
+
   if("spatial" %in% measure){
 
     if(messages){
@@ -191,8 +245,8 @@ tag_spans <- function(data, measure = c("general", "spatial", "temporal"),
       sum_dat_x <- data %>%
         group_by(TagID) %>%
         mutate(
-          minx_bad = if (!is.null(xra[1])) if_else(longitude < xra[1], 1L, 0L) else NA_integer_,
-          maxx_bad = if (!is.null(xra[2])) if_else(longitude > xra[2], 1L, 0L) else NA_integer_
+          minx_bad = if_else(longitude < xra[1], 1L, 0L),
+          maxx_bad = if_else(longitude > xra[2], 1L, 0L)
         ) %>%
         summarise(
           any_xmin_bad = any(minx_bad == 1, na.rm = TRUE),
@@ -207,6 +261,31 @@ tag_spans <- function(data, measure = c("general", "spatial", "temporal"),
           .groups = "drop"
         )
       names(sum_dat_x$xmin_bad) <- names(sum_dat_x$xmax_bad) <- names(sum_dat_x$xmin_bad_times) <- names(sum_dat_x$xmax_bad_times) <- sum_dat_x$TagID
+
+      # annotate the data with conditions
+      data <- data %>%
+        mutate(
+          minx_issue = if(!is.null(xra[1])) if_else(longitude < xra[1], 1L, 0L) else NA_integer_,
+          maxx_issue = if(!is.null(xra[2])) if_else(longitude > xra[2], 1L, 0L) else NA_integer_
+        )
+
+      nr = nrow(data)
+
+      #if(!annotated){
+      if(mode == "resolve"){
+        data <- data %>% filter(minx_issue == 0, maxx_issue == 0)
+
+        nr_drop = nrow(data) - nr
+
+        if(verbose){
+          if(nr_drop > 0){
+            message("--- Dropping ", nrow(data) - nr, " data identified as outside of xra ---")
+          } else{
+            message("--- No errant data beyond xra ---")
+          }
+        }
+
+      }
 
 
       if(messages){
@@ -263,8 +342,8 @@ tag_spans <- function(data, measure = c("general", "spatial", "temporal"),
       sum_dat_y <- data %>%
         group_by(TagID) %>%
         mutate(
-          miny_bad = if (!is.null(yra[1])) if_else(latitude < yra[1], 1L, 0L) else NA_integer_,
-          maxy_bad = if (!is.null(yra[2])) if_else(latitude > yra[2], 1L, 0L) else NA_integer_
+          miny_bad = if_else(latitude < yra[1], 1L, 0L),
+          maxy_bad = if_else(latitude > yra[2], 1L, 0L)
         ) %>%
         summarise(
           any_ymin_bad = any(miny_bad == 1, na.rm = TRUE),
@@ -280,6 +359,30 @@ tag_spans <- function(data, measure = c("general", "spatial", "temporal"),
         )
       names(sum_dat_y$ymin_bad) <- names(sum_dat_y$ymax_bad) <- names(sum_dat_y$ymin_bad_times) <- names(sum_dat_y$ymax_bad_times) <- sum_dat_y$TagID
 
+      # annotate the data with conditions
+      data <- data %>%
+        mutate(
+          miny_issue = if(!is.null(yra[1])) if_else(latitude < yra[1], 1L, 0L) else NA_integer_,
+          maxy_issue = if(!is.null(yra[2])) if_else(latitude > yra[2], 1L, 0L) else NA_integer_
+        )
+
+      nr = nrow(data)
+
+      #if(!annotated){
+      if(mode == "resolve"){
+        data <- data %>% filter(miny_issue == 0, maxy_issue == 0)
+
+        nr_drop = nrow(data) - nr
+
+        if(verbose){
+          if(nr_drop > 0){
+            message("--- Dropping ", nrow(data) - nr, " data identified as outside of yra ---")
+          } else{
+            message("--- No errant data beyond yra ---")
+          }
+        }
+
+      }
 
       if(messages){
 
@@ -324,9 +427,20 @@ tag_spans <- function(data, measure = c("general", "spatial", "temporal"),
 
     }
 
+    if(is.null(xra) & is.null(yra)){
+
+      if(messages){
+        cat(paste0("\033[",msg_col,"m"),"No xra or yra provided to check outlying spatial extents","\033[0m\n")
+      }
+
+    }
+
   }
 
   # ------------------------------------------------------------------------ #
+  # TEMPORAL
+  # ------------------------------------------------------------------------ #
+
   if("temporal" %in% measure){
 
     if(messages){
@@ -357,6 +471,31 @@ tag_spans <- function(data, measure = c("general", "spatial", "temporal"),
           .groups = "drop"
         )
       names(time_summary$future_dates) <- names(time_summary$temporal_dates) <- time_summary$TagID
+
+      # annotate the data with conditions
+      data <- data %>%
+        mutate(
+          future_issue = if_else(DateTime > Sys.time(), 1L, 0L),
+          temporal_issue = if_else(DateTime < (dates[1] - buffer_days) |
+                                     DateTime > (dates[2] + buffer_days), 1L, 0L)
+        )
+      nr = nrow(data)
+
+      #if(!annotated){
+      if(mode == "resolve"){
+        data <- data %>% filter(future_issue == 0, temporal_issue == 0)
+
+        nr_drop = nrow(data) - nr
+
+        if(verbose){
+          if(nr_drop > 0){
+            message("--- Dropping ", nrow(data) - nr, " data identified as outside of date ranges ---")
+          } else{
+            message("--- No errant data beyond temporal bounds provided ---")
+          }
+        }
+
+      }
 
       if(messages){
 
@@ -404,31 +543,133 @@ tag_spans <- function(data, measure = c("general", "spatial", "temporal"),
 
       }
     } else{
+
+      # then ONLY compute future date checks
       if(messages){
-        cat("\033[35m", "No date range provided", "\033[0m\n")
+        cat(paste0("\033[",msg_col,"m"),"Only checking for future dates (no date range provided)","\033[0m\n")
+      }
+      time_summary <- data %>%
+        group_by(TagID) %>%
+        mutate(future_flag = if_else(DateTime > Sys.time(), 1L, 0L)
+        ) %>%
+        summarise(
+          any_future = any(future_flag == 1),
+          future_dates = list(DateTime[future_flag == 1]),
+          n_future = sum(future_flag == 1),
+          .groups = "drop"
+        )
+      names(time_summary$future_dates) <- time_summary$TagID
+
+      # annotate the data with conditions
+      data <- data %>%
+        mutate(
+          future_issue = if_else(DateTime > Sys.time(), 1L, 0L)
+        )
+
+      nr = nrow(data)
+
+      #if(!annotated){
+      if(mode == "resolve"){
+        data <- data %>% filter(future_issue == 0)
+
+        nr_drop = nrow(data) - nr
+
+        if(verbose){
+          if(nr_drop > 0){
+            message("--- Dropping ", nrow(data) - nr, " data identified as outside of date ranges ---")
+          } else{
+            message("--- No errant data beyond temporal bounds provided ---")
+          }
+        }
+
+      }
+
+      if(any(time_summary$any_future)){
+
+        if(messages){
+          cat(paste0("\033[",msg_col,"m", "", sum(time_summary$n_future), " time stamp(s) are in data are in the future!", "\033[0m\n"))
+          wrongun = time_summary[which(time_summary$any_future),]$future_dates
+
+          for(tag in names(wrongun)) {
+            dates_print <- wrongun[[tag]]
+            dates_print <- format(dates_print, "%Y-%m-%d %H:%M:%S", tz = tz)
+            if(length(dates_print) > max_show) {
+              dates_print <- c(dates_print[1:max_show], "...")
+            }
+            n_f <- time_summary[time_summary$TagID == tag,]$n_temporal
+            msg <- paste0("- Animal: ", tag, " -> n = ", n_f, ": ", paste(dates_print, collapse = ", "))
+            cat(paste0("\033[",msg_col,"m"),msg,"\033[0m\n")
+          }
+        }
+
+
+      } else{
+        if(messages){
+          cat(paste0("\033[",msg_col,"m"),"- No errant future data","\033[0m\n")
+        }
+
       }
 
     }
 
   }
 
+  # ------------------------------------------------------------------------ #
+  # OUTPUT SUMMARY
+  # ------------------------------------------------------------------------ #
+
   out <- vector("list", 4)
   names(out) <- c("summary","xra","yra","dates")
 
-  if(!is.null(xra)){
+  if("general" %in% measure){
     out[[1]] <- overall
+  } else{
+    out[[1]] <- NA
   }
-  if(!is.null(xra)){
-    out[[2]] <- sum_dat_x
+
+  if("spatial" %in% measure){
+    if(!is.null(xra)){
+      out[[2]] <- sum_dat_x
+    } else{
+      out[[2]] <- NA
+    }
+    if(!is.null(yra)){
+      out[[3]] <- sum_dat_y
+    } else{
+      out[[3]] <- NA
+    }
+
   }
-  if(!is.null(yra)){
-    out[[3]] <- sum_dat_y
-  }
-  if(!is.null(dates)){
+
+  if("temporal" %in% measure){
     out[[4]] <- time_summary
   }
 
-  return(out)
+  if(mode == "summary"){
+    return(out)
+  }
+
+  if(mode %in% c("annotate", "resolve")){
+
+    if(mode == "resolve"){
+
+      # drop out additional flag columns
+      data <- data %>%
+        select(-any_of(c(
+          "minx_issue", "maxx_issue",
+          "miny_issue", "maxy_issue",
+          "future_issue", "temporal_issue"
+        )))
+
+    }
+
+    # add summary data attributes
+    attr(data, "out") <- out
+
+    return(data)
+  }
+
+
 }
 
 

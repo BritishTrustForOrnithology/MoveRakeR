@@ -8,12 +8,15 @@
 tag_spans(
   data,
   measure = c("general", "spatial", "temporal"),
-  xra = c(-10, 5),
-  yra = c(25, 65),
-  dates = c("2014-01-01 00:00:01", "2021-12-31 23:59:59"),
+  xra = NULL,
+  yra = NULL,
+  dates = NULL,
   buffer_days = 2,
   tz = "UTC",
   max_show = 3,
+  mode = c("summary", "annotate", "resolve"),
+  annotate = FALSE,
+  verbose = TRUE,
   messages = TRUE,
   msg_col = 33
 )
@@ -37,22 +40,37 @@ directs the function to assess the (1) general data quality using the \code{summ
 being the overall bounding xy box, within which animals had most and least fixes, which animals were
 at the extremes of the bounding box, which animals were
 tracked longest and for the least amount of time; (2) the spatial quality, i.e. any fixes outside
-and which birds had such fixes occuring outside the supplied xra and yra, and (3) temporal quality being either an errant DateTime in the future beyond the current date or outside
-bounds of supplied DateTimes.
-a data in the past.}
+and which birds had such fixes occurring outside the supplied xra and yra, and (3) temporal quality being
+either an errant DateTime in the future beyond the current date or outside bounds of supplied DateTimes.}
 
 \item{xra}{The expected limits of acceptable data in the x longitude dimension (WGS84),
-supplied as a two-length vector c(min,max), c(-10,5).}
+supplied as a two-length vector c(min,max), c(-10,5). Defaults to NULL.}
 
 \item{yra}{The expected limits of acceptable data in the y latitude dimension (WGS84),
-supplied as a two-length vector c(min,max), defaulting to c(25,65).}
+supplied as a two-length vector c(min,max), e.g.c(25,65). Defaults to NULL.}
 
 \item{dates}{The expected valid range of dates over which the dataset was collected, supplied as a
-two-length vector c(min,max) as character YYYY-MM-DD HH:MM:SS format, defaulting to c("2014-01-01 00:00:01", "2021-12-31 23:59:59").}
+two-length vector c(min,max) as character YYYY-MM-DD HH:MM:SS format,
+e.g. c("2014-01-01 00:00:01", "2021-12-31 23:59:59"). Defaults to NULL, resulting in only a future data check.}
 
-\item{buffer_days}{A buffer in days for flagging dates as a temporal flag either side of the 'dates' time window.}
+\item{buffer_days}{A buffer in days for flagging dates as a temporal flag either side of the 'dates' time window
+defaulting to 2 days.}
 
-\item{max_show}{The maximum number of individual animals to show in the messaging print out.}
+\item{max_show}{The maximum number of individual animals to show in the messaging print out, default = 3.}
+
+\item{mode}{Character string specifying the operation mode:
+\itemize{
+\item \code{"summary"}: summarises the data as a simple listed output (default);
+\item \code{"resolve"}: filters out any problematic rows identified;
+\item \code{"annotate"}: annotates problematic rows as a 1,0 without resolving.
+}}
+
+\item{annotate}{Boolean (default FALSE) for legacy compatibility with other MoveRakeR functions using annotate = TRUE
+to annotate extra columns with row flags and FALSE to filter them out keeping only "good" rows. Superseded by the
+use of the mode argument, which also includes "summary". If \code{TRUE} and \code{mode}
+is not supplied, equivalent to \code{mode = "annotate"}.}
+
+\item{verbose}{Logical. If \code{TRUE}, default, detailed progress messages are printed.}
 
 \item{messages}{Whether printed console messages are to be returned to the user, a Boolean defaulting to TRUE.}
 
@@ -101,11 +119,24 @@ have potentially outlying GPS fixes. This is useful if the user knows the overal
 or has an approximation of it, and therefore sudden jumps in the GPS can be identified easily. Note also,
 these jumps are the very same fixes that would be identified under the \code{speed_filt} function.
 
-Note that the xra and yra arguments are only a guide of what you may expect to be incorrect.
-This is an intentionally simplistic first pass of the data.
+Note that the default of \code{tag_spans} is NULL for xra, yra and dates arguments, resulting in only
+a check of future errant dates. This is an intentionally simplistic first pass of the data.
 }
 \examples{
 
+# only checking for errant future data and returning a simple general summary
+dat <- tag_spans(data) # all measures by default triggered
+
+# only general summary.Track() style output
+dat <- tag_spans(data, measure = "general")
+
+# specific check of ONLY future datetime as no date ranges specified
+dat <- tag_spans(data, measure = "temporal")
+
+# no spatial checks requested nothing returned
+dat <- tag_spans(data, measure = "spatial")
+
+# full use
 dat <- tag_spans(data, measure = c("general","spatial", "temporal"),
     msg_col = 33,
     xra = c(-10,5), yra = c(25,65), max_show = 3,
