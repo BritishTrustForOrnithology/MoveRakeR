@@ -63,7 +63,7 @@ The gap column always appears before longitude and latitude.
 A function using the S3 \code{summary} method for \code{Track} objects to summarise GPS tracking data
 }
 \details{
-Summariies of GPS tracking data are generated for individual animals, with
+Summaries of GPS tracking data are generated for individual animals, with
 a combined population-level row. The \code{summary} function supports simple summaries,
 full summaries, and extended summaries including all numeric variables.
 Gap summaries (time differences between consecutive fixes) are included.
