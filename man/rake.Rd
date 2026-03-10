@@ -3,14 +3,15 @@
 \name{rake}
 \alias{rake}
 \alias{rule_centre}
+\alias{centre_line}
 \title{Overarching assessment of data quality}
 \usage{
 rake(
   data,
-  check_for = c("spans", "NAlatlong", "dupDT", "timeline", "rates", "nsats"),
-  xra = c(-10, 5),
-  yra = c(25, 65),
-  dates = c("2014-01-01 00:00:01", "2021-12-31 23:59:59"),
+  check_for = c("spans", "NAlatlong", "duplicates", "timeline", "rates", "nsats"),
+  xra = NULL,
+  yra = NULL,
+  dates = NULL,
   buffer_days = 2,
   max_show = 3,
   plot = FALSE,
@@ -22,27 +23,30 @@ rake(
   breaks = c(1, 60, 100, 300, 600, 900, 1200, 1800, 3600, 7200, 10800),
   tol = c(0, 0.5, rep(0.4, 2), rep(0.3, 5), rep(0.2, 2)),
   pctn_rate_thresh = 20,
-  sat_col = "satellites_used",
+  sat_col = NULL,
   drop_sats = 3,
   messages = TRUE,
   msg_col = c(32, 33, 34, 35, 36, 37)
 )
 
 rule_centre(text = "", col = "35", char = "-")
+
+centre_line(text, width = getOption("width"), fill = "*", pad = 1)
 }
 \arguments{
 \item{data}{Input data object, with required columns: TagID, DateTime, longitude, latitude.}
 
-\item{check_for}{One of six options as noted in details for "spans", "NAlatlong", "dupDT", "timeline", "rates", "nsats",}
+\item{check_for}{One of six options as noted in details for "spans", "NAlatlong", "duplicates", "timeline", "rates", "nsats",}
 
 \item{xra}{From \code{tag_spans}: The expected limits of acceptable data in the x longitude dimension (WGS84),
-supplied as a two-length vector c(min,max), c(-10,5).}
+supplied as a two-length vector c(min,max), e.g. c(-10,5), defaults to NULL.}
 
 \item{yra}{From \code{tag_spans}: The expected limits of acceptable data in the y latitude dimension (WGS84),
-supplied as a two-length vector c(min,max), defaulting to c(25,65).}
+supplied as a two-length vector c(min,max), e.g. c(25,65), defaults to NULL.}
 
 \item{dates}{From \code{tag_spans}: The expected valid range of dates over which the dataset was collected, supplied as a
-two-length vector c(min,max) as character YYYY-MM-DD HH:MM:SS format, defaulting to c("2014-01-01 00:00:01", "2021-12-31 23:59:59").}
+two-length vector c(min,max) as character YYYY-MM-DD HH:MM:SS format, e.g. c("2014-01-01 00:00:01", "2021-12-31 23:59:59");
+defaults to NULL, i.e. only a future errant data check is performed.}
 
 \item{buffer_days}{From \code{tag_spans}: A buffer in days for flagging dates as a temporal flag either side of the 'dates' time window.}
 
@@ -79,7 +83,8 @@ The tol argument can also be a single vector that is then applied equally to all
 \item{pctn_rate_thresh}{From \code{assign_rates2}:The percentage value threshold above which assessment for data collection at coarser
 or finer sampling rates is presented in the messaged outputs, e.g. For animal(s) X and Y: Z\% or more data was collected at coarser/finer rates of 'S' s.}
 
-\item{sat_col}{The column for which to use for assessing satellite data quality, defaulting to "satellites_used".}
+\item{sat_col}{The column for which to use for assessing satellite data quality, defaulting to NULL with NA summary output,
+which essentially means no satellite check is performed by default unless a column is provided, even if "check_for" includes "nsats".}
 
 \item{drop_sats}{The minimum number of satellites present in the data, defaulting to 3.}
 
@@ -95,7 +100,7 @@ Each element relates to the \emph{check_for} options for each separate data quer
 with their options in \code{rake} reflected in their structured outputs - see each function for more details.
 For the 'NAlatlong' list element, this is simply a tibble summary of TagID, whether any missing data was detected ('any_missing'),
 the number of missing data ('n_missing') and the respective DateTimes for those missing data ('missing_times'). Similarly,
-for the 'dupDT' check_for, the output is a separate tibble, with, TagID, any_dupDT (TRUE/FALSE), dupDT (the actual DateTimes), and n_dupDT (how many duplicates per TagID).
+for the 'duplicates' check_for, the output is a separate tibble, with, TagID, any_duplicates (TRUE/FALSE), duplicates (the actual DateTimes), and n_duplicates (how many duplicates per TagID).
 For 'nsats' the output is similar again, with columns denoting any TagIDs that had missing satellite information,
 and respective DateTimes, and further if any cells were found with satellites less than then minimum as input into the function, agai with the DateTimes for those records.
 }
@@ -105,7 +110,7 @@ A general 'rake' of the data to assess quality of data using several queries of 
 \details{
 This overarching \code{rake} function is an initial assessment of the overall quality of the data structure
 made by using broad queries relating to: (1) the data quality in space and time extents ('spans'), (2) whether
-any missing (NA) data are present in latitude or longitude columns ('NAlatlong'), (3) whether any duplicate DateTime records exist ('dupDT'),
+any missing (NA) data are present in latitude or longitude columns ('NAlatlong'), (3) whether any duplicate DateTime records exist ('duplicates'),
 (4) an assessment of animal tracking durations and density over overlaps among the data over days (timeline'), (5) the
 likely rates of GPS sampling schedules and potentially missing data ('rates'), and (6) a quick appraisal of number of satellites
 and missing (NA) satellite data ('nsats').
@@ -117,7 +122,8 @@ The \code{rake} function uses the function \code{tag_timeline} to return the inf
 of the tags and overlaps of the data, \code{tag_spans} to determine spatio-temporal extents and
 potential fixes errant outside user-provided bounds, and \code{assign_rates2} to query the likely sampling rates present.
 However, the \code{rake} function also considers some measurement
-error aspects such as duplicate DateTimes, missing latitude/longitude information, and number of satellites.
+error aspects such as duplicate data issues, assessed using the \code{duplicate_track()} function,
+missing latitude/longitude information, and number of satellites.
 Each of the above functions used by \code{rake} can also be used on their own. As noted, the xra and yra arguments
 are only a guide of what you may expect to be incorrect and is a simplistic first pass of the data.
 
@@ -139,7 +145,7 @@ a = data_fake[sample(seq(1,nrow(data_fake),1),25, replace = FALSE),]
 data_fake = rbind(data_fake,a) \%>\% arrange(TagID,DateTime)
 
 # all with defaults
-rake_all = rake(data_fake, check_for = c("spans", "NAlatlong", "dupDT", "timeline", "rates", "nsats"),
+rake_all = rake(data_fake, check_for = c("spans", "NAlatlong", "duplicates", "timeline", "rates", "nsats"),
            msg_col = c(32,33,34,35,36,37))
 
 # spans only
@@ -158,8 +164,8 @@ dat <- tag_spans(data_fake, measure = c("spatial", "temporal"),
     messages = FALSE)
 
 
-# NAlatlongs and "dupDT"
-rake_ll_dt = rake(data_fake, check_for = c("NAlatlong", "dupDT"),
+# NAlatlongs and "duplicates"
+rake_ll_dt = rake(data_fake, check_for = c("NAlatlong", "duplicates"),
                  max_show = 3,
                  msg_col = c(33,34))
 
@@ -192,5 +198,5 @@ rake_rates = rake(data_fake, check_for = c("rates"),
 
 }
 \seealso{
-\link{rake_outlie}, \link{ShinyRakeR}, \link{tag_timeline}, \link{tag_spans}, \link{assign_rates2}
+\link{rake_outlie}, \link{ShinyRakeR}, \link{duplicate_track}, \link{tag_timeline}, \link{tag_spans}, \link{assign_rates2}
 }
