@@ -402,27 +402,27 @@ data <- data \%>\% clean_track() # accepting the defaults of the clean_track fun
 # --------------------------------------------------------------------------- #
 # as an annotation tool:
 data_an <- clean_track(data,
-         min_fix = 5, min_fix_when = "after_NA",       # keep birds with 5 fixes or more, after NA annotation applied
-         NA_latlong = TRUE,                            # drop NA lat-longs
-         duplicates = TRUE,                            # activate duplicate search
-         tagspans = TRUE,                              # tag spans check - by default this will only check for future data
-         sat_check = TRUE, drop_sats=3,                # drop fixes with 3 satellites
-         flt_switch = FALSE,                           # ignored here
-         pdop = 6, hdop = 6,                           # drop any rows above a value of 6
-         hasgaps = FALSE, GAP = 28800, tol = 0,        # no gaps previously defined, use an 8 h gap + zero tolerance
-         drop = FALSE,                                 # keep all gap sections identified with 1 fix (but note these are dropped anyway in speed filter if we are not annotating!)
-         dup_DT = TRUE,                                # remove duplicate DateTimes
-         speedFilt = TRUE, sp_thres = 50,              # speed filter activated with a maximum of 50 m/s
-         turnFilt = NULL, turnFilt_dir = "less_than",  # No angle turning filter used
-         annotate = TRUE, attrib = TRUE,               # no annotation = dropping rows not meeting conditions, attributes of no. rows per stage retained as an attribute in final data
-         reproject = FALSE, p4s = 3035,                # no reprojection of lat longs
-         verbose = TRUE, detailed_verbose = FALSE)     # simple messaging used
+ min_fix = 0, min_fix_when = "after_NA",                       # keep birds with 5 fixes or more, after NA annotation applied
+ NA_latlong = TRUE,                                            # drop NA lat-longs
+ sat_col = "satellites_used", sat_check = TRUE, drop_sats = 3, # drop fixes with 3 satellites
+ pdop_check = FALSE, pdop_val = 7, pdop_col = "gps.pdop",      # drop any rows above a value of 7 IF pdop_check TRUE
+ hdop_check = FALSE, hdop_val = 7, hdop_col = "gps.hdop",      # drop any rows above a value of 7 IF hdop_check TRUE
+ flt_switch = FALSE,                                           # flt_switch custom argument, ignored here
+ custom_filt = FALSE,                                          # should any custom filtering be done, no here but nms, vals_l, vals_u would then be needed (see below)
+ hasgaps = FALSE, GAP = 28800, tol = 0.2,                      # no gaps previously defined, if TRUE use GAP and tol args to redefine
+ drop_single_gap = FALSE,                                      # keep all gap sections identified with 1 fix (note these are dropped anyway in speed filter if not annotating)
+ duplicates = TRUE, dup_method = "random",                     # activate duplicate filter, defaulting to a random pick in dup_method
+ tagspans = TRUE, measure = c("spatial", "temporal"),          # activate the tagspans data checks (default spatial and temporal)
+ speedFilt = TRUE, sp_thres = 50,                              # activate basic speed filtering using only raw GPS traj speed - see further options for smoothed and RMS consideration
+ turnFilt = NULL, turnFilt_dir = "less_than",                  # no use of turn filter under default
+ annotate = TRUE,                                              # default is usually FALSE but TRUE annotates rather than filters
+ attrib = TRUE, reproject = FALSE, p4s = 3035,                 # attributes and p4s conditions
+ verbose = TRUE, detailed_verbose = FALSE)                     # verbosity
 
-# check out where fixes where dropped:
+# If you are NOT annotating, you can check where fixes were dropped via:
 attr(data_an,"data_summary")
-
-# If annotating the data, switching annotate to TRUE above, additional rows flagging conditions would be added
-data_an$combined_rm # the combined row
+# otherwise you can assess this using the '_rm' columns in the annotated dataset:
+data_an$combined_rm # the combined annotation column
 
 # --------------------------------------------------------------------------- #
 # Further use of custom filtering via the dots(...) argument of clean_track()
@@ -433,6 +433,8 @@ data_an$combined_rm # the combined row
 # If sat_check was FALSE, then anything less than or equal to 3 satellites would be dropped via the vals_l argument.
 # If the flag column is "wrong", then these would be dropped. vals_l and vals_u are best supplied as lists if multiple
 # columns are to be used.
+
+data$flag <- "0" # IF YOU DO NOT HAVE A FLAG COLUMN (used in this example), otherwise filt_err() will fail.
 
 cust_filt = clean_track(data,
                 sat_check = TRUE, drop_sats=3, sat_col = "satellites_used",
@@ -500,7 +502,7 @@ cust_speed = clean_track(data,
 
 data_dups = clean_track(data, duplicates = TRUE, annotate = TRUE,
   dup_method = "best_quality",
-  quality_vars = c("n_sats", "accuracy", "pdop", "hdop"),
+  quality_vars = c("satellites_used", "accuracy", "pdop", "hdop"),
   quality_directions = c(1,1,-1,-1)
 )
 
