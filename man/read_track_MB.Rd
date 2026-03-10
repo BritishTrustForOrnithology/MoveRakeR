@@ -48,13 +48,13 @@ data from Movebank using \code{move::getMovebankLocationData}.}
 
 \item{dropsat}{Logical defaults to FALSE. This indicates whether to drop GPS fixes with satellites below
 the \emph{dropsats} threshold. It is suggested the user do not change these
-from FALSE but instead use the function \code{\link{clean_GPS}}.}
+from FALSE but instead use the function \code{\link{clean_track}}.}
 
 \item{dropsats}{Numeric value indicating a threshold for satellite retention.}
 
 \item{flt_switch}{logical argument, set to FALSE whether to retain
 Movebank data erroneous flt_switch values, instead being dealt with in the
-\code{\link{clean_GPS}} function.}
+\code{\link{clean_track}} function.}
 
 \item{mindata}{This specifies a minimum number of rows of data for the individual
 to be retained and is a form of cleaning, but here is retained to exclude reading
@@ -151,7 +151,7 @@ fixes. Note that occasionally the UvA database can go down, and recently the ROD
 was not working on multiple computers. It is best to email the Dev, or email \code{UvA-BiTS"at"uva.nl}.
 
 There are other arguments included in this function for cleaning, but these have
-been transferred to the function \code{\link{clean_GPS}} function although they
+been transferred to the function \code{\link{clean_track}} function although they
 are retained here are set to FALSE (see Arguments).
 }
 \examples{

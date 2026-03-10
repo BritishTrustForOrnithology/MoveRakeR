@@ -43,10 +43,10 @@ as an additional attribute called 'summary', i.e. attr(data, "summary").
 }
 \description{
 The function \code{tspeed_jit} can be used to understand the variance in trajectory speed over
-varying GPS sampling rate to inform the speed trajectory threshold used in \code{clean_GPS}.
+varying GPS sampling rate to inform the speed trajectory threshold used in \code{clean_track}.
 }
 \details{
-Within the \code{clean_GPS} function, a trajectory speed filter is used to
+Within the \code{clean_track} function, a trajectory speed filter is used to
 estimate likely erroneous GPS fixes consecutively in DateTime strings of points. Very large
 speeds beyond that of the upper limit of travel speed of an animal would be more likely to be flagged
 as inccorect. However, this filter is applied in a blanket fashion across all sampling rates that
@@ -58,9 +58,9 @@ of the trajectory speed around fixes set to different sampling rates. This is pr
 \code{tspeed_jit} function, where a 'jitter' of random noise as inserted around the GPS fixes and then
 the data bootstrapped to assess the effect on the trajectory speeds. A non-linear function can then be fitted
 to assess the relationship in variance from the true trajectory speed, and can inform the trajectory speed
-filter used in \code{clean_GPS}.
+filter used in \code{clean_track}.
 
-Of course it is quite simple just to increase the overall trajectory speed threshold used in \code{clean_GPS()}
+Of course it is quite simple just to increase the overall trajectory speed threshold used in \code{clean_track()}
 to circumvent these issues, i.e. an animal travelling to the equator and back from the UK in five minutes or 10 seconds will
 be flagged as erroneous if the speed threshold is much higher than the maximum speed of the animal. The
 \code{tspeed_jit} function simply serves as a tool to understand the nature of the data.

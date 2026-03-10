@@ -95,7 +95,7 @@
 #' p4 <- 3035
 #'
 #' # With a very basic rectangle around the colony for trips
-#' indata <- indata %>% clean_GPS() %>%
+#' indata <- indata %>% clean_track() %>%
 #'   define_trips(method="rect", plot=TRUE,lls = c(-3.2, 54.0553,-3.1689, 54.0437), p4s = p4)
 #'
 #' ### European shape as an example
@@ -257,7 +257,7 @@ plot.Track <- function(data, gap = FALSE,
 
       if(gap){
 
-        if(!any(names(data) == "gapsec")){stop("Needs a column called gapsec: Use clean_GPS or gap_section functions")}
+        if(!any(names(data) == "gapsec")){stop("Needs a column called gapsec: Use clean_track or gap_section functions")}
 
         # # # # # # # # #  BUG IDENTIFIED 26/09/2024 # # # # # # # #
         # CANNOT ACCEPT LINESTRINGS OF LENGTH 1!

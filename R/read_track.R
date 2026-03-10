@@ -39,7 +39,7 @@
 #' was not working on multiple computers. It is best to email the Dev, or email \code{UvA-BiTS"at"uva.nl}.
 #'
 #' There are other arguments included in this function for cleaning, but these have
-#' been transferred to the function \code{\link{clean_GPS}} function although they
+#' been transferred to the function \code{\link{clean_track}} function although they
 #' are retained here are set to FALSE (see Arguments).
 #'
 #' @param TagID The individual tag identifier from the Movebank database.
@@ -55,7 +55,7 @@
 #' direct the function to look up animals and their data from Movebank in the right place.
 #' @param dropsat Logical defaults to FALSE. This indicates whether to drop GPS fixes with satellites below
 #' the \emph{dropsats} threshold. It is suggested the user do not change these
-#' from FALSE but instead use the function \code{\link{clean_GPS}}.
+#' from FALSE but instead use the function \code{\link{clean_track}}.
 #' @param dropsats Numeric value indicating a threshold for satellite retention.
 #' @param option One of \code{"BTOTT"} or \code{"BTOTT_MB"} directing the function to return either a subsetted
 #' aligned dataset in option "BTOTT" for combining with UvA data, or, "BTOTT_MB", containing the
@@ -69,7 +69,7 @@
 #' data from Movebank using \code{move::getMovebankLocationData}.
 #' @param flt_switch logical argument, set to FALSE whether to retain
 #' Movebank data erroneous flt_switch values, instead being dealt with in the
-#' \code{\link{clean_GPS}} function.
+#' \code{\link{clean_track}} function.
 #' @param mindata This specifies a minimum number of rows of data for the individual
 #' to be retained and is a form of cleaning, but here is retained to exclude reading
 #' in data from animals with too few data deemed unusable for analysis.
@@ -541,7 +541,7 @@ read_track_MB <- function(TagID=NULL,start=NULL,end=NULL,repo=NULL,
   #option = "BTOTT" # the format required for aligning to UvA data as normally used
   #option = "BTOTT_MB" # retains ALL MB variables but inserts additional copies needed for Track objects in BTOTT to be used
 
-  # BUG FIX: 07/12/2021 AND 28/02/2023 (latter issue of flt_switch column still being retained if no flt.switch coloumn found! Causes downstream issues with clean_GPS())
+  # BUG FIX: 07/12/2021 AND 28/02/2023 (latter issue of flt_switch column still being retained if no flt.switch coloumn found! Causes downstream issues with clean_track())
   #.finalise_tracks(third_data[[1]][[1]])
   #data =third_data[[1]][[15]]
 
@@ -1021,7 +1021,7 @@ read_track_MB <- function(TagID=NULL,start=NULL,end=NULL,repo=NULL,
 #' fixes.
 #'
 #' There are other arguments included in this function for cleaning, but these have
-#' been transferred to the function \code{\link{clean_GPS}} function although they
+#' been transferred to the function \code{\link{clean_track}} function although they
 #' are retained here are set to FALSE (see Arguments).
 #'
 #' @param TagID The individual tag identifier from the UvA-BiTS database.
@@ -1035,11 +1035,11 @@ read_track_MB <- function(TagID=NULL,start=NULL,end=NULL,repo=NULL,
 #' with the the other defaulting to NULL. NOTE: THE FUNCTION WILL RETURN AN ERROR IF NO DATA ARE FOUND BETWEEN START AND END TIMES SPECIFIED.
 #' @param dropsat Logical defaults to FALSE. This indicates whether to drop GPS fixes with satellites below
 #' the \emph{dropsats} threshold. It is suggested the user do not change these
-#' from FALSE but instead use the function \code{\link{clean_GPS}}.
+#' from FALSE but instead use the function \code{\link{clean_track}}.
 #' @param dropsats Numeric value indicating a threshold for satellite retention.
 #' @param flt_switch. logical argument, set to FALSE whether to retain
 #' Movebank data erroneous flt_switch values, instead being dealt with in the
-#' \code{\link{clean_GPS}} function.
+#' \code{\link{clean_track}} function.
 #' @param mindata This specifies a minimum number of rows of data for the individual
 #' to be retained and is a form of cleaning, but here is retained to exclude reading
 #' in data from animals with too few data deemed unusable for analysis.

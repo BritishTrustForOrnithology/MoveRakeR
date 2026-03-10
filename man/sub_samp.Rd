@@ -185,7 +185,7 @@ ColLat = 54.045
 p4 <- sf::st_crs((paste("+proj=laea +lon_0=", ColLon," +lat_0=", ColLat, " +units=m", sep="")))
 data <- yourdata # GPS data with tagID, DateTime, longitude and latitude named columns
 
-indata <- data \%>\% clean_GPS(speedfilt = TRUE, drop = FALSE) \%>\%
+indata <- data \%>\% clean_track(speedfilt = TRUE, drop = FALSE) \%>\%
   define_trips(method="rect", lls = c(-3.2, 54.0553,-3.1689, 54.0437), p4s = p4)
 
 # test of rounding and sequencing approaches
@@ -388,5 +388,5 @@ correlated random walk models to animal movement data. Zenodo.
 \url{https://doi.org/10.5281/zenodo.596464}
 }
 \seealso{
-\link{clean_GPS}, \link{gap_section}, \link{Track2move}, \link{progress_estimated2}
+\link{clean_track}, \link{gap_section}, \link{Track2move}, \link{progress_estimated2}
 }

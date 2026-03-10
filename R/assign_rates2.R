@@ -60,7 +60,7 @@
 #' tabulation and percent amount of rates per animal, and an additional optional \code{ggplot2::geom_smooth} graphic
 #' showing per animal the rates for a visual interpretation.
 #'
-#' @seealso [MoveRakeR::assign_rates], [MoveRakeR::clean_GPS], [MoveRakeR::rake]
+#' @seealso [MoveRakeR::assign_rates], [MoveRakeR::clean_track], [MoveRakeR::rake]
 #'
 #' @examples
 #' indata <- yourdata # data.frame with a minimum of columns named TagID, DateTime, longitude, latitude
@@ -312,9 +312,12 @@ assign_rates2 <- function(data, by = NULL,
       next_most_freq_all <- unname(summary_tbl[summary_tbl$TagID == "all_anim",]$which_second_max,)
       next_most_freq_all_val <- sprintf("%.2f",unname(summary_tbl[summary_tbl$TagID == "all_anim",]$second_max_val,))
 
-      cat(paste0("\033[",msg_col,"m","Across animals, the top two sampling rates are:","\033[0m\n"))
+      cat(paste0("\033[",msg_col,"m","Across animals, the top sampling rate(s) are:","\033[0m\n"))
       cat(paste0("\033[",msg_col,"m","1. ",most_freq_all," s"," (",most_freq_all_val,"% GPS fixes)\033[0m\n"))
-      cat(paste0("\033[",msg_col,"m","2. ",next_most_freq_all," s"," (",next_most_freq_all_val,"% GPS fixes)\033[0m\n"))
+
+      if(!is.na(next_most_freq_all)){
+        cat(paste0("\033[",msg_col,"m","2. ",next_most_freq_all," s"," (",next_most_freq_all_val,"% GPS fixes)\033[0m\n"))
+      }
       cat(rep(" ",  getOption("width")), "\n", sep = "")
 
       # between animal top two rates - not a good idea to summarise all the data for big data!
@@ -421,24 +424,29 @@ assign_rates2 <- function(data, by = NULL,
       ############ finally, if any fixes were above the max rate expected (i.e. gaps)
       # df = if not length zero will be the extra rates above the max rate specified
 
-      if(nrow(df)>0){
-        cat(paste0("\033[",msg_col,"m","Some time steps detected beyond the max likely rate (",mr," s), i.e. gaps?\033[0m\n"))
+      if(!is.null(df)){
+        if(nrow(df)>0){
+          cat(paste0("\033[",msg_col,"m","Some time steps detected beyond the max likely rate (",mr," s), i.e. gaps?\033[0m\n"))
 
-        bad_f = rowSums(df[-1])
-        tot_f = sum(rates_all_anim$all_anim)
+          bad_f = rowSums(df[-1])
+          tot_f = sum(rates_all_anim$all_anim)
 
-        cat(paste0("\033[",msg_col,"m - ",sprintf("%.2f",(bad_f / tot_f)*100),"% fixes above the max rate\033[0m\n"))
+          cat(paste0("\033[",msg_col,"m - ",sprintf("%.2f",(bad_f / tot_f)*100),"% fixes above the max rate\033[0m\n"))
 
-        # highest proportion for:
-        high = names(which.max(rates_norm[nrow(rates_norm),][-1]))
-        w = names(rates_norm[nrow(rates_norm),][-1]) %in% high
-        this = rates_norm[nrow(rates_norm),][-1][w]
+          # highest proportion for:
+          high = names(which.max(rates_norm[nrow(rates_norm),][-1]))
+          w = names(rates_norm[nrow(rates_norm),][-1]) %in% high
+          this = rates_norm[nrow(rates_norm),][-1][w]
 
-        cat(paste0("\033[",msg_col,"m - Animal: ",names(this), " has the greatest percentage (",sprintf("%.2f",this),"%) fixes above the max rate\033[0m\n"))
+          cat(paste0("\033[",msg_col,"m - Animal: ",names(this), " has the greatest percentage (",sprintf("%.2f",this),"%) fixes above the max rate\033[0m\n"))
 
+        } else{
+          cat(paste0("\033[",msg_col,"m - No fixes detected beyond the max rate specified\033[0m\n"))
+        }
       } else{
         cat(paste0("\033[",msg_col,"m - No fixes detected beyond the max rate specified\033[0m\n"))
       }
+
 
     }
 

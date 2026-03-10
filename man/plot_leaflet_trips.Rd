@@ -80,7 +80,7 @@ then the selection reverts to "All" for the next bird chosen to avoid crashes. A
 of "TagID", "start", "end" for basic information of start and end dates of the animal's
 deployment, and "dur.days","dur.days.mon" for the total time span studied (end minus start), and
 the total period within that span where the tag was considered "actively" monitoring, based on selections
-of gapsections in \code{clean_GPS} or \code{gapsection}; the function \code{tabulate_history} is used
+of gapsections in \code{clean_track} or \code{gapsection}; the function \code{tabulate_history} is used
 for this purpose, and can be run as a standalone function outside this routine. A further tab
 \strong{"Likely sampling rates"} uses another function \code{assign_rates} to produce a tabulation of
 most likely sampling rates of animals, using hard-coded choices between 10s and 5 hours+.
@@ -110,7 +110,7 @@ p4 <- 32631
 indata <- yourdata # data.frame with a minimum of columns named TagID, DateTime, longitude, latitude
 indata <- Track(indata) # optional to convert to in-house class (most functions will still run on non track data but generic S3 methods will not be available for plot and summary)
 
-data_in <- indata \%>\% clean_GPS(.,speedfilt = TRUE, drop = FALSE) \%>\%
+data_in <- indata \%>\% clean_track(.,speedfilt = TRUE, drop = FALSE) \%>\%
   define_trips(method="rect", lls = c(-3.2, 54.0553,-3.1689, 54.0437), p4s = p4)
 
 # get trip summary

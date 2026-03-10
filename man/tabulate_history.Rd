@@ -14,7 +14,7 @@ If "year" is chosen and year is not in the data, then this is added via \code{lu
 }
 \value{
 A \code{tbl} of TagID, start, end and number of fixes, duration (end minus start) and duration of monitoring,
-using gapsections as determined through the user's selection earlier in the process e.g. \code{clean_GPS}. This
+using gapsections as determined through the user's selection earlier in the process e.g. \code{clean_track}. This
 function is also used in \code{plot_leaflet_trips} for one of the tabs in the Shiny app.
 }
 \description{

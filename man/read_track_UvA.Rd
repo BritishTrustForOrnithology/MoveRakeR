@@ -32,7 +32,7 @@ with the the other defaulting to NULL. NOTE: THE FUNCTION WILL RETURN AN ERROR I
 
 \item{dropsat}{Logical defaults to FALSE. This indicates whether to drop GPS fixes with satellites below
 the \emph{dropsats} threshold. It is suggested the user do not change these
-from FALSE but instead use the function \code{\link{clean_GPS}}.}
+from FALSE but instead use the function \code{\link{clean_track}}.}
 
 \item{dropsats}{Numeric value indicating a threshold for satellite retention.}
 
@@ -56,7 +56,7 @@ outside the functions if they so wish anyway. Argument Defaults to BNG using eps
 
 \item{flt_switch.}{logical argument, set to FALSE whether to retain
 Movebank data erroneous flt_switch values, instead being dealt with in the
-\code{\link{clean_GPS}} function.}
+\code{\link{clean_track}} function.}
 }
 \value{
 The final data outputted for individual animals is a \code{Track and data.frame} object of 29 variables for each
@@ -118,7 +118,7 @@ between fixes, along with a "dt" time difference (secs) and distance (m) between
 fixes.
 
 There are other arguments included in this function for cleaning, but these have
-been transferred to the function \code{\link{clean_GPS}} function although they
+been transferred to the function \code{\link{clean_track}} function although they
 are retained here are set to FALSE (see Arguments).
 }
 \examples{

@@ -131,7 +131,7 @@
 #' to \code{Track} data using the \code{retrieve_boots} function that adds an additional column of 'boot'
 #' in a stacked dataset across all animals.
 #'
-#' @seealso [MoveRakeR::clean_GPS], [MoveRakeR::gap_section], [MoveRakeR::Track2move], [MoveRakeR::progress_estimated2]
+#' @seealso [MoveRakeR::clean_track], [MoveRakeR::gap_section], [MoveRakeR::Track2move], [MoveRakeR::progress_estimated2]
 #'
 #' @examples
 #'
@@ -141,7 +141,7 @@
 #' p4 <- sf::st_crs((paste("+proj=laea +lon_0=", ColLon," +lat_0=", ColLat, " +units=m", sep="")))
 #' data <- yourdata # GPS data with tagID, DateTime, longitude and latitude named columns
 #'
-#' indata <- data %>% clean_GPS(speedfilt = TRUE, drop = FALSE) %>%
+#' indata <- data %>% clean_track(speedfilt = TRUE, drop = FALSE) %>%
 #'   define_trips(method="rect", lls = c(-3.2, 54.0553,-3.1689, 54.0437), p4s = p4)
 #'
 #' # test of rounding and sequencing approaches

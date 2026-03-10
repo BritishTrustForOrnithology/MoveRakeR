@@ -154,7 +154,7 @@ indata <- Track(indata) # optional to convert to in-house class (most functions 
 p4 <- 3035
 
 # With a very basic rectangle around the colony for trips
-indata <- indata \%>\% clean_GPS() \%>\%
+indata <- indata \%>\% clean_track() \%>\%
   define_trips(method="rect", plot=TRUE,lls = c(-3.2, 54.0553,-3.1689, 54.0437), p4s = p4)
 
 ### European shape as an example

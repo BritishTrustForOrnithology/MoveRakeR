@@ -123,5 +123,5 @@ attr(data_with_rates[[2]],"plot") # the extended list slot [[2]] has the plot at
 
 }
 \seealso{
-\link{assign_rates}, \link{clean_GPS}, \link{rake}
+\link{assign_rates}, \link{clean_track}, \link{rake}
 }
