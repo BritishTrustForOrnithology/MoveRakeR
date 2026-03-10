@@ -44,7 +44,7 @@
 #'
 #' @examples
 #'
-#' indata <- data_in %>% clean_GPS(speed_filt = TRUE, drop = FALSE) %>%
+#' indata <- data_in %>% clean_track(speed_filt = TRUE, drop = FALSE) %>%
 #'  define_trips(method="rect", lls = c(-3.2, 54.0553,-3.1689, 54.0437))
 #'
 #' # additional data may have been added to the Track object
