@@ -162,7 +162,7 @@ p4 <- sf::st_crs((paste("+proj=laea +lon_0=", ColLon," +lat_0=", ColLat, " +unit
 library(dplyr)
 data <- get(load("Y:/R packages/BTOTTdata/data/LBBGWalB201416.RData"))
 data <- TrackMultiStack2Track(data, rename = FALSE)
-indata <- data \%>\% clean_GPS(speed_filt = TRUE, drop = FALSE) \%>\%
+indata <- data \%>\% clean_track(speed_filt = TRUE, drop = FALSE) \%>\%
   define_trips(method="rect", lls = c(-3.2, 54.0553,-3.1689, 54.0437), p4s = p4)
 
 ######################

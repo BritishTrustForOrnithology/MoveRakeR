@@ -84,7 +84,7 @@ plot(Europe_sf$geometry)
 # accurately label non-estuarine / riverine locations as terrestrial onshore
 
 # bird data, e.g.
-data = data \%>\% clean_GPS(data) \%>\% offshore(use_crs_shape = TRUE, shape = Europe_sf, crop = TRUE, buffer_extent = 10000)
+data = data \%>\% clean_track(data) \%>\% offshore(use_crs_shape = TRUE, shape = Europe_sf, crop = TRUE, buffer_extent = 10000)
 
 plot_leaflet(data)
 

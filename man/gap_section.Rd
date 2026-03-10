@@ -22,7 +22,7 @@ The argument \code{GAP} here is the cut-off i.e. temporal hiatus between two
 consecutive GPS fixes, which defaults to 28800 seconds, although note the tolerance parameter will be incorporated if greater than zero.
 This is a subjective choice for the user, and will depend also on GPS sampling
 resolution. \code{GAP} is also used to defined \strong{gapsections} in the data,
-that are sequentially labelled. Also note that in \code{\link{clean_GPS}}
+that are sequentially labelled. Also note that in \code{\link{clean_track}}
 gap sections (bursts) of fixes of length = 1 are by default EXCLUDED, by the \code{drop_single_gap} argument,
 see below, but this can be overridden with \code{drop_single_gap = FALSE}. If a precise GAP is needed with no tolerance,
 set tol to 0. Units are in seconds.}
@@ -38,7 +38,7 @@ temporal filter. This replaces the previous 'drop' argument in MoveRakeR <1.0.2.
 \item{verbose}{logical argument as to whether detailed information processing of the function
 should be displayed, defaults to TRUE.}
 
-\item{attr}{If TRUE gives attributes to the data output for arguments used; this is set to FALSE when used inside clean_GPS().}
+\item{attr}{If TRUE gives attributes to the data output for arguments used; this is set to FALSE when used inside clean_track().}
 }
 \value{
 The function returns a tibble format with an additional \code{Track} class.
@@ -46,7 +46,7 @@ Additional columns in the objects are also returned:
 including: \strong{dt}, time difference (secs) between consecutive GPS fixes,
 \strong{gap}, a binary (1,0) for fixes where a gap was identified and \strong{gapsec}
 as a numeric integer of sequentially-labelled gapsection strings of telemetry fixes. Note these
-columns are overwritten if gapsections have already been defined in \code{\link{clean_GPS}} or
+columns are overwritten if gapsections have already been defined in \code{\link{clean_track}} or
 \code{gap_section}.
 }
 \description{
@@ -63,7 +63,7 @@ an additional column \code{gapsec}. This allows further manipulation such as use
 analyses, for example making sure that periods when tags may not have been recording, e.g. due to
 low battery are excluded from consideration, e.g. speeds, plotting etc.
 
-\code{gap_section} code is carried out directly within the \code{\link{clean_GPS}} function,
+\code{gap_section} code is carried out directly within the \code{\link{clean_track}} function,
 so this duplication as a standalone function allows the user to redefine gaps should they so
 wish.
 }
@@ -75,17 +75,17 @@ db <- RODBC::odbcConnect("GPS") # ODBC
 
 ## One bird
 dataUvA_one <- read_track_UvA('1', "2016-06-01 13:53:50","2016-07-15 09:17:14") \%>\% # replace '1' with TagID real name
-  clean_GPS(GAP = 28800, tol = 0) \%>\% gap_section(GAP = 300, tol = 0.4, drop_single_gap = TRUE)
+  clean_track(GAP = 28800, tol = 0) \%>\% gap_section(GAP = 300, tol = 0.4, drop_single_gap = TRUE)
 
 TagIDUvA = c('1', '2', '3')
 start = c("2016-06-01 13:53:50", "2016-06-15 12:22:13", "2016-06-05 08:07:23")
 end = c("2016-07-15 09:17:14", "2016-07-20 01:08:58", "2016-07-18 14:22:45")
 dataUvA_many <- read_track_UvA(TagIDUvA, start=start, end=end)
 
-dataUvA_2 <- clean_GPS(dataUvA, GAP = 450, tol = 0, Thres = 30, drop_single_gap = TRUE)
+dataUvA_2 <- clean_track(dataUvA, GAP = 450, tol = 0, Thres = 30, drop_single_gap = TRUE)
 dataUvA_3 <- gap_section(dataUvA, GAP = 450, tol = 0, drop_single_gap = TRUE)
 
 }
 \seealso{
-\link{clean_GPS}, \link{sub_samp}
+\link{clean_track}, \link{sub_samp}
 }

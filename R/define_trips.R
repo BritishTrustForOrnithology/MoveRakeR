@@ -91,9 +91,9 @@
 #' @param keep_extra_row Logical defaults to TRUE for keeping the extra row for trip statistics,
 #' if a bird comes back to the colony and leaves again before registering a second fix there.
 #' @param new_after_gap Logical. Whether to start a new trip after a \emph{"gap"} in the
-#' date-time telemetry record; gaps are initially determined through the function \code{\link{clean_GPS}}
+#' date-time telemetry record; gaps are initially determined through the function \code{\link{clean_track}}
 #' and can be set there to any length defined by the user. Should new gaps be decided upon after
-#' \code{clean_GPS} then function \code{\link{gap_section}} can be used to re-define gapsections.
+#' \code{clean_track} then function \code{\link{gap_section}} can be used to re-define gapsections.
 #' The issue here is related to potentially \strong{incomplete} trips when the tag may stop recording
 #' for some reason, e.g. low battery, but where an animal can still be away
 #' on a trip after the gap (i.e. did it come back and leave again?). This argument is used to
@@ -138,7 +138,7 @@
 #' integer values delineating sequentially ordered trips for each individual TagID based on the options chosen.
 #' A value of zero is returned for animals inside the defined central place area.
 #'
-#' @seealso [MoveRakeR::clean_GPS], [MoveRakeR::trip_stats], [MoveRakeR::add_cag_trips]
+#' @seealso [MoveRakeR::clean_track], [MoveRakeR::trip_stats], [MoveRakeR::add_cag_trips]
 #'
 #' @examples
 #'
@@ -435,7 +435,7 @@ define_trips <- function(data, use_current_by = FALSE, by = NULL, birdyear = TRU
     data$Beh <- ifelse(data$Col != 1,"Trip","Colony")
 
     if(!exists("gap", where = data)){
-      warning("No gapsections defined, likely clean_GPS() was not used: assuming NO GAPS in the telemetry datetime record")
+      warning("No gapsections defined, likely clean_track() was not used: assuming NO GAPS in the telemetry datetime record")
       data$gap <- 0
       data$gapsec <- 1
 

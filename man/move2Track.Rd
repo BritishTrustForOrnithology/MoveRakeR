@@ -39,13 +39,13 @@ with the the other defaulting to NULL. Multiple periods per TagID are also permi
 
 \item{dropsat}{Logical defaults to FALSE. This indicates whether to drop GPS fixes with satellites below
 the \emph{dropsats} threshold. It is suggested the user do not change these
-from FALSE but instead use the function \code{\link{clean_GPS}}.}
+from FALSE but instead use the function \code{\link{clean_track}}.}
 
 \item{dropsats}{Numeric value indicating a threshold for satellite retention.}
 
 \item{flt_switch}{logical argument, set to FALSE whether to retain
 Movebank data erroneous flt_switch values, instead being dealt with in the
-\code{\link{clean_GPS}} function.}
+\code{\link{clean_track}} function.}
 
 \item{mindata}{This specifies a minimum number of rows of data for the individual
 to be retained and is a form of cleaning, but here is retained to exclude reading

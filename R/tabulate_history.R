@@ -7,7 +7,7 @@
 #' @param by Additional vector of characters referring to other levels to evaluate a summary by.
 #' If "year" is chosen and year is not in the data, then this is added via \code{lubridate::year()}.
 #' @return A \code{tbl} of TagID, start, end and number of fixes, duration (end minus start) and duration of monitoring,
-#' using gapsections as determined through the user's selection earlier in the process e.g. \code{clean_GPS}. This
+#' using gapsections as determined through the user's selection earlier in the process e.g. \code{clean_track}. This
 #' function is also used in \code{plot_leaflet_trips} for one of the tabs in the Shiny app.
 #'
 #' @examples
@@ -24,7 +24,7 @@ tabulate_history <- function(data, by = NULL){
 
   # active monitoring, as assessed through gapsections
   if(!exists("gapsec",data)){
-    warning("Needs gapsec column from clean_GPS or gap_section functions (active monitoring), assuming no gaps in the record")
+    warning("Needs gapsec column from clean_track or gap_section functions (active monitoring), assuming no gaps in the record")
     data$gapsec <- 1 # i.e. will just be the same as Dur_days
 
   }

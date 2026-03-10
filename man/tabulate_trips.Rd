@@ -88,7 +88,7 @@ p4 <- sf::st_crs((paste("+proj=laea +lon_0=", ColLon," +lat_0=", ColLat, " +unit
 indata <- yourdata # data.frame with a minimum of columns named TagID, DateTime, longitude, latitude
 indata <- Track(indata) # optional to convert to in-house class (most functions will still run on non track data but generic S3 methods will not be available for plot and summary)
 
-trip_test <- indata \%>\% clean_GPS() \%>\% # 8 hour gapsections by default
+trip_test <- indata \%>\% clean_track() \%>\% # 8 hour gapsections by default
   define_trips(method="rect", lls = c(-3.2, 54.0553,-3.1689, 54.0437), p4s = p4) \%>\%
   trip_stats()
 

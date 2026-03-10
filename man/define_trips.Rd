@@ -85,9 +85,9 @@ the colony, for instance by other methods such as visual re-sighting surveys, ca
 if a bird comes back to the colony and leaves again before registering a second fix there.}
 
 \item{new_after_gap}{Logical. Whether to start a new trip after a \emph{"gap"} in the
-date-time telemetry record; gaps are initially determined through the function \code{\link{clean_GPS}}
+date-time telemetry record; gaps are initially determined through the function \code{\link{clean_track}}
 and can be set there to any length defined by the user. Should new gaps be decided upon after
-\code{clean_GPS} then function \code{\link{gap_section}} can be used to re-define gapsections.
+\code{clean_track} then function \code{\link{gap_section}} can be used to re-define gapsections.
 The issue here is related to potentially \strong{incomplete} trips when the tag may stop recording
 for some reason, e.g. low battery, but where an animal can still be away
 on a trip after the gap (i.e. did it come back and leave again?). This argument is used to
@@ -291,5 +291,5 @@ movement from archival and satellite tags. \emph{PLoS ONE}, \strong{4}(10).
 \url{http://dx.plos.org/10.1371/journal.pone.0007324}.
 }
 \seealso{
-\link{clean_GPS}, \link{trip_stats}, \link{add_cag_trips}
+\link{clean_track}, \link{trip_stats}, \link{add_cag_trips}
 }

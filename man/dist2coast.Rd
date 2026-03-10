@@ -88,7 +88,7 @@ Europe_sf = st_crop(Europe, xmin = -25, ymin=32, xmax=35, ymax=70)
 Europe_sf <- sf::st_transform(Europe_sf, 3035)
 plot(Europe_sf$geometry)
 
-data = data \%>\% clean_GPS() \%>\% dist2coast(use_crs_shape = TRUE, shape = Europe_sf,
+data = data \%>\% clean_track() \%>\% dist2coast(use_crs_shape = TRUE, shape = Europe_sf,
     crop = TRUE, plot = TRUE, buffer_extent = 50000, p4s = 3035)
 
 }
