@@ -376,6 +376,8 @@ tag_timeline <- function(data, plot = FALSE, return_plot = TRUE, overlaps = TRUE
     }
 
 
+  } else{
+    bird_overlap <- NA
   }
 
   # ---- 5. Return outputs ----
