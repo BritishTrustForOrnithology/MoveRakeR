@@ -1,238 +1,316 @@
-#' Summarise \code{Track}, \code{TrackStack} and \code{TrackMultiStack} class objects
+#' Summarise Track Data by Animal
 #'
-#' A function using the S3 \code{summary} method for \code{Track-family} objects,
-#' that gives a simple summary using \code{base::summary}.
+#' A function using the S3 `summary` method for `Track` objects to summarise GPS tracking data
 #'
-#' The \code{summary} gives basic information on the start and end times available for each TagID, the
-#' number of GPS fixes, and the x and y latitude and longitude WGS84 range of the data.
-#' \code{summary} provides easy indication as to whether data match
+#' Summaries of GPS tracking data are generated for individual animals, with
+#' a combined population-level row. The `summary` function supports simple summaries,
+#' full summaries, and extended summaries including all numeric variables.
+#' Gap summaries (time differences between consecutive fixes) are included.
+#'
+#' At very least the \code{summary} gives basic information on the start and end times available for each TagID, the
+#' number of GPS fixes, and the x and y latitude and longitude WGS84 range of the data. Missing DateTimes are
+#' counts per animal are given as n_na_DT, with further prop_na_lat and prop_na_lon for any NA lat long data.
+#' This \code{summary} provides an easy indication as to whether data match
 #' the user's expectation, such as upon read in from databases, or after manipulation stages,
 #' e.g. checking the date ranges per animal are as expected if start and end times were specified in
 #' \code{\link{read_track_MB}} and \code{\link{read_track_UvA}}.
 #'
 #' @rdname summary
-#' @param data A \code{Track}, \code{TrackStack}, or \code{TrackMultiStack} object.
-#' @return An object of class \code{TrackSummary}, \code{TrackSummaryStack} or \code{TrackSummaryMultiStack}, containing
-#' \code{base::summary} information for all columns in the \code{Track} data.frame objects. Additional slots
-#' of dimension of the data \code{dim_data}, number of animals, \code{animals}, years included for
-#' animals, \code{years}, and specific TagIDs extracted, \code{TagIDs}.
-#' @param Simplify Logical defaulting to TRUE for whether to simplify the data to only
-#' core data columns of: "TagID", "DateTime", "longitude", "latitude".
-#' @param extra_vars for a concatenation of column names that should be retained in simplification
-#' of the Track data, in addition to the core columns specified; not this argument is only relevant if
-#' simplify = TRUE.
-#' @param simple_view Logical (default = TRUE) for if just a simple table of fixes, datetime range,
-#' number of fixes and long-lat range is required.
-#' @param round_out whether to round x and y ranges and durations to nearest 'round_val'.
-#' @param round_val A numeric value for the precision of rounding for x and y ranges and durations, defaults to 2L.
-#' @param verbose Boolean defaulting to TRUE for if messaging is desired.
+#' @param data A data frame or tibble containing at least the columns:
+#'   \code{TagID} (character/factor), \code{DateTime} (POSIXct),
+#'   \code{latitude} and \code{longitude} (numeric). Extra numeric columns
+#'   are optionally included in \code{full_plus} mode.
+#' @param stat Character. "mean" or "median". Determines how central tendency
+#'   is computed for numeric summaries.
+#' @param dispersion Character. "MAD" or "IQR". Determines the dispersion measure
+#'   used with median statistics.
+#' @param digits Integer. Number of decimal places for formatted numeric output.
+#' @param mode Character. One of "simple", "full", "full_plus".
+#'   - "simple": basic start/end/n_fixes and bounding box.
+#'   - "full": includes gaps, min/max, ± summaries for latitude/longitude.
+#'   - "full_plus": adds all other numeric variables with ± summaries,
+#'     and optionally ranges via \code{add_ranges}.
+#' @param add_ranges Logical. If TRUE and \code{mode = "full_plus"}, adds
+#'   min and max columns for all extra numeric variables.
+#' @param gap_units Character. One of "seconds", "minutes" or "hours" controlling the returned
+#' format of min_dt, max_dt, modal_dt and dt columns.
+#' @param ... Additional arguments (currently unused).
 #'
+#' @return A tibble of class \code{TrackSummary} with one row per TagID
+#'   plus a combined "ALL" row. Columns include:
+#'   \describe{
+#'     \item{n_records, n_fixes, n_na_DT}{Counts of records and missing DateTime.}
+#'     \item{start, end, dur}{Start, end, and duration of tracking period.}
+#'     \item{gap, min_gap, max_gap, modal_gap}{Gap summaries in seconds.}
+#'     \item{longitude, latitude}{± SD or ± MAD/IQR formatted summaries.}
+#'     \item{xmin, xmax, ymin, ymax, area}{Spatial extents.}
+#'     \item{prop_na_DT, prop_na_lat, prop_na_lon}{Proportion of missing values.}
+#'     \item{Extra numeric columns}{Formatted ± summaries, and optionally min/max ranges.}
+#'   }
+#'   The gap column always appears before longitude and latitude.
 #' @examples
-#' indata <- yourdata # data.frame with a minimum of columns named TagID, DateTime, longitude, latitude
-#' data <- Track(indata) # optional to convert to in-house class (most functions will still run on non track data but generic S3 methods will not be available for plot and summary)
-#'
-#' summary(data)
-#'
+#' \dontrun{
+#' summary2(data, mode = "full_plus", add_ranges = TRUE, stat = "median", dispersion = "IQR")
+#' }
 #' @export
 #' @method summary Track
-summary.Track <- function(object, Simplify = TRUE, extra_vars = NULL, simple_view = TRUE, round_out = TRUE, round_val = 2, verbose = TRUE){
+summary.Track <- function(data,
+                          stat = c("mean", "median"),
+                          dispersion = c("MAD", "IQR"),
+                          digits = 2,
+                          mode = c("full", "simple", "full_plus"),
+                          add_ranges = FALSE,
+                          gap_units = c("seconds", "minutes", "hours"),
+                          ...) {
 
-  data <- object # in keeping with name of first arg in generic summary method
+  stat       <- match.arg(stat)
+  dispersion <- match.arg(dispersion)
+  mode       <- match.arg(mode)
+  gap_units  <- match.arg(gap_units)
 
-  if(!is(data, "Track")){
-    stop("Data are not a valid Track, TrackStack or TrackMultiStack object")
+  # ------------------------------------------- #
+  # Conversion factor for gap units
+  # ------------------------------------------- #
+  gap_factor <- switch(gap_units,
+                       seconds = 1,
+                       minutes = 60,
+                       hours   = 3600)
+
+  # ------------------------------------------- #
+  # Internal summary formatter
+  # ------------------------------------------- #
+  .format_summary <- function(x, stat, dispersion, digits) {
+    x <- x[!is.na(x)]
+    if (length(x) == 0) return(NA_character_)
+    if (stat == "mean") {
+      sprintf(paste0("%.", digits, "f ± %.", digits, "f"),
+              mean(x), sd(x))
+    } else {
+      disp <- if (dispersion == "MAD") mad(x) else IQR(x)
+      sprintf(paste0("%.", digits, "f ± %.", digits, "f"),
+              median(x), disp)
+    }
   }
 
-  if(Simplify){
-    data <- simplify(data, keep = extra_vars)
+  # ------------------------------------------- #
+  # Helper for modal gap
+  # ------------------------------------------- #
+  .modal_gap <- function(x, tol = 1){
+    x <- as.numeric(x)
+    x <- x[!is.na(x)]
+    if (length(x) == 0) return(NA_real_)
+    x_round <- round(x / tol) * tol
+    ux <- unique(x_round)
+    ux[which.max(tabulate(match(x_round, ux)))]
   }
 
-  .summary_track <- function(data){
-    # sumarise animal through generic base::summary data add a couple of attributes
+  # ------------------------------------------- #
+  # Helper to format numeric columns globally
+  # ------------------------------------------- #
+  .format_numeric <- function(df, digits){
+    num_cols <- vapply(df, is.numeric, logical(1))
+    num_cols <- num_cols & !vapply(df, inherits, logical(1), what = c("POSIXt", "difftime"))
+    df[num_cols] <- lapply(df[num_cols], function(x) {
+      x_formatted <- x
+      x_formatted[is.finite(x)] <- as.numeric(sprintf(paste0("%.", digits, "f"), x[is.finite(x)]))
+      x_formatted
+    })
+    df
+  }
 
-    .risub <- function(x,n){substring(x,nchar(x)-n+1)}
+  # ------------------------------------------- #
+  # Safe min/max functions
+  # ------------------------------------------- #
+  safe_min <- function(x){
+    x <- x[!is.na(x)]
+    if(length(x)==0) return(NA_real_)
+    min(x)
+  }
+  safe_max <- function(x){
+    x <- x[!is.na(x)]
+    if(length(x)==0) return(NA_real_)
+    max(x)
+  }
 
-    if(simple_view == FALSE){
-      data <- lapply(data, function(x) subset(x, select = -TagID))
-      dataout <- lapply(data,summary.data.frame)
+  # ------------------------------------------- #
+  # SIMPLE MODE
+  # ------------------------------------------- #
+  if(mode == "simple"){
+    per_animal <- data %>%
+      dplyr::group_by(TagID) %>%
+      dplyr::summarise(
+        n_fixes = dplyr::n_distinct(DateTime),
+        start = min(DateTime, na.rm = TRUE),
+        end   = max(DateTime, na.rm = TRUE),
+        xmin = min(longitude, na.rm = TRUE),
+        xmax = max(longitude, na.rm = TRUE),
+        ymin = min(latitude, na.rm = TRUE),
+        ymax = max(latitude, na.rm = TRUE),
+        .groups = "drop"
+      )
+    all_row <- per_animal %>%
+      dplyr::summarise(
+        TagID = "ALL",
+        dplyr::across(-TagID, min, na.rm = TRUE)
+      )
+    out <- dplyr::bind_rows(per_animal, all_row)
+    class(out) <- c("TrackSummary", class(out))
+    attr(out, "gap_units") <- gap_units
+    return(out)
+  }
+
+  # ------------------------------------------- #
+  # Identify dynamic numeric cols
+  # ------------------------------------------- #
+  core_numeric <- c("latitude", "longitude")
+  extra_numeric <- if(mode=="full_plus"){
+    data %>% dplyr::select(where(is.numeric)) %>% dplyr::select(-any_of(core_numeric)) %>% names()
+  } else character(0)
+
+  # ------------------------------------------- #
+  # PER-ANIMAL SUMMARY
+  # ------------------------------------------- #
+  per_animal <- data %>%
+    dplyr::group_by(TagID) %>%
+    dplyr::summarise(
+      n_records = dplyr::n(),
+      n_fixes   = dplyr::n_distinct(DateTime),
+      n_na_DT   = sum(is.na(DateTime)),
+
+      start = min(DateTime, na.rm = TRUE),
+      end   = max(DateTime, na.rm = TRUE),
+      dur   = end - start,
+
+      xmin = safe_min(longitude),
+      xmax = safe_max(longitude),
+      ymin = safe_min(latitude),
+      ymax = safe_max(latitude),
+      area = (xmax - xmin) * (ymax - ymin),
+
+      prop_na_DT  = sum(is.na(DateTime)) / n_records,
+      prop_na_lat = sum(is.na(latitude)) / n_records,
+      prop_na_lon = sum(is.na(longitude)) / n_records,
+
+      gaps = list(diff(sort(DateTime[!is.na(DateTime)]))),
+      min_gap = safe_min(unlist(gaps))/gap_factor,
+      max_gap = safe_max(unlist(gaps))/gap_factor,
+      modal_gap = .modal_gap(unlist(gaps))/gap_factor,
+
+      longitude = .format_summary(longitude, stat, dispersion, digits),
+      latitude  = .format_summary(latitude, stat, dispersion, digits),
+      gap       = .format_summary(as.numeric(unlist(gaps))/gap_factor, stat, dispersion, digits),
+
+      .groups = "drop"
+    ) %>% dplyr::select(-gaps)
+
+  # ------------------------------------------- #
+  # EXTRA NUMERIC (full_plus)
+  # ------------------------------------------- #
+  if(length(extra_numeric)>0){
+    extra <- data %>%
+      dplyr::group_by(TagID) %>%
+      dplyr::summarise(
+        dplyr::across(all_of(extra_numeric), ~ .format_summary(.x, stat, dispersion, digits), .names="{.col}"),
+        .groups="drop"
+      )
+    per_animal <- dplyr::left_join(per_animal, extra, by="TagID")
+    if(add_ranges){
+      ranges <- data %>%
+        dplyr::group_by(TagID) %>%
+        dplyr::summarise(
+          dplyr::across(all_of(extra_numeric),
+                        list(min = ~ safe_min(.x),
+                             max = ~ safe_max(.x))),
+          .groups="drop"
+        )
+      per_animal <- dplyr::left_join(per_animal, ranges, by="TagID")
     }
+  }
 
-    dimdata <- data.frame(do.call('rbind',lapply(data,function(x){dim(x)[1]})))
-    names(dimdata)[c(1)] <- c("n_fixes")
-    ddrange <- data.frame(do.call('rbind',lapply(data,function(x){as.character(range(x$DateTime))})))
-    dimdata$start <- datetime(ddrange$X1)
-    dimdata$end <- datetime(ddrange$X2)
+  # ------------------------------------------- #
+  # ALL ROW
+  # ------------------------------------------- #
+  all_gaps <- unlist(lapply(split(data$DateTime, data$TagID),
+                            function(x) diff(sort(x[!is.na(x)]))))
 
-    if(round_out){
-      dimdata$dur <- round(difftime(dimdata$end,dimdata$start, unit = 'days'),round_val)
-    } else{
-      dimdata$dur <- difftime(dimdata$end,dimdata$start, unit = 'days')
+  all_row <- data %>% dplyr::summarise(
+    TagID = "ALL",
+    n_records = n(),
+    n_fixes = dplyr::n_distinct(DateTime),
+    n_na_DT = sum(is.na(DateTime)),
+    start = min(DateTime, na.rm = TRUE),
+    end   = max(DateTime, na.rm = TRUE),
+    dur   = end - start,
+    xmin = safe_min(longitude),
+    xmax = safe_max(longitude),
+    ymin = safe_min(latitude),
+    ymax = safe_max(latitude),
+    area = (xmax - xmin)*(ymax - ymin),
+    prop_na_DT  = mean(is.na(DateTime)),
+    prop_na_lat = mean(is.na(latitude)),
+    prop_na_lon = mean(is.na(longitude)),
+    longitude = .format_summary(longitude, stat, dispersion, digits),
+    latitude  = .format_summary(latitude, stat, dispersion, digits),
+    gap       = .format_summary(as.numeric(all_gaps)/gap_factor, stat, dispersion, digits),
+    modal_gap = .modal_gap(all_gaps)/gap_factor,
+    min_gap   = safe_min(all_gaps)/gap_factor,
+    max_gap   = safe_max(all_gaps)/gap_factor
+  )
+
+  if(length(extra_numeric)>0){
+    extra_all <- data %>% dplyr::summarise(
+      dplyr::across(all_of(extra_numeric), ~ .format_summary(.x, stat, dispersion, digits), .names="{.col}")
+    )
+    all_row <- dplyr::bind_cols(all_row, extra_all)
+    if(add_ranges){
+      extra_ranges_all <- data %>% dplyr::summarise(
+        dplyr::across(all_of(extra_numeric), list(min = ~ safe_min(.x), max = ~ safe_max(.x)))
+      )
+      all_row <- dplyr::bind_cols(all_row, extra_ranges_all)
     }
+  }
 
-    xrange <- data.frame(do.call('rbind',lapply(data,function(x){as.character(range(x$longitude, na.rm=TRUE))})))
-    yrange <- data.frame(do.call('rbind',lapply(data,function(x){as.character(range(x$latitude, na.rm=TRUE))})))
+  # ------------------------------------------- #
+  # Combine, format numeric, add units
+  # ------------------------------------------- #
+  out <- dplyr::bind_rows(per_animal, all_row)
+  out <- .format_numeric(out, digits)
+  class(out) <- c("TrackSummary", class(out))
+  attr(out, "gap_units") <- gap_units
 
-    #dimdata$xrange <- paste0("(",round(as.numeric(xrange$X1),2),", ", round(as.numeric(xrange$X2),2),")")
-    #dimdata$yrange <- paste0("(",round(as.numeric(yrange$X1),2),", ", round(as.numeric(yrange$X2),2),")")
-
-    if(round_out){
-      dimdata$xmin = round(as.numeric(xrange$X1),round_val)
-      dimdata$xmax = round(as.numeric(xrange$X2),round_val)
-
-      dimdata$ymin = round(as.numeric(yrange$X1),round_val)
-      dimdata$ymax = round(as.numeric(yrange$X2),round_val)
-    } else{
-      dimdata$xmin = as.numeric(xrange$X1)
-      dimdata$xmax = as.numeric(xrange$X2)
-
-      dimdata$ymin = as.numeric(yrange$X1)
-      dimdata$ymax = as.numeric(yrange$X2)
-    }
-
-    dimdata$TagID <- do.call('rbind',lapply(data, function(x) as.vector(unique(x$TagID))))[,1]
-    dimdata <- dimdata[order(dimdata$TagID),]
-
-    if(!is.null(extra_vars)){
-
-      for(i in 1:length(extra_vars)){
-
-        # check if numeric or integer
-        check_integer <- function(x){if(any(!x%%1 == 0)){FALSE} else{TRUE}}
-
-        if(is.numeric(data[[1]][names(data[[1]]) == extra_vars[i]][[1]])){
-
-          if(check_integer(data[[1]][names(data[[1]]) == extra_vars[i]][[1]]) == TRUE){
-
-            Ra <- do.call('rbind',
-                          lapply(data, function(x){
-                            range(x[names(x) == extra_vars[i]])
-                          }
-                          )
-            )
-
-            L <- do.call('rbind',
-                          lapply(data, function(x){
-                            length(unique(x[names(x) == extra_vars[i]])[[1]])
-
-                          }
-                          )
-            )
-
-            nm <- paste0("(",round(Ra[,1],2),", ",round(Ra[,2],2),", n=",L[,1],")")
-            dimdata <- cbind(dimdata, nm)
-            names(dimdata)[which(names(dimdata) == "nm")] <- paste0(extra_vars[i],"_range")
-
-          }
-
-          if(check_integer(data[[1]][names(data[[1]]) == extra_vars[i]][[1]]) == FALSE){
-
-            Ra <- do.call('rbind',
-                          lapply(data, function(x){
-                            range(x[names(x) == extra_vars[i]])
-                          }
-                          )
-            )
-            nm <- paste0("(",round(Ra[,1],2),", ",round(Ra[,2],2),")")
-            dimdata <- cbind(dimdata, nm)
-            names(dimdata)[which(names(dimdata) == "nm")] <- paste0(extra_vars[i],"_range")
-
-
-          }
-
-
-        } else{ # character, factor etc
-          Ra <- do.call('rbind',
-            lapply(data, function(x){
-              levs <- as.character(unique(x[names(x) == extra_vars[i]][[1]]))
-              if(length(levs) == 2){
-                stlis1 <- paste0(substr(levs[1],1,3),"~",.risub(levs[1],2))
-                stlis2 <- paste0(substr(levs[1],1,3),"~",.risub(levs[2],2))
-                stlis <- paste0(stlis1, ", ", stlis2)
-                paste0("<chr> ", length(levs), " levs: ", stlis)
-              } else
-                if(length(levs) > 2){
-                  stlis <- paste0(substr(levs[1],1,3),"~",.risub(levs[1],2), ", ...")
-                  paste0("<chr> ", length(levs), " levs: ", stlis)
-                }
-                else{
-                stlis <- paste0(substr(levs[1],1,3),"~",.risub(levs[1],2))
-                paste0("<chr> ", length(levs), " lev: ", stlis)
-              }
-
-             }
-            )
-          )
-
-          nm <- Ra[,1]
-          dimdata <- cbind(dimdata, nm)
-          names(dimdata)[which(names(dimdata) == "nm")] <- paste0(extra_vars[i],"_range")
-
-        }
-
-      }
-
-    }
-
-    if(!simple_view){
-      attributes(dataout)$dim_data <- dimdata
-      names(dataout) <- as.vector(do.call('rbind',lapply(data,function(x) unique(x$TagID)))[,1])
-
-      attributes(dataout)$animals <- length(data)
-      attributes(dataout)$years <- lapply(data,function(x){unique(as.numeric(substr(x$DateTime,1,4)))})
-      attributes(dataout)$TagIDs <- as.vector(do.call('rbind',lapply(data,function(x){unique(x$TagID)}))[,1])
-      return(dataout)
-    } else{
-      return(dimdata)
-    }
-
+  # Move gap before longitude
+  col_order <- names(out)
+  if(all(c("gap","longitude","latitude") %in% col_order)){
+    gap_idx <- which(col_order=="gap")
+    lon_idx <- which(col_order=="longitude")
+    col_order <- col_order[-gap_idx]
+    col_order <- append(col_order, "gap", after=lon_idx-1)
+    out <- out[, col_order]
   }
 
 
-  if(is_Track(data)){
-
-    # create list format of Track objects for consistent output with TrackStack
-    data2 <- list()
-    for(i in 1:length(unique(data$TagID))){
-      data2[i] <- list(subset(data,TagID == unique(data$TagID)[i]))
-    }
-    if(verbose){
-      message(paste0("Summary for ", length(data2)," Track objects (animals)"))
-    }
-    dataout <- .summary_track(data2)
-    class(dataout) <- append("TrackSummary",class(dataout))
-
-    return(dataout)
-  }
-
-  else if(is_TrackStack(data)){
-    if(verbose){
-      message(paste0("Summary for ", length(data)," Track objects (animals)"))
-    }
-    dataout <- .summary_track(data)
-    class(dataout) <- append("TrackSummaryStack",class(dataout))
-
-    return(dataout)
-
-  }
-
-  else if(is_TrackMultiStack(data)){
-
-    anikeep <- list()
-    for(j in 1:length(data)){
-      anikeep[[j]] <- length(data[[j]])
-    }
-
-    if(verbose){
-      message(paste0("Summary for ", length(data)," TrackStack objects (", paste(unlist(anikeep), collapse = ", "), " animals, repectively)"))
-    }
-
-    dataout <- lapply(data,.summary_track)
-    class(dataout) <- append("TrackSummaryMultiStack",class(dataout))
-
-    return(dataout)
-
-
-  }
-
-
+  out
 }
+
+#' @export
+print.TrackSummary <- function(x, n = 10, ...){
+  gap_units <- attr(x, "gap_units")
+  if(is.null(gap_units)) gap_units <- "seconds"
+
+  df <- as.data.frame(x) # ensure safe printing
+
+  # Add units to gap columns
+  for(col in c("gap","min_gap","max_gap","modal_gap")){
+    if(col %in% names(df)){
+      df[[col]] <- paste0(df[[col]], " (", gap_units, ")")
+    }
+  }
+
+  cat("TrackSummary object:\n")
+  cat(sprintf("Rows: %d, Columns: %d\n", nrow(df), ncol(df)))
+  cat(sprintf("Gap units: %s\n\n", gap_units))
+  print(utils::head(df, n = n), row.names = FALSE)
+  if(nrow(df) > n) cat(sprintf("\n... %d more rows\n", nrow(df) - n))
+  invisible(x)
+}
+

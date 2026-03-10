@@ -2,59 +2,82 @@
 % Please edit documentation in R/summary_Track.R
 \name{summary.Track}
 \alias{summary.Track}
-\title{Summarise \code{Track}, \code{TrackStack} and \code{TrackMultiStack} class objects}
+\title{Summarise Track Data by Animal}
 \usage{
 \method{summary}{Track}(
-  object,
-  Simplify = TRUE,
-  extra_vars = NULL,
-  simple_view = TRUE,
-  round_out = TRUE,
-  round_val = 2,
-  verbose = TRUE
+  data,
+  stat = c("mean", "median"),
+  dispersion = c("MAD", "IQR"),
+  digits = 2,
+  mode = c("full", "simple", "full_plus"),
+  add_ranges = FALSE,
+  gap_units = c("seconds", "minutes", "hours"),
+  ...
 )
 }
 \arguments{
-\item{Simplify}{Logical defaulting to TRUE for whether to simplify the data to only
-core data columns of: "TagID", "DateTime", "longitude", "latitude".}
+\item{data}{A data frame or tibble containing at least the columns:
+\code{TagID} (character/factor), \code{DateTime} (POSIXct),
+\code{latitude} and \code{longitude} (numeric). Extra numeric columns
+are optionally included in \code{full_plus} mode.}
 
-\item{extra_vars}{for a concatenation of column names that should be retained in simplification
-of the Track data, in addition to the core columns specified; not this argument is only relevant if
-simplify = TRUE.}
+\item{stat}{Character. "mean" or "median". Determines how central tendency
+is computed for numeric summaries.}
 
-\item{simple_view}{Logical (default = TRUE) for if just a simple table of fixes, datetime range,
-number of fixes and long-lat range is required.}
+\item{dispersion}{Character. "MAD" or "IQR". Determines the dispersion measure
+used with median statistics.}
 
-\item{round_out}{whether to round x and y ranges and durations to nearest 'round_val'.}
+\item{digits}{Integer. Number of decimal places for formatted numeric output.}
 
-\item{round_val}{A numeric value for the precision of rounding for x and y ranges and durations, defaults to 2L.}
+\item{mode}{Character. One of "simple", "full", "full_plus".
+\itemize{
+\item "simple": basic start/end/n_fixes and bounding box.
+\item "full": includes gaps, min/max, ± summaries for latitude/longitude.
+\item "full_plus": adds all other numeric variables with ± summaries,
+and optionally ranges via \code{add_ranges}.
+}}
 
-\item{verbose}{Boolean defaulting to TRUE for if messaging is desired.}
+\item{add_ranges}{Logical. If TRUE and \code{mode = "full_plus"}, adds
+min and max columns for all extra numeric variables.}
 
-\item{data}{A \code{Track}, \code{TrackStack}, or \code{TrackMultiStack} object.}
+\item{gap_units}{Character. One of "seconds", "minutes" or "hours" controlling the returned
+format of min_dt, max_dt, modal_dt and dt columns.}
+
+\item{...}{Additional arguments (currently unused).}
 }
 \value{
-An object of class \code{TrackSummary}, \code{TrackSummaryStack} or \code{TrackSummaryMultiStack}, containing
-\code{base::summary} information for all columns in the \code{Track} data.frame objects. Additional slots
-of dimension of the data \code{dim_data}, number of animals, \code{animals}, years included for
-animals, \code{years}, and specific TagIDs extracted, \code{TagIDs}.
+A tibble of class \code{TrackSummary} with one row per TagID
+plus a combined "ALL" row. Columns include:
+\describe{
+\item{n_records, n_fixes, n_na_DT}{Counts of records and missing DateTime.}
+\item{start, end, dur}{Start, end, and duration of tracking period.}
+\item{gap, min_gap, max_gap, modal_gap}{Gap summaries in seconds.}
+\item{longitude, latitude}{± SD or ± MAD/IQR formatted summaries.}
+\item{xmin, xmax, ymin, ymax, area}{Spatial extents.}
+\item{prop_na_DT, prop_na_lat, prop_na_lon}{Proportion of missing values.}
+\item{Extra numeric columns}{Formatted ± summaries, and optionally min/max ranges.}
+}
+The gap column always appears before longitude and latitude.
 }
 \description{
-A function using the S3 \code{summary} method for \code{Track-family} objects,
-that gives a simple summary using \code{base::summary}.
+A function using the S3 \code{summary} method for \code{Track} objects to summarise GPS tracking data
 }
 \details{
-The \code{summary} gives basic information on the start and end times available for each TagID, the
-number of GPS fixes, and the x and y latitude and longitude WGS84 range of the data.
-\code{summary} provides easy indication as to whether data match
+Summariies of GPS tracking data are generated for individual animals, with
+a combined population-level row. The \code{summary} function supports simple summaries,
+full summaries, and extended summaries including all numeric variables.
+Gap summaries (time differences between consecutive fixes) are included.
+
+At very least the \code{summary} gives basic information on the start and end times available for each TagID, the
+number of GPS fixes, and the x and y latitude and longitude WGS84 range of the data. Missing DateTimes are
+counts per animal are given as n_na_DT, with further prop_na_lat and prop_na_lon for any NA lat long data.
+This \code{summary} provides an easy indication as to whether data match
 the user's expectation, such as upon read in from databases, or after manipulation stages,
 e.g. checking the date ranges per animal are as expected if start and end times were specified in
 \code{\link{read_track_MB}} and \code{\link{read_track_UvA}}.
 }
 \examples{
-indata <- yourdata # data.frame with a minimum of columns named TagID, DateTime, longitude, latitude
-data <- Track(indata) # optional to convert to in-house class (most functions will still run on non track data but generic S3 methods will not be available for plot and summary)
-
-summary(data)
-
+\dontrun{
+summary2(data, mode = "full_plus", add_ranges = TRUE, stat = "median", dispersion = "IQR")
+}
 }
