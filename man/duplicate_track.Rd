@@ -13,6 +13,7 @@ duplicate_track(
   centroid_fun = median,
   quality_fun = mean,
   time_fun = mean,
+  use_dup_coords = FALSE,
   mode = c("resolve", "annotate", "detect"),
   annotate = FALSE,
   verbose = TRUE,
@@ -87,7 +88,7 @@ Duplicate resolution is performed in a fixed sequence of steps:
 \enumerate{
 \item Parallel temporal streams (overlapping time segments within TagID)
 \item Same DateTime with different coordinates
-\item Same coordinates with different DateTime
+\item Same coordinates with different DateTime, although this is not used by default
 \item Exact duplicates (DateTime + latitude + longitude)
 \item Fully duplicated rows across all columns
 }
@@ -114,7 +115,7 @@ by temporal jumps or multiple concurrent streams. Only the selected stream is re
 
 \item \strong{Same DateTime, different coordinates}: multiple fixes recorded at the same timestamp but with
 differing spatial locations.#'
-\item \strong{Same coordinates, different DateTimes}: identical spatial locations recorded at multiple timestamps.
+\item \strong{Same coordinates, different DateTimes}: identical spatial locations recorded at multiple timestamps but that are by default not used.
 \item \strong{Exact duplicates}: duplicated rows sharing \code{DateTime}, \code{latitude}, and \code{longitude}.
 \item \strong{Fully duplicated rows}: rows duplicated across all columns.
 }
@@ -152,6 +153,10 @@ Annotation flags added when \code{annotate = TRUE} include:
 A further function \code{is_duplicated_track()} can be used to return a Boolean TRUE/FALSE for whether there are any
 duplication issues, which calls \code{duplicate_track()} using the detect mode. \code{is_duplicated_track()} can also accept
 a \code{step} argument to search for specific duplication issues as considered by \code{duplicate_track()}.
+
+As a word of caution, the \code{duplicated_track()} function identifies duplicates within animals. Should you
+wish to identify duplicates across the dataset, this would require separate coding, or tricking the functon to
+thinking you have only one animal.
 }
 \examples{
 library(dplyr)
@@ -370,6 +375,10 @@ test2_3 = duplicate_track(data, dup_method = "best_quality",
 ################################################################################
 # 3. Same-location/different-time
 ################################################################################
+# This is not carried out by default as it is entirely possible to get valid GPS fixes
+# at different times. But if you are sure the precision of the GPS and the animal under consideration would
+# never have this case, then by all means use it.
+#
 # Duplicate DateTimes present for locations
 # Needing a resolve of how to reduce to one DateTime per location
 
@@ -420,11 +429,9 @@ data <- data.frame(
 # --------------------------------------- #
 
 # Should you want to run a "first-pass" over the data, then this is possible with mode = "detect"
-duplicate_track(data, mode = "detect")
+duplicate_track(data, mode = "detect", use_dup_coord = TRUE)
 
 # This returns:
-
-duplicate_track(data, mode = "detect")
 # A tibble: 2 × 6
 step     TagID issue_detected n_segments affected_data     n_affected_rows
 <chr>    <chr> <lgl>               <int> <list>                      <int>
@@ -436,22 +443,22 @@ step     TagID issue_detected n_segments affected_data     n_affected_rows
 # --------------------------------------- #
 
 # dup_method = random would randomly pick a DateTime for the given location to be used:
-test3_1 = duplicate_track(data, dup_method = "random", mode = "resolve")
+test3_1 = duplicate_track(data, dup_method = "random", mode = "resolve", use_dup_coord = TRUE)
 
 # using a step-specific dup_method of "avg_time", using time_fun
 # note this is termed "avg_time" but you can apply any function you want really
 
 # NOT RUN (would not work):
-# test3_0 = duplicate_track(data, dup_method = "avg_time", mode = "resolve") # as above for step 2, cannot work as a global dup_method for other dup steps
+# test3_0 = duplicate_track(data, dup_method = "avg_time", mode = "resolve", use_dup_coord = TRUE) # as above for step 2, cannot work as a global dup_method for other dup steps
 
 # instead use:
-test3_2 = duplicate_track(data, dup_method = "random", dup_method_same_loc = "avg_time", time_fun = mean, mode = "resolve")
+test3_2 = duplicate_track(data, dup_method = "random", dup_method_same_loc = "avg_time", time_fun = mean, mode = "resolve", use_dup_coord = TRUE)
 
 # or best quality as above, same code:
 test3_3 = duplicate_track(data, dup_method = "best_quality",
               quality_vars = c("n_sats", "accuracy", "pdop", "hdop"),
               quality_directions = c(1,1,-1,-1),
-              mode = "resolve"
+              mode = "resolve", use_dup_coord = TRUE
 )
 
 ################################################################################
