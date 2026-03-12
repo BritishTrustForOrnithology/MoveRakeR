@@ -246,7 +246,62 @@ is.VoCom <- is_VoCom
 is.VoComStack <- is_VoComStack
 is.VoComMultiStack <- is_VoComMultiStack
 
+#' Track2Vo
+#'
+#' Conversion between \code{Track} and \code{Vo} classes
+#'
+#' The \code{Track2Vo} function is required for use of the plot generic S3 method for \code{Vo} objects,
+#' to first create a \code{Vo} object from you track data based on columns that are assumed to be existing
+#' within the \code{Track} data.
+#'
+#' @param data Track object to be converted.
+#' @param vsll column in your data relating to solar voltage charging (e.g. voltage or percentage)
+#' @param vbat column in your data relating to the battery charge (e.g. voltage, or percentage)
+#'
+#' @example
+#' Vo_obj = Track2Vo(data, vbat = "tag-voltage", vsll = "battery-charging-current")
+#'
+#' Vo_obj_subset = Vo_obj[Vo_obj$TagID == "animal_1",] # subsetting for one animal if wanted
+#' track_data = data[data$TagID == "animal_1",]
+#'
+#' # plot with track data alongside for additional day/night bars, with a subset of time period
+#' plot_st = plot(Vo_obj_subset, dataTrack = track_data, start = "2022-04-05 00:00:00", end = "2022-04-10 00:00:00")
+#'
+#' @export
+Track2Vo <- function(data, vsll = NULL, vbat = NULL){
 
+  w = which(names(data) %in% c("TagID","DateTime"))
+
+  if(length(w) != 2){
+    stop("Needs TagID and DateTime columns defined")
+  }
+
+  # detect columns flagged as vsll or vbat
+  vbatcol = which(names(data) %in% vbat)
+  vsllcol = which(names(data) %in% vsll)
+
+  # always keep TagID and DateTime
+  data0 <- data[,names(data) %in% c("TagID","DateTime")]
+
+  if(length(vbatcol) == 0){
+    message("No vbat column found matching supplied name")
+    data0$vbat <- NA
+  } else{
+    data0$vbat = data.frame(data)[,vbatcol]
+  }
+
+  if(length(vsllcol) == 0){
+    message("No vbat column found matching supplied name")
+    data0$vsll <- NA
+  } else{
+    data0$vsll = data.frame(data)[,vsllcol]
+  }
+  row.names(data0) <- 1:nrow(data0)
+
+  data0 <- Vo(data0)
+
+  return(data0)
+}
 
 
 

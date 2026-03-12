@@ -149,8 +149,20 @@ plot(data, anims = "uniq",
      p4s = 4326)
 ```
 
-Should the user be interested in voltages, then these can also be plotted through an S3 generic plot function, that plots objects of class `Vo`. But, currently this is only available for University of Amsterdam data at the moment, which is accessed through the `read_voltage_UvA()` function. This may be useful to see how tags are performing, e.g. battery and solar charging after deployment to check sustainability of sampling protocols, and plotted alongside GPS data. Further options also exist to source acceleration 
-and pressure data from UvA-BiTS directly into R. 
+Should the user be interested in voltages, then these can also be plotted through an S3 generic plot function, that plots objects of class `Vo`. This is directly compatible with voltage data that can be accessed from the UvA-BiTS database, through the `read_voltage_UvA()` function. For use with wider `Track` data, if you have voltage and charing data in the same dataset, this can be coerced to a `Vo` object using the `Track2Vo` function. This visualisation may be useful to see how tags are performing, after deployment to check sustainability of sampling protocols, and can bevplotted alongside GPS data. Further options also exist to source acceleration and pressure data from UvA-BiTS directly into R. 
+
+``` r
+# This needs conversion to a Vo object first, where data is an object with TagID and DateTime columns:
+Vo_obj = Track2Vo(data, vbat = "tag-voltage", vsll = "battery-charging-current")
+
+Vo_obj_subset = Vo_obj[Vo_obj$TagID == "animal_1",] # subsetting one animal if wanted from Track data
+track_data = data[data$TagID == "animal_1",]
+
+# plot with Track data alongside for additional day/night bars, with a subset of time period
+plot_st = plot(Vo_obj_subset, dataTrack = track_data, start = "2022-04-05 00:00:00", end = "2022-04-10 00:00:00")
+
+```
+An example plot below is shown from several animals of a separate dataset:
 
 ![](README_files/plotVo_example.png)
 

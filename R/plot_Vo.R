@@ -6,7 +6,7 @@
 #'
 #' @details
 #' The S3 generic \code{plot} function can be used for \code{Vo} and \code{VoStack} objects to
-#' produce a visualisation of UvA-BiTS (not Movetech at the moment) tag voltages, to see
+#' produce a visualisation of tag voltages, to see
 #' how tags are performing, e.g. just after deployment to check sustainability of sampling protocols.
 #' The function in its default form
 #' will accept a single \code{Vo} and \code{VoStack} object under the "data" argument, and
@@ -30,9 +30,7 @@
 #' vbatt or vsll of the Vo data; the dt line will always appear on the secondary access as the
 #' red line.
 #'
-#' No doubt there could be bugs in this, so do let the package maintainer know if anything doesn't work as intended.
-#'
-#' @seealso [MoveRakeR::read_voltage_UvA], [MoveRakeR::read_track_UvA]
+#' @seealso [MoveRakeR::Track2Vo], [MoveRakeR::read_voltage_UvA], [MoveRakeR::read_track_UvA]
 #'
 #' @param data A \code{Vo} or \code{VoStack} object.
 #' @param dataTrack An (optional, default NULL) A \code{Track} or \code{TrackStack} object for further plotting
@@ -61,6 +59,22 @@
 #'
 #' @examples
 #'
+#' # ----------------------- #
+#' # 1. Wider case where a Track dataset has the necessary columns of battery and solar-
+#' # charging information are already in the data
+#'
+#' # This needs conversion to a Vo object first:
+#' Vo_obj = Track2Vo(data, vbat = "tag-voltage", vsll = "battery-charging-current")
+#'
+#' Vo_obj_subset = Vo_obj[Vo_obj$TagID == "animal_1",] # subsetting for one animal if wanted
+#' track_data = data[data$TagID == "animal_1",]
+#'
+#' # plot with track data alongside for additional day/night bars, with a subset of time period
+#' plot_st = plot(Vo_obj_subset, dataTrack = track_data, start = "2022-04-05 00:00:00", end = "2022-04-10 00:00:00")
+#'
+#' # ----------------------- #
+#' # 2. Case specific to the UvA-BiTS database where voltage data can be directly accessed
+#'
 #' db_file <- "GPS" # what you named the ODBC link on set up
 #' db <- RODBC::odbcConnect(db_file) # currently required "db" to be named globally
 #'
@@ -79,7 +93,7 @@
 #' ### zoom in on the timeline
 #' plot(dataVo, start = "2021-06-22 00:01:00", end = "2021-06-28 00:01:00")
 #'
-#' ### add in Track data for day/night rectangles#'
+#' ### add in Track data for day/night rectangles
 #' plot(data = dataVo, dataTrack = dataTrack, start = "2021-06-22 00:01:00", end = "2021-06-28 00:01:00")
 #'
 #' ### try a dt sampling rate plot
