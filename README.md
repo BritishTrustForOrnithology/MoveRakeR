@@ -218,11 +218,11 @@ Should the user be interested in voltages, then these can also be
 plotted through an S3 generic plot function, that plots objects of class
 `Vo`. This is directly compatible with voltage data that can be accessed
 from the UvA-BiTS database, through the `read_voltage_UvA()` function.
-For use with wider `Track` data, if you have voltage and charing data in
-the same dataset, this can be coerced to a `Vo` object using the
+For use with wider `Track` data, if you have voltage and charging data
+in the same dataset, this can be coerced to a `Vo` object using the
 `Track2Vo` function. This visualisation may be useful to see how tags
 are performing, after deployment to check sustainability of sampling
-protocols, and can bevplotted alongside GPS data. Further options also
+protocols, and can be plotted alongside GPS data. Further options also
 exist to source acceleration and pressure data from UvA-BiTS directly
 into R.
 
@@ -253,7 +253,7 @@ potential outlying individuals using `tag_timeline()`. You may be
 interested to understand likely tag sampling rates, that can be assigned
 through `assign_rates()`. Moreover, the spacing between sampling rates
 may vary considerably if the tag has stopped recording, for example due
-to low batter, necessitating identification of ‘gaps’ in your data,
+to low battery, necessitating identification of ‘gaps’ in your data,
 available through the `gap_section()` function.
 
 Movement validity can be assessed through checks of trajectory speed
