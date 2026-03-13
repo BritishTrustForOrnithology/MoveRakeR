@@ -38,7 +38,7 @@ ui <- dashboardPage(
                           height = "100%",  # full column height
                           # Step 1: Optional Gap Assignment
                           wellPanel(
-                            tags$h4("Step 1: Identify Gaps (Optional)", style = "color: steelblue;"),
+                            tags$h4("Step 1: Identify Gaps", style = "color: steelblue;"),
                             #checkboxInput("do_gap_section", "Run gap_section() first?", value = FALSE),
                             numericInput("gap_thresh", "Gap threshold (seconds):", value = 3600, min = 1, step = 60),
                             numericInput("gap_tol", "Tolerance (seconds):", value = 0.2, min = 0, step = 0.01),
@@ -47,12 +47,30 @@ ui <- dashboardPage(
                             tags$p("Set gap parameters before applying annotation filters.", style = "font-size: 12px; color: gray;")
                           ),
 
+                          wellPanel(
+                            # 0. dup data
+                            tags$h4("Step 2: Assess duplicate data", style = "color: slateblue;"),
+                            div(
+                              style = "display: flex; align-items: center;",
+                              div(style = "flex: 1;",
+                                  htmltools::h5(tags$b("Arguments for duplicate_track():"))
+                              ),
+                              div(style = "flex: 0 0 auto;",
+                                  actionButton("run_dup", "Set values", style = "width: 120px;")
+                              ),
+                              div(style = "flex: 0 0 auto;",
+                                  # UI: Duplicate summary button
+                                  actionButton("show_dup_summary", "Summary", style = "width: 150px;")
+                              )
+                            )
+                          ),
+
                           # Annotation / Threshold Sliders
                           wellPanel(
-                            tags$h4("Step 2: Annotate data", style = "color: darkgreen;"),
+                            tags$h4("Step 3: Annotate data", style = "color: darkgreen;"),
                             uiOutput("custom_flag_ui"),
 
-                            # 0. Too few data per animal
+                            # 1. Too few data per animal
                             div(
                               style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
                               div(style = "flex: 3;",
@@ -72,7 +90,7 @@ ui <- dashboardPage(
                             ),
 
                             hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
-                            # 1. NA Lat long
+                            # 2. NA Lat long
                             div(
                               style = "display: flex; align-items: center;",
                               div(style = "flex: 1;",
@@ -91,20 +109,8 @@ ui <- dashboardPage(
                             ),
                             uiOutput("na_warning"),
 
-                            hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
-
-                            # 2. dup data
-                            div(
-                              style = "display: flex; align-items: center;",
-                              div(style = "flex: 1;",
-                                  htmltools::h5(tags$b("Duplicate DateTime stamps:"))
-                              ),
-                              div(style = "flex: 0 0 auto;",
-                                  actionButton("run_dup", "Duplicates", style = "width: 120px;")
-                              )
-                            ),
-
-                            hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
+                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
+                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
 
                             # 3. Nsats
                             div(
@@ -138,9 +144,8 @@ ui <- dashboardPage(
                               )
                             ),
 
-
-                            hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
-
+                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
+                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
 
                             # 4. PDOP filter + button
                             div(
@@ -162,7 +167,8 @@ ui <- dashboardPage(
                             ),
                             uiOutput("pdop_warning"),
 
-                            hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
+                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
+                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
 
                             # 5. HDOP filter + button
                             div(
@@ -184,7 +190,36 @@ ui <- dashboardPage(
                             ),
                             uiOutput("hdop_warning"),
 
-                            hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
+                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
+                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
+
+                            # XX. CUSTOM FILTER
+                            div(
+                              htmltools::h5(tags$b("Custom filtering:")),
+
+                              style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
+
+                              div(
+                                style = "flex: 1 1 120px; min-width: 120px;",
+                                actionButton(
+                                  "cust_filt",
+                                  "Run custom filt_err()",
+                                  style = "width: 100%; white-space: normal; text-align: center;"
+                                )
+                              ),
+
+                              div(
+                                style = "flex: 1 1 140px; min-width: 140px;",
+                                actionButton(
+                                  "show_rm_summary",
+                                  "Filter summary",
+                                  style = "width: 100%; white-space: normal; text-align: center;"
+                                )
+                              )
+                            ),
+
+                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
+                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
 
                             # 6. Single gapsections
                             #fluidRow(
@@ -210,7 +245,9 @@ ui <- dashboardPage(
                             ),
                             uiOutput("singlegap_warning"),
 
-                            hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
+                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
+                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
+
                             # 7. Iterative trajectory speed
                             div(
                               style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
@@ -230,7 +267,9 @@ ui <- dashboardPage(
                               )
                             ),
 
-                            hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
+                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
+                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
+
                             # 8. Simple trajectory speed
                             div(
                               style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
@@ -249,7 +288,10 @@ ui <- dashboardPage(
                                   actionButton("run_custom_speed", "Custom speed", style = "width: 120px;")
                               )
                             ),
-                            hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
+
+                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
+                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
+
                             # 9. Turning angle speed
                             div(
                               style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
@@ -279,7 +321,10 @@ ui <- dashboardPage(
                                 )
                               )
                             ),
-                            hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
+
+                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
+                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
+
                             # 10. lat long extent selector
                             div(
                               style = "display: flex; flex-direction: column; gap: 5px; width: 100%; max-width: 100%; box-sizing: border-box;",
@@ -399,6 +444,19 @@ ui <- dashboardPage(
                                 width = "100%",
                                 class = "btn-success"
                               )
+                            )
+                          ),
+
+                          shinyWidgets::dropdown(
+                            inputId = "decisions",
+                            label = "Current decisions",
+                            icon = icon("clipboard-list"),
+                            status = "info",
+                            width = "250px",
+                            up = FALSE,
+                            tagList(
+                              actionButton("show_decisions", "Current Decisions"),
+                              actionButton("clear", "Reset")
                             )
                           )
                         ), # divider close

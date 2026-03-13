@@ -87,23 +87,6 @@ server <- function(input, output, session) {
     )
   })
 
-  #output$tid_dropdown_ui2 <- renderUI({
-  #  shinyWidgets::dropdown(
-  #    inputId = "tid_dropdown",   # different from `tid2`
-  #    label = "Select animals",
-  #    pickerInput(
-  #      inputId = "tid2",
-  #      label = NULL,
-  #      choices = unique(data$TagID),
-  #      selected = unique(data$TagID)[1],
-  #      multiple = TRUE
-  #    ),
-  #    style = "unite",
-  #    icon = icon("earlybirds"),
-  #    width = "200px"
-  #  )
-  #})
-
   ######################################################################################################
 
   # Synchronize slider -> numeric
@@ -181,6 +164,48 @@ server <- function(input, output, session) {
   # Base data (optionally gap-sectioned)
   data_start <- reactive({ data })
 
+  map_ready <- reactiveVal(TRUE)
+
+  observeEvent(input$clear, {
+
+    removeModal()
+
+    map_ready(FALSE)
+
+    for(n in names(reactiveValuesToList(filter_state))){
+      filter_state[[n]] <- NULL
+    }
+
+    #leafletProxy("mymap2") %>%
+    #  clearMarkers() %>%
+    #  clearShapes()
+
+    output$mymap2 <- leaflet::renderLeaflet({
+      map_reactive()
+    })
+
+    #invalidateLater(300, session)
+
+    #observe({
+    #  req(!map_ready())  # just to ensure reactive context exists
+    #  map_ready(TRUE)
+    #})
+
+    # reset working data
+    annotated_data(data_start())
+
+  })
+
+  observeEvent(map_ready(), {
+
+    if (!map_ready()) {
+      invalidateLater(250, session)
+      map_ready(TRUE)
+    }
+
+  }, ignoreInit = TRUE)
+
+
   # ---------------------------------------- #
   # Gap assignment
   # ---------------------------------------- #
@@ -209,6 +234,13 @@ server <- function(input, output, session) {
       )
     #}
 
+    # remember current choices:
+    filter_state$gapsec <- list(
+      GAP = input$gap_thresh,
+      tol = input$gap_tol,
+      timestamp = Sys.time()
+    )
+
     df$singlegap_rm <- 0
 
     shinybusy::remove_modal_spinner()
@@ -228,47 +260,12 @@ server <- function(input, output, session) {
   })
 
   # ---------------------------------------- #
-  # TagID filter happens after gaps assigned
-  # ---------------------------------------- #
-  # best to NOT do this as it complicates things; filter TagIDs only after full dataset has been handled for simplicity
-  #data_tagged <- reactive({
-  #  df <- gapped_data()
-  #  req(df)
-  #  if(!is.null(input$tid2)) {
-  #    df <- df %>% dplyr::filter(TagID %in% input$tid2)
-  #  }
-  #  df
-  #})
-
-  # ---------------------------------------- #
   # Annotated data
   # ---------------------------------------- #
 
   # Central store for annotated data
   annotated_data <- reactiveVal(NULL)
 
-  # Helper to get current base for annotation
-  #
-  #
-  #
-  #
-  # / # / # / # / # at the moment this seems incorrect as gapped data is ONLY run if annotated_data is null
-  # i.e. if it is not null, and the user want to re-do gaps, then bespoke gaps will not come through
-  # and the check in speed filt below will either find the prvious gap column or not at all so defaults will be taken
-  #
-  #
-  #
-  # / # / # / # / #
-  #get_annotation_base <- function() {
-  #  if(is.null(annotated_data())) {
-  #
-  #    gapped_data() # <-------------------- ...... only when NULL?
-  #    #data_tagged() # skipping this part of the reactive chain
-  #  } else {
-  #
-  #    annotated_data()
-  #  }
-  #}
 
   get_annotation_base <- function(){
    base <- gapped_data()
@@ -296,14 +293,107 @@ server <- function(input, output, session) {
   # - flt_rm (flt_switch)
   # - gps_pdop_rm (pdop)
   # - gps_hdop_rm (hdop)
+  # - all_rm # combination of custom filtering options
   # - singlegap_rm ('orphaned' gapsections)
-  # - dup_rm (duplicate DateTimes)
+  # - dup_rm (duplicate data)
   # - speed_rm (speed filter)
   # - angle_rm (angle filter)
   # - combined_rm, A combined remove column using conditions across all annotation rows
-  #choices = c("Latlong NA", "All NA", "Satellites NA", "Satellites removed", "Flt_switch",
-  #            "PDOP", "HDOP", "Single gaps", "DateTime duplicates",
-  #            "Traj speed", "Turn angle"),
+
+
+  #########################################################################################################
+  # track changes: the options currently used
+
+  filter_state <- reactiveValues(
+    gapsec = NULL,
+    dup = NULL,
+    nfix = NULL,
+    nNA = NULL,
+    nsat = NULL,
+    pdop = NULL,
+    hdop = NULL,
+    cust_filt = NULL,
+    speed = NULL,
+    speed_cus = NULL,
+    turn = NULL,
+    latlong = NULL,
+    gap_orph = NULL,
+    extra = NULL
+  )
+
+  decision_sections <- c(
+    "Gap sections" = "gapsec",
+    "Duplicate annotation (duplicate_track())" = "dup",
+    "Number of satellites" = "nsat",
+    "Number of fixes/animal" = "nfix",
+    "NA fixes" = "nNA",
+    "PDOP value" = "pdop",
+    "HDOP value" = "hdop",
+    "Custom annotation (filt_err)" = "cust_filt",
+    "Speed annotation" = "speed",
+    "Custom speed annotation" = "speed_cus",
+    "Turning angle annotation" = "turn",
+    "Single gap sections annotated" = "gap_orph",
+    "Extra flag columns used" = "extra"
+  )
+
+  observeEvent(input$show_decisions, {
+
+    modal_body <- tagList(
+      lapply(seq_along(decision_sections), function(i){
+
+        title <- names(decision_sections)[i]
+        id <- decision_sections[i]
+
+        tags$details(
+
+          style = "margin-bottom:8px;",
+
+          tags$summary(
+            style = "font-weight:bold; font-size:16px; cursor:pointer;",
+            title
+          ),
+
+          #div(
+          #  style = "margin-top:6px;",
+          #  verbatimTextOutput(paste0("dec_", id))
+          #)
+
+          div(
+            style = "
+              margin-top:6px;
+              padding:8px;
+              background:#f7f7f7;
+              border-left:3px solid #ccc;
+            ",
+            verbatimTextOutput(paste0("dec_", id))
+          )
+
+        )
+
+      })
+    )
+
+    showModal(
+      modalDialog(
+        title = "Current annotation decisions",
+        size = "l",
+        easyClose = TRUE,
+        modal_body,
+        footer = modalButton("Close")
+      )
+    )
+
+  })
+
+  # add render texts
+  lapply(decision_sections, function(id){
+
+    output[[paste0("dec_", id)]] <- renderPrint({
+      filter_state[[id]]
+    })
+
+  })
 
   #########################################################################################################
 
@@ -326,6 +416,13 @@ server <- function(input, output, session) {
     # which animals have less than the min number
     tid_rm <- df0[df0$flag == 1L,]$TagID
     df$tid_rm <- ifelse(df$TagID %in% tid_rm, 1L, 0L)
+
+
+    # remember current choices:
+    filter_state$nfix <- list(
+      nfix = input$fix_thresh_numeric,
+      timestamp = Sys.time()
+    )
 
     shinybusy::remove_modal_spinner()
     annotated_data(df)
@@ -376,6 +473,12 @@ server <- function(input, output, session) {
       na_ll_warn(1)
     }
 
+    # remember current choices:
+    filter_state$nNA <- list(
+      nNA = "NA check used",
+      timestamp = Sys.time()
+    )
+
     shinybusy::remove_modal_spinner()
     annotated_data(df)
 
@@ -387,26 +490,199 @@ server <- function(input, output, session) {
 
 
   # -------------------------------------------------------------- #
-  # Duplicate data times
+  # Duplicate data
   # -------------------------------------------------------------- #
 
+#  observeEvent(input$run_dup, {
+#
+#    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running pdop simple filter ...")
+#
+#    df <- get_annotation_base()
+#    req(df)
+#
+#    df <- df %>%
+#      group_by(TagID) %>%
+#      mutate(dup_rm = if_else(duplicated(DateTime) | duplicated(DateTime, fromLast = TRUE), 1L, 0L)) %>%
+#      ungroup()
+#
+#    shinybusy::remove_modal_spinner()
+#    annotated_data(df)
+#
+#  })
+
+  # Show modal when user clicks "Duplicates"
   observeEvent(input$run_dup, {
+    showModal(
+      modalDialog(
+        title = "Duplicate Track Options",
+        size = "m",
+        easyClose = TRUE,
+        footer = tagList(
+          modalButton("Cancel"),
+          actionButton("apply_dup_options", "Apply")
+        ),
+        selectInput("dup_method", "Global dup_method",
+                    choices = c("random", "best_quality", "first", "last", "mean"),
+                    selected = "random"),
+        checkboxInput("use_dup_coords", "Use duplicate coordinates check?", value = FALSE),
+        uiOutput("quality_vars_ui"),
+        uiOutput("quality_dir_ui"),
+        selectInput("dup_method_parallel", "Parallel time stream method",
+                    choices = c("random", "first", "last", "best_quality", "merge"),
+                    selected = "random"),
+        selectInput("dup_method_same_time", "Same time / different location method",
+                    choices = c("random", "first", "last", "best_quality", "centroid"),
+                    selected = "random"),
+        selectInput("dup_method_same_loc", "Same location / different time method",
+                    choices = c("random", "first", "last", "best_quality", "avg_time"),
+                    selected = "random")
+      )
+    )
+  })
 
-    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running pdop simple filter ...")
+  # Dynamic quality variable inputs
+  output$quality_vars_ui <- renderUI({
+    req(annotated_data())
+    cols <- names(annotated_data())
+    selectizeInput("quality_vars", "Quality variables", choices = cols, multiple = TRUE)
+  })
 
-    df <- get_annotation_base()
+  #output$quality_dir_ui <- renderUI({
+  #  req(input$quality_vars)
+  #  n <- length(input$quality_vars)
+  #  tagList(
+  #    lapply(seq_len(n), function(i) {
+  #      selectInput(paste0("quality_dir_", i),
+  #                  paste("Direction for", input$quality_vars[i]),
+  #                  choices = c("Higher better" = 1, "Lower better" = -1),
+  #                  selected = 1)
+  #    })
+  #  )
+  #})
+
+  output$quality_dir_ui <- renderUI({
+    req(input$quality_vars)
+
+    n <- length(input$quality_vars)
+
+    div(
+      style = "
+      margin-left: 20px;
+      padding: 10px;
+      background-color: #f7f7f7;
+      border-left: 3px solid #ccc;
+      border-radius: 4px;
+    ",
+
+      tagList(
+        lapply(seq_len(n), function(i) {
+          selectInput(
+            paste0("quality_dir_", i),
+            paste("Direction for", input$quality_vars[i]),
+            choices = c("Higher better" = 1, "Lower better" = -1),
+            selected = 1
+          )
+        })
+      )
+    )
+  })
+
+  # Apply user choices and run duplicate_track
+  observeEvent(input$apply_dup_options, {
+    removeModal()
+
+    df <- annotated_data()
     req(df)
 
-    df <- df %>%
-      group_by(TagID) %>%
-      mutate(dup_rm = if_else(duplicated(DateTime) | duplicated(DateTime, fromLast = TRUE), 1L, 0L)) %>%
-      ungroup()
+    # Collect directions as numeric vector
+    quality_directions <- sapply(seq_along(input$quality_vars), function(i) {
+      as.numeric(input[[paste0("quality_dir_", i)]])
+    })
 
-    shinybusy::remove_modal_spinner()
-    annotated_data(df)
+    id <- showNotification(
+      "Running duplicate detection...",
+      duration = NULL,
+      closeButton = FALSE,
+      type = "message"
+    )
+
+    # Run duplicate_track
+    df_annotated <- duplicate_track(
+      data = df,
+      dup_method = input$dup_method,
+      quality_vars = input$quality_vars,
+      quality_directions = quality_directions,
+      use_dup_coords = input$use_dup_coords,
+      mode = "annotate",
+      dup_method_parallel = input$dup_method_parallel,
+      dup_method_same_time = input$dup_method_same_time,
+      dup_method_same_loc = input$dup_method_same_loc,
+      centroid_fun = median,
+      time_fun = mean
+    )
+
+    # remember current choices:
+    filter_state$dup <- list(
+      dup_method = input$dup_method,
+      quality_vars = input$quality_vars,
+      quality_directions = quality_directions,
+      method = input$dup_method,
+      use_dup_coords = input$use_dup_coords,
+      dup_method_parallel = input$dup_method_parallel,
+      dup_method_same_time = input$dup_method_same_time,
+      dup_method_same_loc = input$dup_method_same_loc,
+      timestamp = Sys.time()
+    )
+
+    # Create combined dup_rm column
+    df_annotated <- df_annotated %>%
+      mutate(
+        dup_rm = pmax(
+          parallel_issue,
+          dup_time_issue,
+          dup_coords_issue,
+          dup_time_coords_issue,
+          all_dup_issue,
+          na.rm = TRUE
+        )
+      )
+
+    removeNotification(id)
+
+    annotated_data(df_annotated)
 
   })
 
+  observeEvent(input$show_dup_summary, {
+    req(annotated_data())
+    df <- annotated_data()
+
+    # Identify the "issue" columns
+    issue_cols <- c("parallel_issue", "dup_time_issue", "dup_coords_issue",
+                    "dup_time_coords_issue", "all_dup_issue")
+
+    # Quick summary: count TRUE (or 1) per animal per issue
+    dup_summary <- df %>%
+      group_by(TagID) %>%
+      summarise(
+        across(all_of(issue_cols), ~as.integer(sum(.x, na.rm = TRUE))),
+        .groups = "drop"
+      )
+
+
+    # Show in modal
+    showModal(
+      modalDialog(
+        title = "Duplicate Removal Summary",
+        size = "l",
+        easyClose = TRUE,
+        renderTable({
+          dup_summary
+        }),
+        footer = modalButton("Close")
+      )
+    )
+  })
 
 
   # -------------------------------------------------------------- #
@@ -424,8 +700,8 @@ server <- function(input, output, session) {
       choices = names(df),   # or dynamically via renderUI
       selected = NULL
     )
-  })
 
+  })
 
   #observeEvent(input$run_nsats, {
   #
@@ -444,7 +720,14 @@ server <- function(input, output, session) {
   #})
 
   observeEvent(input$run_nsats, {
-    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running nsats ...")
+    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running nfix/animal ...")
+
+    id <- showNotification(
+      "Running number fixes/animal...",
+      duration = NULL,
+      closeButton = FALSE,
+      type = "message"
+    )
 
     tryCatch({
       req(get_annotation_base(), input$sat_col, input$nsat_thresh_numeric)
@@ -472,9 +755,19 @@ server <- function(input, output, session) {
 
       # If we got here, safe to compute flag
       df$sat_rm <- ifelse(df[[colname]] >= input$nsat_thresh_numeric, 0L, 1L)
+
+      # remember last choice
+      filter_state$nsat <- list(
+        nsat = input$nsat_thresh_numeric,
+        timestamp = Sys.time()
+      )
+
       annotated_data(df)
 
     }, finally = {
+
+      removeNotification(id)
+
       shinybusy::remove_modal_spinner()
     })
   })
@@ -508,6 +801,13 @@ server <- function(input, output, session) {
 
     shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running pdop simple filter ...")
 
+    id <- showNotification(
+      "Running pdop...",
+      duration = NULL,
+      closeButton = FALSE,
+      type = "message"
+    )
+
     # user selection to keep in all data within the bar selected i.e. above max value are dropped out
     df <- get_annotation_base()
 
@@ -537,6 +837,13 @@ server <- function(input, output, session) {
     #req(df)
     #df <- pdop_filt(df, pdop_thresh = input$pdop_thresh)
     #annotated_data(df)
+
+    filter_state$pdop <- list(
+      pdop = input$pdop_thresh,
+      timestamp = Sys.time()
+    )
+
+    removeNotification(id)
     shinybusy::remove_modal_spinner()
     annotated_data(df)
   })
@@ -563,6 +870,13 @@ server <- function(input, output, session) {
   observeEvent(input$run_hdop, {
 
     shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running pdop simple filter ...")
+
+    id <- showNotification(
+      "Running hdop...",
+      duration = NULL,
+      closeButton = FALSE,
+      type = "message"
+    )
 
     # user selection to keep in all data within the bar selected i.e. above max value are dropped out
     df <- get_annotation_base()
@@ -593,9 +907,212 @@ server <- function(input, output, session) {
     #req(df)
     #df <- pdop_filt(df, pdop_thresh = input$pdop_thresh)
     #annotated_data(df)
+
+    # remember choice
+    filter_state$hdop <- list(
+      hdop = input$pdop_thresh,
+      timestamp = Sys.time()
+    )
+
+    removeNotification(id)
     shinybusy::remove_modal_spinner()
     annotated_data(df)
   })
+
+  # -------------------------------------------------------------- #
+  # Custom filtering by columns
+  # -------------------------------------------------------------- #
+  filt_rm_cols <- reactiveVal(character())
+
+  observeEvent(input$cust_filt, {
+
+    showModal(
+      modalDialog(
+        title = "Custom filtering (filt_err)",
+        size = "m",
+        easyClose = TRUE,
+
+        footer = tagList(
+          modalButton("Cancel"),
+          actionButton("apply_cust_filt", "Apply")
+        ),
+
+        selectizeInput(
+          "cust_filter_cols",
+          "Columns to filter",
+          choices = names(get_annotation_base()),
+          multiple = TRUE
+        ),
+
+        uiOutput("cust_filter_options"),
+
+        hr(),
+
+        checkboxInput("cust_inclusive",
+                      "Inclusive numeric bounds",
+                      TRUE)
+
+      )
+    )
+
+  })
+
+
+
+  output$cust_filter_options <- renderUI({
+
+    req(input$cust_filter_cols)
+
+    tagList(
+      lapply(seq_along(input$cust_filter_cols), function(i){
+
+        col <- input$cust_filter_cols[i]
+
+        wellPanel(
+          style = "padding:10px;",
+
+          strong(col),
+
+          fluidRow(
+
+            column(
+              width = 4,
+              numericInput(
+                paste0("cust_lower_", i),
+                label = "Lower",
+                value = NA
+              )
+            ),
+
+            column(
+              width = 4,
+              numericInput(
+                paste0("cust_upper_", i),
+                label = "Upper",
+                value = NA
+              )
+            ),
+
+            column(
+              width = 4,
+              textInput(
+                paste0("cust_match_", i),
+                label = "Match (character)",
+                value = ""
+              )
+            )
+
+          )
+        )
+
+      })
+    )
+
+  })
+
+
+  observeEvent(input$apply_cust_filt, {
+
+    removeModal()
+
+    df <- get_annotation_base()
+    req(df)
+
+    nms <- input$cust_filter_cols
+
+    vals_l <- lapply(seq_along(nms), function(i){
+      val <- input[[paste0("cust_lower_", i)]]
+      if(is.na(val)) NULL else val
+    })
+
+    vals_u <- lapply(seq_along(nms), function(i){
+
+      num_val <- input[[paste0("cust_upper_", i)]]
+      char_val <- input[[paste0("cust_match_", i)]]
+
+      if(!is.na(num_val)) return(num_val)
+      if(nzchar(char_val)) return(char_val)
+
+      NULL
+    })
+
+    df <- filt_err(
+      df,
+      nms = nms,
+      vals_l = vals_l,
+      vals_u = vals_u,
+      annotate = TRUE,
+      inclusive = input$cust_inclusive,
+      all_flag = TRUE,
+      verbose = TRUE
+    )
+
+    # remember choice
+    filter_state$cust_filt <- list(
+      col_nms = nms,
+      vals_l = vals_l,
+      vals_u = vals_u,
+      inclusive = input$cust_inclusive,
+      all_flag = TRUE,
+      timestamp = Sys.time()
+    )
+
+    # Track only rm columns created by THIS run
+    new_rm_cols <- paste0(nms, "_rm")
+
+    # If all_flag is used, include it
+    if("all_rm" %in% names(df)) {
+      new_rm_cols <- c(new_rm_cols, "all_rm")
+    }
+
+    filt_rm_cols(new_rm_cols)
+
+    annotated_data(df)
+
+  })
+
+  # this is the summary of the number of fixes under the custom filtering....
+  observeEvent(input$show_rm_summary, {
+
+    df <- annotated_data()
+    req(df)
+
+    rm_cols <- filt_rm_cols()
+
+    # Keep only ones that still exist (safety check)
+    rm_cols <- rm_cols[rm_cols %in% names(df)]
+
+    if(length(rm_cols) == 0){
+
+      showModal(modalDialog(
+        title = "Filter Summary",
+        "No filt_err() columns found for this run.",
+        easyClose = TRUE
+      ))
+
+      return(NULL)
+    }
+
+    summary_tbl <- data.frame(
+      Variable = rm_cols,
+      Total_Flagged = sapply(rm_cols, function(col){
+        sum(df[[col]] == 1, na.rm = TRUE)
+      })
+    )
+
+    showModal(
+      modalDialog(
+        title = "Current filt_err() Summary",
+        size = "m",
+        easyClose = TRUE,
+        renderTable(summary_tbl, digits = 0),
+        footer = modalButton("Close")
+      )
+    )
+
+  })
+
+
 
   # -------------------------------------------------------------- #
   # Singlegap_rm ('orphaned' gapsections)
@@ -628,8 +1145,22 @@ server <- function(input, output, session) {
 
     shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running pdop simple filter ...")
 
+    id <- showNotification(
+      "Detecting single gapsections...",
+      duration = NULL,
+      closeButton = FALSE,
+      type = "message"
+    )
+
     #browser()
     df <- get_annotation_base()
+
+
+    # remember choice
+    filter_state$gap_orph <- list(
+      gap_orph = "run",
+      timestamp = Sys.time()
+    )
 
     if(exists("gapsec", df)){
 
@@ -650,6 +1181,7 @@ server <- function(input, output, session) {
       single_gap_warn(1)
       df$singlegap_rm <- 0
 
+      removeNotification(id)
       shinybusy::remove_modal_spinner()
       annotated_data(df)
 
@@ -662,20 +1194,215 @@ server <- function(input, output, session) {
   # -------------------------------------------------------------- #
   # MoveRakeR speed filter
   # -------------------------------------------------------------- #
+#  observeEvent(input$run_speed, {
+#
+#    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running MoveRakeR::speed_filt() ...")
+#
+#    id <- showNotification(
+#      "Running speed filter...",
+#      duration = NULL,
+#      closeButton = FALSE,
+#      type = "message"
+#    )
+#
+#    df <- get_annotation_base()
+#    req(df)
+#    has_gaps <- "gapsec" %in% names(df)
+#    df <- speed_filt(df, sp_thres = input$speed_thresh, annotate = TRUE,
+#                     verbose = TRUE, detailed_verbose = FALSE, hasgaps = has_gaps)
+#
+#    removeNotification(id)
+#    shinybusy::remove_modal_spinner()
+#    annotated_data(df)
+#
+#  })
+
+  ##########
   observeEvent(input$run_speed, {
 
-    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running MoveRakeR::speed_filt() ...")
+    showModal(
+      modalDialog(
+        title = "Speed Filter Options",
+        size = "m",
+        easyClose = TRUE,
+        footer = tagList(
+          modalButton("Cancel"),
+          actionButton("apply_speed_options", "Apply")
+        ),
+
+        checkboxInput("speed_hybrid",
+                      "Hybrid filter (raw traj speed + smoother)",
+                      value = FALSE),
+
+        selectInput("speed_method",
+                    "Smoothing / RMS method",
+                    choices = c(
+                      "None (raw trajectory speed)" = "none",
+                      "McConnell RMS" = "mcconnell",
+                      "Flexi clip RMS" = "flexi_clip",
+                      "Flexi vectorised RMS" = "flexi_vec"
+                    ),
+                    selected = "none"),
+
+        numericInput("points_each_side",
+                     "Points each side (window size)",
+                     value = 2, min = 1, step = 1),
+
+        checkboxInput("include_centre",
+                      "Include centre point in window",
+                      value = TRUE),
+
+        checkboxInput("use_custom_fun",
+                      "Use custom smoothing function",
+                      value = FALSE),
+
+        uiOutput("custom_fun_args_ui"),
+
+        hr(),
+
+        checkboxInput("speed_verbose",
+                      "Verbose console output",
+                      value = TRUE),
+
+        checkboxInput("speed_detailed_verbose",
+                      "Detailed verbose output",
+                      value = FALSE)
+      )
+    )
+
+  })
+
+
+  output$custom_fun_args_ui <- renderUI({
+
+    if (!isTRUE(input$use_custom_fun)) return(NULL)
+
+    div(
+      style = "
+      margin-left:20px;
+      padding:10px;
+      background:#f7f7f7;
+      border-left:3px solid #ccc;
+    ",
+
+      selectInput(
+        "custom_fun_name",
+        "Smoothing function",
+        choices = c(
+          "Median" = "median",
+          "Mean" = "mean",
+          "Max" = "max",
+          "Min" = "min",
+          "User supplied function" = "custom"
+        )
+      ),
+
+      numericInput(
+        "fun_k",
+        "Window size (k)",
+        value = 5,
+        min = 3
+      ),
+
+      conditionalPanel(
+        condition = "input.custom_fun_name == 'custom'",
+        textInput(
+          "custom_fun_text",
+          "Custom function name",
+          placeholder = "e.g. my_smoother"
+        )
+      )
+
+    )
+
+  })
+
+
+  observeEvent(input$apply_speed_options, {
+
+    removeModal()
+
+    shinybusy::show_modal_spinner(
+      spin = "fading-circle",
+      text = "Running MoveRakeR::speed_filt() ..."
+    )
+
+    id <- showNotification(
+      "Running speed filter...",
+      duration = NULL,
+      closeButton = FALSE,
+      type = "message"
+    )
 
     df <- get_annotation_base()
     req(df)
-    has_gaps <- "gapsec" %in% names(df)
-    df <- speed_filt(df, sp_thres = input$speed_thresh, annotate = TRUE,
-                     verbose = TRUE, detailed_verbose = FALSE, hasgaps = has_gaps)
 
+    has_gaps <- "gapsec" %in% names(df)
+
+    # custom function block
+    fun_obj <- NULL
+    fun_args <- list()
+
+    if (isTRUE(input$use_custom_fun)) {
+
+      smoother <- switch(
+        input$custom_fun_name,
+        median = median,
+        mean = mean,
+        max = max,
+        min = min,
+        custom = match.fun(input$custom_fun_text)
+      )
+
+      fun_obj <- function(x, y, k = input$fun_k) {
+        data.table::frollapply(
+          y,
+          n = k,
+          FUN = smoother,
+          align = "center",
+          fill = NA
+        )
+      }
+
+      fun_args <- list(k = input$fun_k)
+
+    }
+
+    df <- speed_filt(
+      df,
+      sp_thres = input$speed_thresh,
+      hybrid = input$speed_hybrid,
+      method = input$speed_method,
+      points_each_side = input$points_each_side,
+      include_centre = input$include_centre,
+      fun = fun_obj,
+      fun_args = fun_args,
+      annotate = TRUE,
+      hasgaps = has_gaps,
+      verbose = input$speed_verbose,
+      detailed_verbose = input$speed_detailed_verbose
+    )
+
+    # remember choice
+    filter_state$speed <- list(
+      sp_thres = input$speed_thresh,
+      method = input$speed_method,
+      hybrid = input$speed_hybrid,
+      points_each_side = input$points_each_side,
+      include_centre = input$include_centre,
+      custom_used = input$use_custom_fun,
+      fun = fun_obj,
+      fun_args = fun_args,
+      timestamp = Sys.time()
+    )
+
+    removeNotification(id)
     shinybusy::remove_modal_spinner()
+
     annotated_data(df)
 
   })
+
 
   # -------------------------------------------------------------- #
   # Simple speed filter
@@ -723,6 +1450,12 @@ server <- function(input, output, session) {
 
     df0 = df0 %>% ungroup() %>% group_by(TagID)
 
+    # remember choice
+    filter_state$speed_cus <- list(
+      sp_thres_cus = input$custom_speed_thresh_numeric,
+      timestamp = Sys.time()
+    )
+
     shinybusy::remove_modal_spinner()
     annotated_data(df0)
 
@@ -746,6 +1479,12 @@ server <- function(input, output, session) {
 
     df <- df %>% select(-any_of(c("init_row", "cc", "row_id")))
 
+    # remember choice
+    filter_state$turn <- list(
+      turnFilt = input$turn_thresh_numeric,
+      turnFilt_dir = input$turn_dir,
+      timestamp = Sys.time()
+    )
 
     shinybusy::remove_modal_spinner()
     annotated_data(df)
@@ -781,9 +1520,21 @@ server <- function(input, output, session) {
         }
       }
 
+      # remember choice
+      filter_state$latlong <- list(
+        lat1 = input$lat1,
+        lat2 = input$lat2,
+        lng1 = input$lng1,
+        lng2 = input$lng2,
+        timestamp = Sys.time()
+      )
+
     } else{
 
-       df <- df %>% select(-any_of("ll_rm"))
+      # remember choice
+      filter_state$latlong <- NULL
+
+      df <- df %>% select(-any_of("ll_rm"))
 
     }
 
@@ -791,7 +1542,6 @@ server <- function(input, output, session) {
     annotated_data(df)
 
   })
-
 
   # -------------------------------------------------------------------- #
   # timeline plot
@@ -810,7 +1560,6 @@ server <- function(input, output, session) {
     df
   })
 
-
   output$timeline_plot <- renderPlot({
     df <- timeline_data()
     req(nrow(df) > 0)
@@ -821,7 +1570,6 @@ server <- function(input, output, session) {
                             return_plot = TRUE,
                             overlaps = TRUE,
                             messages = FALSE)
-
 
     suppressMessages({
       attr(plotter, "plot") +
@@ -850,8 +1598,6 @@ server <- function(input, output, session) {
   # -------------------------------------------------------------- #
   # user may already have columns flagged and want to include / visualise
   # e.g. different versions of speed filtering from different R packages
-
-
 
   # 1. Let user pick extra flags
   # UI for user to select existing flag-like columns (0/1/NA)
@@ -902,10 +1648,11 @@ server <- function(input, output, session) {
     "No. sats"     = "sat_rm",
     "PDOP"         = "gps_pdop_rm",
     "HDOP"         = "gps_hdop_rm",
+    "Custom filters" = "all_rm",
     "Traj. speed" = "speed_rm",
     "Traj. speed (custom)" = "cust_speed_rm",
     "Turn angle"   = "angle_rm",
-    "DateTime dups" = "dup_rm",
+    "Duplicates" = "dup_rm",
     "Single gap"   = "singlegap_rm",
     "Extreme latlongs" = "ll_rm"
   )
@@ -988,6 +1735,7 @@ server <- function(input, output, session) {
 
   # Combine annotation columns automatically (built-in + user-provided)
   observe({
+
     df <- annotated_data()
     req(df)
 
@@ -995,12 +1743,19 @@ server <- function(input, output, session) {
     # Built-in flags you always consider
     base_flags <- c(
       "tid_rm","NA_latlong_rm", "all_NA_rm", "sat_rm", "flt_rm",
-      "gps_pdop_rm", "gps_hdop_rm", "singlegap_rm",
+      "gps_pdop_rm", "gps_hdop_rm", "all_rm","singlegap_rm",
       "dup_rm", "speed_rm", "cust_speed_rm","angle_rm", "ll_rm"
     )
 
     # Add user-selected flags
     extra_flags <- input$custom_flags
+
+    # remember choice
+    filter_state$extra <- list(
+      extra_flags = input$custom_flags,
+      timestamp = Sys.time()
+    )
+
     all_flags <- unique(c(base_flags, extra_flags))
     all_flags <- intersect(all_flags, names(df))  # keep only those that exist
 
@@ -1084,6 +1839,7 @@ server <- function(input, output, session) {
 
   ##########################
   filtered_data_threshold <- reactive({
+    req(annotated_data())
     df <- filtered_annotated()
     req(input$time_slider_threshold)
     df %>% filter(DateTime >= input$time_slider_threshold[1],
@@ -1103,6 +1859,9 @@ server <- function(input, output, session) {
 
   # GPS lines
   observe({
+
+    req(map_ready())   # HARD GATE
+
 
     #df <- filtered_annotated()
     df <- filtered_data_threshold()
@@ -1129,9 +1888,16 @@ server <- function(input, output, session) {
 
   # GPS fixes
   observe({
+
+    req(map_ready())   # HARD GATE
+
     #df <- filtered_annotated()
     df <- filtered_data_threshold()
     req(df)
+
+    if (!"plot_col" %in% names(df)) {
+      df$plot_col <- 0
+    }
 
     df$flag_col <- ifelse(is.na(df$plot_col), "grey",
                           ifelse(df$plot_col == 1, "red", "blue"))
@@ -1142,7 +1908,6 @@ server <- function(input, output, session) {
       "gps_pdop_rm", "gps_hdop_rm", "singlegap_rm",
       "dup_rm", "speed_rm", "cust_speed_rm","angle_rm", "ll_rm"
     )
-
 
     # Add user-selected flags
     extra_flags <- input$custom_flags
@@ -1173,6 +1938,7 @@ server <- function(input, output, session) {
       speed_rm     =  NA, ##### NOT CURRENTLY CARRIED THROUGH in  way that matches how traj_speed() works
       cust_speed_rm = "traj_speed", # the current row is a lead so this is the speed from current row to t-1
       angle_rm     = "turn_angle", ##### NOT CURRENTLY CARRIED THROUGH
+      all_rm = NA, # custom filtering
       dup_rm       = NA,
       singlegap_rm = NA,
       ll_rm        = NA
@@ -1278,10 +2044,11 @@ server <- function(input, output, session) {
       "No. sats"      = "sat_rm",
       "PDOP"          = "gps_pdop_rm",
       "HDOP"          = "gps_hdop_rm",
+      "Custom filters" = "all_rm",
       "Traj. speed"   = "speed_rm",
       "Traj. speed (custom)" = "cust_speed_rm",
       "Turn angle"    = "angle_rm",
-      "DateTime dups" = "dup_rm",
+      "Duplicates" = "dup_rm",
       "Single gap"    = "singlegap_rm",
       "Extreme latlongs" = "ll_rm"
     )
@@ -1322,10 +2089,11 @@ server <- function(input, output, session) {
         "No. sats"      = "sat_rm",
         "PDOP"          = "gps_pdop_rm",
         "HDOP"          = "gps_hdop_rm",
+        "Custom filters" = "all_rm",
         "Traj. speed"   = "speed_rm",
         "Traj. speed (custom)" = "cust_speed_rm",
         "Turn angle"    = "angle_rm",
-        "DateTime dups" = "dup_rm",
+        "Duplicates" = "dup_rm",
         "Single gap"    = "singlegap_rm",
         "Extreme latlongs" = "ll_rm"
       )
@@ -1382,10 +2150,11 @@ server <- function(input, output, session) {
       "No. sats"      = "sat_rm",
       "PDOP"          = "gps_pdop_rm",
       "HDOP"          = "gps_hdop_rm",
+      "Custom filters" = "all_rm",
       "Traj. speed"   = "speed_rm",
       "Traj. speed (custom)" = "cust_speed_rm",
       "Turn angle"    = "angle_rm",
-      "DateTime dups" = "dup_rm",
+      "Duplicates" = "dup_rm",
       "Single gap"    = "singlegap_rm",
       "Extreme latlongs" = "ll_rm"
     )
@@ -1413,10 +2182,11 @@ server <- function(input, output, session) {
                           "No. sats" = input$nsat_thresh_numeric,
                           "PDOP" = input$pdop_thresh,
                           "HDOP" = input$hdop_thresh,
+                          "Custom filters" = "n/a",
                           "Traj. speed" = input$speed_thresh_numeric,
                           "Traj. speed (custom)" = input$custom_speed_thresh_numeric,
                           "Turn angle" = input$turn_thresh_numeric,
-                          "DateTime dups" = "n/a",
+                          "Duplicates" = "n/a",
                           "Single gap"    = "n/a",
                           "Extreme latlongs" = "n/a"
                           )

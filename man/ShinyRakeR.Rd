@@ -31,7 +31,7 @@ By running the \code{ShinyRakeR} command, this launches an interactive MoveRakeR
 two main tabs: (1) Threshold explorer, and (2) Temporal inspector.
 
 (1) The Threshold explorer tab
-This tab uses a combination of some of the processes available in \code{clean_GPS} and
+This tab uses a combination of some of the processes available in \code{clean_track} and
 a soft 'rake' of the data leaning into the presentation within the \code{rake} function. This tab allows
 the user to first label gapsections using the \code{gap_section} function (optionally), and then annotate data through:
 \itemize{
