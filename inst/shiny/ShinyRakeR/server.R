@@ -164,6 +164,10 @@ server <- function(input, output, session) {
   # Base data (optionally gap-sectioned)
   data_start <- reactive({ data })
 
+  # -------------------------------------------------------------- #
+  # Clear
+  # -------------------------------------------------------------- #
+
   map_ready <- reactiveVal(TRUE)
 
   observeEvent(input$clear, {
@@ -171,6 +175,8 @@ server <- function(input, output, session) {
     removeModal()
 
     map_ready(FALSE)
+
+    dup_resolved(FALSE)
 
     for(n in names(reactiveValuesToList(filter_state))){
       filter_state[[n]] <- NULL
@@ -205,6 +211,18 @@ server <- function(input, output, session) {
 
   }, ignoreInit = TRUE)
 
+
+  # -------------------------------------------------------------- #
+  # Map reset, in case drawing goes wrong
+  # -------------------------------------------------------------- #
+
+  observeEvent(input$map_reset, {
+
+    output$mymap2 <- leaflet::renderLeaflet({
+      map_reactive()
+    })
+
+  })
 
   # ---------------------------------------- #
   # Gap assignment
@@ -655,34 +673,90 @@ server <- function(input, output, session) {
 
   observeEvent(input$show_dup_summary, {
     req(annotated_data())
+
     df <- annotated_data()
 
     # Identify the "issue" columns
     issue_cols <- c("parallel_issue", "dup_time_issue", "dup_coords_issue",
                     "dup_time_coords_issue", "all_dup_issue")
 
-    # Quick summary: count TRUE (or 1) per animal per issue
-    dup_summary <- df %>%
-      group_by(TagID) %>%
-      summarise(
-        across(all_of(issue_cols), ~as.integer(sum(.x, na.rm = TRUE))),
-        .groups = "drop"
-      )
+    #browser()
+
+    if(any(names(df) %in% issue_cols)){
+      # Quick summary: count TRUE (or 1) per animal per issue
+      dup_summary <- df %>%
+        group_by(TagID) %>%
+        summarise(
+          across(all_of(issue_cols), ~as.integer(sum(.x, na.rm = TRUE))),
+          .groups = "drop"
+        )
 
 
-    # Show in modal
-    showModal(
-      modalDialog(
-        title = "Duplicate Removal Summary",
-        size = "l",
-        easyClose = TRUE,
-        renderTable({
-          dup_summary
-        }),
-        footer = modalButton("Close")
+      # Show in modal
+      showModal(
+        modalDialog(
+          title = "Duplicate Removal Summary",
+          size = "l",
+          easyClose = TRUE,
+          renderTable({
+            dup_summary
+          }),
+          footer = modalButton("Close")
+        )
       )
-    )
+    }
+
+
   })
+
+  ####### resolve duplicates
+
+  dup_resolved <- reactiveVal(FALSE)
+
+  observeEvent(input$resolve_dup, {
+
+    req(annotated_data())
+
+    df <- annotated_data()
+
+    # Identify the "issue" columns
+    issue_cols <- c("parallel_issue", "dup_time_issue", "dup_coords_issue",
+                    "dup_time_coords_issue", "all_dup_issue")
+
+    #browser()
+    if(any(names(df) %in% issue_cols)){
+
+      df$new_issue_flag <- as.integer(
+        rowSums(df[issue_cols] == 1, na.rm = TRUE) > 0
+      )
+
+      df <- df[df$new_issue_flag == 0,]
+      annotated_data(df)
+      dup_resolved(TRUE)
+     }
+
+  })
+
+  output$dup_status_icon <- renderUI({
+
+    if(isTRUE(dup_resolved())) {
+
+      tags$span(
+        icon("check-circle"),
+        " Duplicates removed",
+        style = "color: #d32f2f; font-weight: 600; font-weight: bold;"
+      )
+
+
+    } else {
+
+      NULL
+    }
+
+  })
+
+
+
 
 
   # -------------------------------------------------------------- #

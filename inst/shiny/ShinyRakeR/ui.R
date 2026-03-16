@@ -1,13 +1,15 @@
 
 ui <- dashboardPage(
 
-  dashboardHeader(title = "ShinyRakeR"),
+  dashboardHeader(title = "ShinyRakeR",
+                  rightUi = uiOutput("dup_status_icon")
+  ),
   dashboardSidebar(
     sidebarMenu(
       #menuItem("Rake Overview", tabName = "rake_overview", icon = icon("leaf")),
       menuItem("Threshold Explorer", tabName = "threshold_explorer", icon = icon("sliders-h")),
       menuItem("Temporal Inspector", tabName = "temporal_inspect", icon = icon("clock")),
-
+      menuItem("Read Me", tabName = "readme", icon = icon("book")),
       checkboxInput("link_maps", "Link maps to each other", value = FALSE)
 
     )
@@ -38,7 +40,7 @@ ui <- dashboardPage(
                           height = "100%",  # full column height
                           # Step 1: Optional Gap Assignment
                           wellPanel(
-                            tags$h4("Step 1: Identify Gaps", style = "color: steelblue;"),
+                            tags$h4("Step 1: Identify gaps", style = "color: steelblue;"),
                             #checkboxInput("do_gap_section", "Run gap_section() first?", value = FALSE),
                             numericInput("gap_thresh", "Gap threshold (seconds):", value = 3600, min = 1, step = 60),
                             numericInput("gap_tol", "Tolerance (seconds):", value = 0.2, min = 0, step = 0.01),
@@ -50,17 +52,25 @@ ui <- dashboardPage(
                           wellPanel(
                             # 0. dup data
                             tags$h4("Step 2: Assess duplicate data", style = "color: slateblue;"),
+                            div(style = "flex: 1;",
+                                htmltools::h5(tags$b("Specify annotation and optional filtering of data for duplicates:"))
+                            ),
                             div(
-                              style = "display: flex; align-items: center;",
-                              div(style = "flex: 1;",
-                                  htmltools::h5(tags$b("Arguments for duplicate_track():"))
+                              style = "display: flex; gap: 10px; width: 100%;",
+                              actionButton(
+                                "run_dup",
+                                "Run duplicate_track()",
+                                style = "flex: 1; white-space: normal; text-align: center;"
                               ),
-                              div(style = "flex: 0 0 auto;",
-                                  actionButton("run_dup", "Set values", style = "width: 120px;")
+                              actionButton(
+                                "show_dup_summary",
+                                "Summary",
+                                style = "flex: 1; white-space: normal; text-align: center;"
                               ),
-                              div(style = "flex: 0 0 auto;",
-                                  # UI: Duplicate summary button
-                                  actionButton("show_dup_summary", "Summary", style = "width: 150px;")
+                              actionButton(
+                                "resolve_dup",
+                                "Resolve duplicates",
+                                style = "flex: 1; white-space: normal; text-align: center;"
                               )
                             )
                           ),
@@ -89,7 +99,9 @@ ui <- dashboardPage(
                               )
                             ),
 
-                            hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
+                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
+                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
+
                             # 2. NA Lat long
                             div(
                               style = "display: flex; align-items: center;",
@@ -424,7 +436,11 @@ ui <- dashboardPage(
                                 ),
                                 checkboxInput("show_lines", "Show trajectories", value = TRUE),
                                 checkboxInput("show_points", "Show GPS fixes", value = TRUE),
-                                checkboxInput("show_legend", "Show Legend", value = TRUE)
+                                checkboxInput("show_legend", "Show Legend", value = TRUE),
+
+                                div(style = "flex: 0 0 auto;",
+                                    actionButton("map_reset", "Map reset", style = "width: 120px;")
+                                )
                               )
                             ),
                           # UI
@@ -446,7 +462,6 @@ ui <- dashboardPage(
                               )
                             )
                           ),
-
                           shinyWidgets::dropdown(
                             inputId = "decisions",
                             label = "Current decisions",
@@ -672,6 +687,26 @@ ui <- dashboardPage(
                        )
                 )
               )
+      ),
+      tabItem(
+        tabName = "readme",
+
+        fluidRow(
+          column(
+            width = 12,
+
+            box(
+              title = "ShinyRakeR Documentation",
+              width = 12,
+              status = "primary",
+              solidHeader = TRUE,
+
+              includeMarkdown(
+                system.file("shiny/ShinyRakeR/readme.md", package = "MoveRakeR")
+              )
+            )
+          )
+        )
       )
     )
   )

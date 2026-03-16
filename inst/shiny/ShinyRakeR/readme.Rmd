@@ -1,0 +1,114 @@
+---
+title: "App instructions"
+author: "Chris Thaxter"
+date: "2026-03-16"
+output: md_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### **Introduction**
+
+This Shiny app allows the user to experiment with setting parameters to annotate GPS data as erroneous, and to evaluate the consequences of selecting certain parameters. The app is flexible to allow choices to update if you select different parameters.
+
+### **The threshold explorer**
+
+Upon start-up, the app will display the main tab called *Threshold explorer*. This is the tab where you can set parameters and explore the number of fixes that would be lost if you were to follow this particular set of choices.
+
+There is a map on the right that will be populated with display of GPS points and interconnecting lines between them for animals in your dataset. This will be displayed after step 1 is run. There are three steps given on the left-hand side. These are:
+
+- **Step 1: Identify gaps**
+
+- **Step 2: Assess duplicate data**
+
+- **Step 3: Annotate data**
+
+
+#### **Step 1: Identify gaps**
+
+This first part is to identify 'gaps' in your data. This is done using the `MoveRakeR::gap_section()` function, that accepts two arguments of a **Gap threshold** for the perceived maximum allowed sampling interval and the **tolerance** value which adds a proportional extra amount to give lee-way, the result of which is a maximum interval beyond which a gap in the GPS data record is labelled. This essentially labels strings of points in sections split by the resultant time interval generated.
+
+This gap identification feeds into the parameters under step 3 below to consider fixes as isolated single sections as worthy of dropping from the data.
+
+#### **Step 2: Assess duplicate data**
+
+This second determines if there are any duplicate data issues with the data as presented to the app. By clicking *Run duplicate_track()*, a modal dialogue box will pop up. This brings up further options that feed directly into the `MoveRakeR::duplicate_track()` function. 
+
+This function us used to assess (i) potential duplicate time streams (if the tag has jumped back in time), (ii) duplicate timestamps for the same GPS fix, and (iii) full duplicate data across time and xy coordinates. There is a further (iv) option available for duplicate GPS locations across different time stamps, but use that with caution as it is dependent on precision of the xy data and stationary animals could have identical locations.   
+
+Within the dialogue box, there are options of how to handles cases of the above i-iv cases of duplicates. A global method across all types of duplicates can be used, or specific ones for different duplicate types. If *best quality* is used as the method, then you can select which variables to use from your data, such as GPS fixtime, DOP, or number of satellites etc, and the direction of those to indicate if higher or lower values are better.
+
+It should be noted that for duplicates, further processes may depend on no duplicates being present. Therefore, there is a resolve duplicates button. If this is pressed, a red notification appears at the top, and data are filtered to remove those rows. For example where consecutive timestamps are needed in speed filtering, this is required. This is the ONLY part of the app the does filtering, the rest is annotation.
+
+#### **Step 3: Annotate data**
+
+This section is where you can specify labelling of rows as erroneous This section has a large selection of extra choices to select in any order. These are:
+
+1. An initial flag that you may have already in your data from a particular column;
+2. A minimum number of GPS fixes per animal;
+3. Flag any missing NAs in latitude and longitude;
+4. Set a minimum number of satellites using a specific column in your data;
+5. Annotation for minimum horizontal dilution of precision (HDOP);
+6. Annotation for minimum position dilution of precision (PDOP), e.g. typically <3 means satellites well spread;
+7. Beyond 4-6 above, use custom filtering (e.g. instead of 4-6) for any columns in your data, using the `MoveRakeR::filt_err()` function;
+8. Compute a trajectory speed filter, using `MoveRakeR::speed_filt()`. By clicking *Run speed_filt()* this brings up a modal dialogue box that has arguments that the `speed_filt()` function requires, including options for raw traj speed, and/or use of a moving average window (hybrid = both), and options of built in methods such as the McConnell filter, numbers of points either side, with custom functions that you can also use that have to exist already in your R session;
+9. The above `MoveRakeR::speed_filt()` function uses a consecutive filtering approach (using a while loop) which re-computes trajectory speed as it iterates, which can be very different from just simply filtering out all fixes that are above a certain value. If that simpler approach is wanted, then the *custom speed* option can be selected;
+10. A turning angle filter can also be deployed, using `MoveRakeR::turn_filt()` with values either greater or lesser than a radian value of animal turning angle used to flag fixes;
+11. A simple rectangle can also be drawn on the map to give an *a priori* extent beyond which fixes are flagged as outlying and annotated. This can be done interactively on the map by activating the *Rect Mode* ON/OFF clicking for the top left and then bottom right (a rectangle then appears), and then *Run extent filter*; further *Reset rectangle* removes the current selection; setting the rectangle mode to OFF deactivates map clicking.
+
+#### **The 'Rake' section**
+
+As you go along, the section at the bottom right tracks the choices made and summarises the data visually as gauges with number of fixes and a proportion for each type of annotation made, with the combined effect of them all displayed. A table below then summarises the number of fixes per animal in more detail per annotation selected.
+
+#### **The map**
+
+The top right `leaflet` map when first loaded is blank and requires step 1 to be run first. Thereafter, the map will update to reflect each annotation step made. The map also has options for switching between OpenStreetMap, GoogleEarth, ESRI Ocean Basemap and ESRI World Imagery backdrops. 
+
+Above the map there are different drop down menus:
+
+- **Select animal**: self-explanatory is used to select different animals
+- **Filter 'bad' points**: updates with the annotations and can be used to visualise which GPS fixes are labelled as 'erroneous' from the choices made.
+- **Map settings**: gives severl options to change the display of points and lines with point sizes, line thickness, and opacity; toggle the legend to display it;
+- **Export data**: the current data with annotations can be exported to the R session at any point with a particular name to then carry out further work outside of the app;
+- **Current decisions**: a model box appears after clicking the *Current decision* box - this tracks the decisions and parameters that are currently selected for annotation under each step, including gap sections and duplicates; the *Reset* button resets all decisions and removes the current annoation steps, which thus removes decisions under the rake part below and resets the map.
+
+### **The temporal inspector**
+
+Separate to the threshold explorer, the temporal inspector tab can be used to examine the data in your object supplied to the app. 
+
+The tab also has a map in the top right, that can be linked together to the map in the threshold explorer by ticking the *Link maps to each other* box on the left-hand side, but beware that this doubles the map rendering time so the app can be slowed, possibly beyond realistic usage if you have large data.
+
+Select an animal from the top drop down menu (note also in this map, colours are plotted different per animal using the `viridis` scale). The same map settings are also available similar to the map in the threshold explorer. 
+
+The left had side of the temporal inspector is blank to start but numeric covariates can be selected from your data that when individually clicked are sequentially added as temporal line plots. This can help visualise the covariates through time alongside the spatial distribution of fixes. As with the map in the threshold explorer, there is a time slider that can narrow or widen the temporal extent. Under map settings above the map, there is a further option to switch between `ggplot` or `plotly` for visualisation of the covariate line plots.
+
+Further down on the temporal inspector page, there is a very simple `ggplot` histogram that can be used to examine the distribution of the currently-selected numeric variable reflecting the time period subset examined; different animals appears as different panels. The histogram can also be adjusted for bin-width, truncated or transformed for the y-scale.
+
+Finally at the bottom the density of GPS fixes are displayed as blue rectangles through time per animal and across all animals using the `MoveRakeR::tag_timeline()` function; this can help visualise the extent of the data available per animal and to visually show if any animals are outliers for the overall tracking distribution across animals.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
