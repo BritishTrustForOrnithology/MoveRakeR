@@ -1694,52 +1694,6 @@ server <- function(input, output, session) {
   # maximum temporal extent / flag any datetimes in the past/future
   # -------------------------------------------------------------- #
 
-  # render text boxes
-
-  output$maxtemp_section <- renderUI({
-
-    tagList(
-      tags$details(
-        open = if(sections_open()) "open" else NULL,
-
-        tags$summary(
-          tags$b("m. Errant temporal annotation")
-        ),
-
-        ############# TO ADD ###########
-
-        # Start and end dates for valid time period
-        # needs to default to the max of the data
-
-        div(
-          style = "display: flex; gap: 5px; align-items: center; width: 100%;",
-          div(style = "width: 80px;", htmltools::h5("Time period:")),
-          div(style = "flex: 2; min-width: 0;",
-              textInput("starttime", htmltools::span("Start", style = "font-weight: normal;"), value = "")
-          ),
-          div(style = "flex: 2; min-width: 0;",
-              textInput("endtime", htmltools::span("End", style = "font-weight: normal;"), value = "")
-          ),
-          div(style = "flex: 0 0 120px;",
-              textInput("timezone", htmltools::span("Timezone:", style = "font-weight: normal;"), value = "UTC")
-          )
-
-        ),
-        # Button Row
-        div(
-          style = "display: flex; gap: 10px; margin-top: 10px; width: 100%; max-width: 100%; box-sizing: border-box;",
-          div(style = "flex: 1 1 0; min-width: 0;", actionButton("filt_start", "Before start", style = "width: 100%;")),
-          div(style = "flex: 1 1 0; min-width: 0;", actionButton("filt_end", "After end", style = "width: 100%;")),
-          div(style = "flex: 1 1 0; min-width: 0;", actionButton("future_rm", "In future", style = "width: 100%;"))
-        )
-
-      ),
-      hr(style = "border-top: 2px solid #888; margin: 8px 0;")
-
-    )
-
-  })
-
   # ---------------------------- #
   # At the start, populate these boxes with the range around the data
   observe({
@@ -1944,6 +1898,32 @@ server <- function(input, output, session) {
     annotated_data(df)
 
   })
+
+
+  # ---------------------------------------- #
+  # display current times after box expanded/collapsed
+
+  observeEvent(input$cur_times, {
+
+    req(data_start())
+    #if(is.null(input$starttime) || input$starttime == ""){
+
+      isolate({
+
+        df <- data_start()
+
+        st <- min(df$DateTime, na.rm = TRUE)
+        en <- max(df$DateTime, na.rm = TRUE)
+
+        updateTextInput(session, "starttime", value = format(st, "%Y-%m-%d %H:%M:%S", tz = input$timezone))
+        updateTextInput(session, "endtime", value = format(en, "%Y-%m-%d %H:%M:%S", tz = input$timezone))
+
+      })
+    #}
+
+  })
+
+
 
 
 
@@ -2508,7 +2488,53 @@ server <- function(input, output, session) {
 
   })
 
+  # ------------------------------------------ #
+  # temporal annotation
 
+  output$maxtemp_section <- renderUI({
+
+    tagList(
+      tags$details(
+        open = if(sections_open()) "open" else NULL,
+
+        tags$summary(
+          tags$b("m. Errant temporal annotation")
+        ),
+
+        ############# TO ADD ###########
+
+        # Start and end dates for valid time period
+        # needs to default to the max of the data
+
+        div(
+          style = "display: flex; gap: 5px; align-items: center; width: 100%;",
+          div(style = "width: 80px;", htmltools::h5("Time period:")),
+          div(style = "flex: 2; min-width: 0;",
+              textInput("starttime", htmltools::span("Start", style = "font-weight: normal;"), value = "")
+          ),
+          div(style = "flex: 2; min-width: 0;",
+              textInput("endtime", htmltools::span("End", style = "font-weight: normal;"), value = "")
+          ),
+          div(style = "flex: 0 0 120px;",
+              textInput("timezone", htmltools::span("Timezone:", style = "font-weight: normal;"), value = "UTC")
+          )
+
+        ),
+        # Button Row
+        div(
+          style = "display: flex; gap: 10px; margin-top: 10px; width: 100%; max-width: 100%; box-sizing: border-box;",
+          div(style = "flex: 1 1 0; min-width: 0;", actionButton("cur_times", "Display times", style = "width: 100%;")),
+          div(style = "flex: 1 1 0; min-width: 0;", actionButton("filt_start", "Before start", style = "width: 100%;")),
+          div(style = "flex: 1 1 0; min-width: 0;", actionButton("filt_end", "After end", style = "width: 100%;")),
+          div(style = "flex: 1 1 0; min-width: 0;", actionButton("future_rm", "In future", style = "width: 100%;"))
+        )
+
+      ),
+      hr(style = "border-top: 2px solid #888; margin: 8px 0;")
+
+    )
+
+  })
 
   ##########################################################################################################
   #
