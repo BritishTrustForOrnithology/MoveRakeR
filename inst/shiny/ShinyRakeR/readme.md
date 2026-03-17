@@ -108,6 +108,13 @@ order. These are:
     right (a rectangle then appears), and then *Run extent filter*;
     further *Reset rectangle* removes the current selection; setting the
     rectangle mode to OFF deactivates map clicking.
+12. A further temporal annotator is coded to allow dates that are before
+    a start date, after an end date, or in the future to be labelled and
+    is in keeping with the `MoveRakeR::tag_spans()` function.
+
+Annotation options are in a collapsed viewing state when the app loads,
+but a button to expand all is included, and any specific annotation
+sections can be expanded or collapsed as you see fit.
 
 #### **The ‘Rake’ section**
 

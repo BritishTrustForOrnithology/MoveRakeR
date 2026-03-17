@@ -57,6 +57,9 @@ This section is where you can specify labelling of rows as erroneous This sectio
 9. The above `MoveRakeR::speed_filt()` function uses a consecutive filtering approach (using a while loop) which re-computes trajectory speed as it iterates, which can be very different from just simply filtering out all fixes that are above a certain value. If that simpler approach is wanted, then the *custom speed* option can be selected;
 10. A turning angle filter can also be deployed, using `MoveRakeR::turn_filt()` with values either greater or lesser than a radian value of animal turning angle used to flag fixes;
 11. A simple rectangle can also be drawn on the map to give an *a priori* extent beyond which fixes are flagged as outlying and annotated. This can be done interactively on the map by activating the *Rect Mode* ON/OFF clicking for the top left and then bottom right (a rectangle then appears), and then *Run extent filter*; further *Reset rectangle* removes the current selection; setting the rectangle mode to OFF deactivates map clicking.
+12. A further temporal annotator is coded to allow dates that are before a start date, after an end date, or in the future to be labelled and is in keeping with the `MoveRakeR::tag_spans()` function. 
+
+Annotation options are in a collapsed viewing state when the app loads, but a button to expand all is included, and any specific annotation sections can be expanded or collapsed as you see fit.
 
 #### **The 'Rake' section**
 

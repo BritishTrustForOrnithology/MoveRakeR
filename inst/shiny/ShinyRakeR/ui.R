@@ -38,6 +38,8 @@ ui <- dashboardPage(
 
                       box(title = "Threshold and gap controls", status = "warning", width = 12,
                           height = "100%",  # full column height
+
+                          # ---------------------------------------------------------------------------------- #
                           # Step 1: Optional Gap Assignment
                           wellPanel(
                             tags$h4("Step 1: Identify gaps", style = "color: steelblue;"),
@@ -49,6 +51,8 @@ ui <- dashboardPage(
                             tags$p("Set gap parameters before applying annotation filters.", style = "font-size: 12px; color: gray;")
                           ),
 
+                          # ---------------------------------------------------------------------------------- #
+                          # Step 2: Duplication of data
                           wellPanel(
                             # 0. dup data
                             tags$h4("Step 2: Assess duplicate data", style = "color: slateblue;"),
@@ -75,298 +79,78 @@ ui <- dashboardPage(
                             )
                           ),
 
-                          # Annotation / Threshold Sliders
+                          # ---------------------------------------------------------------------------------- #
+                          # Step 3: Annotation
                           wellPanel(
-                            tags$h4("Step 3: Annotate data", style = "color: darkgreen;"),
+
+                            div(
+                              style = "display: flex; justify-content: space-between; align-items: center;",
+
+                              tags$h4("Step 3: Annotate data", style = "color: darkgreen;"),
+
+                              actionButton("toggle_sections", "Expand / Collapse all"),
+                            ),
+
+                            # this enables the down arrow in the drop downs of individual sections to be displayed
+                            tags$style(HTML("
+                              summary {
+                                display: list-item;
+                                cursor: pointer;
+                              }
+                            ")),
+
+                            # ------------------------------------------------------------------ #
+                            # 1. Existing column flags built server side
                             uiOutput("custom_flag_ui"),
 
-                            # 1. Too few data per animal
-                            div(
-                              style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
-                              div(style = "flex: 3;",
-                                  sliderInput("fix_thresh_slider", "Number of fixes/animal:",
-                                              min = 0, max = 100, value = 5) # that upper value may need to be flexible
-                              ),
-                              div(style = "flex: 1;",
-                                  numericInput(
-                                    "fix_thresh_numeric",
-                                    "",
-                                    value = 5, min = 0, max = 100, step = 1
-                                  )
-                              ),
-                              div(style = "flex: 0 0 auto;",
-                                  actionButton("run_fixflag", "Run fix/animal", style = "width: 120px;")
-                              )
-                            ),
+                            # ------------------------------------------------------------------ #
+                            # 2. Too few data per animal
+                            uiOutput("minfix_section"),
 
-                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
-                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
+                            # ------------------------------------------------------------------ #
+                            # 3. NA Lat long
+                            uiOutput("NA_section"),
 
-                            # 2. NA Lat long
-                            div(
-                              style = "display: flex; align-items: center;",
-                              div(style = "flex: 1;",
-                                  htmltools::h5(tags$b("Missing latitute/longitude:"))
-                              ),
-                              div(style = "flex: 0 0 auto;",
-                                  actionButton("close_warn_1", "", style = "width: 30px;", icon = icon("xmark"))
-                              ),
-                              div(style = "flex: 0 0 auto;",
-                                  actionButton("run_na_ll", "Flag NAs", style = "width: 120px;")
-                              )
-                              #,
-                              #div(style = "flex: 0 0 auto;",
-                              #    actionButton("clear_ll", "clear", style = "width: 60px;") #, icon = icon("ban"))
-                              #)
-                            ),
-                            uiOutput("na_warning"),
+                            # ------------------------------------------------------------------ #
+                            # 4. Nsats
+                            uiOutput("nsats_section"),
 
-                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
-                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
+                            # ------------------------------------------------------------------ #
+                            # 5. PDOP
+                            uiOutput("pdop_section"),
 
-                            # 3. Nsats
-                            div(
-                              style = "margin-bottom: 12px;",  # space below this block
+                            # ------------------------------------------------------------------ #
+                            # 6. HDOP
+                            uiOutput("hdop_section"),
 
-                              # --- First row: label + dropdown ---
-                              div(
-                                style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
-                                div(style = "flex: 1;",
-                                    htmltools::h5(tags$b("Number of satellites:"))
-                                ),
-                                div(style = "flex: 2;",
-                                    uiOutput("sel_sat_col")
-                                )
-                              ),
+                            # ------------------------------------------------------------------ #
+                            # 7. Custom filter
+                            uiOutput("custom_section"),
 
-                              # --- Second row: slider + numeric + button ---
-                              div(
-                                style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px;",
-                                div(style = "flex: 3;",
-                                    sliderInput("nsat_thresh_slider", NULL,
-                                                min = 3, max = 6, value = 4)
-                                ),
-                                div(style = "flex: 1;",
-                                    numericInput("nsat_thresh_numeric", NULL,
-                                                 value = 4, min = 0, max = 8, step = 1)
-                                ),
-                                div(style = "flex: 0 0 auto;",
-                                    actionButton("run_nsats", "Run nsats", style = "width: 120px;")
-                                )
-                              )
-                            ),
+                            # ------------------------------------------------------------------ #
+                            # 8. Single gapsections
+                            uiOutput("gapsec_section"),
 
-                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
-                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
+                            # ------------------------------------------------------------------ #
+                            # 9. Iterative trajectory speed
+                            uiOutput("speedfilt_section"),
 
-                            # 4. PDOP filter + button
-                            div(
-                              style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
-                              div(style = "flex: 3;",
-                                  sliderInput("pdop_thresh", "PDOP filter:",
-                                              min = 0, max = 10, value = 5)
-                              ),
-                              div(style = "flex: 1;",
-                                  numericInput(
-                                    "pdop_thresh_numeric",
-                                    "",
-                                    value = 5, min = 0, max = 10, step = 0.01
-                                  )
-                              ),
-                              div(style = "flex: 0 0 auto;",
-                                  actionButton("run_pdop", "Run pdop", style = "width: 120px;")
-                              )
-                            ),
-                            uiOutput("pdop_warning"),
+                            # ------------------------------------------------------------------ #
+                            # 10. Simple trajectory speed
+                            uiOutput("custspeedfilt_section"),
 
-                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
-                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
+                            # ------------------------------------------------------------------ #
+                            # 11. Turning angle speed
+                            uiOutput("turnangle_section"),
 
-                            # 5. HDOP filter + button
-                            div(
-                              style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
-                              div(style = "flex: 3;",
-                                  sliderInput("hdop_thresh", "HDOP filter:",
-                                              min = 0, max = 10, value = 5)
-                              ),
-                              div(style = "flex: 1;",
-                                  numericInput(
-                                    "hdop_thresh_numeric",
-                                    "",
-                                    value = 5, min = 0, max = 10, step = 0.01
-                                  )
-                              ),
-                              div(style = "flex: 0 0 auto;",
-                                  actionButton("run_hdop", "Run hdop", style = "width: 120px;")
-                              )
-                            ),
-                            uiOutput("hdop_warning"),
+                            # ------------------------------------------------------------------ #
+                            # 12. lat long extent selector
+                            uiOutput("maxext_section"),
 
-                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
-                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
+                            # ------------------------------------------------------------------ #
+                            # 13. temporal extent
+                            uiOutput("maxtemp_section")
 
-                            # XX. CUSTOM FILTER
-                            div(
-                              htmltools::h5(tags$b("Custom filtering:")),
-
-                              style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
-
-                              div(
-                                style = "flex: 1 1 120px; min-width: 120px;",
-                                actionButton(
-                                  "cust_filt",
-                                  "Run custom filt_err()",
-                                  style = "width: 100%; white-space: normal; text-align: center;"
-                                )
-                              ),
-
-                              div(
-                                style = "flex: 1 1 140px; min-width: 140px;",
-                                actionButton(
-                                  "show_rm_summary",
-                                  "Filter summary",
-                                  style = "width: 100%; white-space: normal; text-align: center;"
-                                )
-                              )
-                            ),
-
-                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
-                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
-
-                            # 6. Single gapsections
-                            #fluidRow(
-                            #  style = "align-items: centre;",
-                            #  column(8,
-                            #         htmltools::h5(tags$b("Single gapsections:"))
-                            #  ),
-                            #  column(4,
-                            #         div(style = "text-align: right;",
-                            #             actionButton("run_orph", "Single gapsecs", style = "width: 120px;")
-                            #             ))
-                            #),
-                            div(style = "display: flex; align-items: centre;",
-                                div(style = "flex: 1;",
-                                    htmltools::h5(tags$b("Single gapsections:"))
-                                ),
-                                div(style = "flex: 0 0 auto;",
-                                    actionButton("close_warn_2", "", style = "width: 30px;", icon = icon("xmark"))
-                                ),
-                                div(style = "flex: 0 0 auto;",
-                                    actionButton("run_orph", "Single gapsecs", style = "width: 120px;")
-                                )
-                            ),
-                            uiOutput("singlegap_warning"),
-
-                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
-                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
-
-                            # 7. Iterative trajectory speed
-                            div(
-                              style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
-                              div(style = "flex: 3;",  # slider takes remaining width
-                                  sliderInput("speed_thresh", "Trajectory speed (m/s):",
-                                              min = 0, max = 500, value = 50)
-                              ),
-                              div(style = "flex: 1;",
-                                  numericInput(
-                                    "speed_thresh_numeric",
-                                    "",
-                                    value = 50, min = 0, max = 500, step = 0.01
-                                  )
-                              ),
-                              div(style = "flex: 0 0 auto;",  # button keeps its natural width
-                                  actionButton("run_speed", "Run speed_filt()", style = "width: 120px;")
-                              )
-                            ),
-
-                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
-                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
-
-                            # 8. Simple trajectory speed
-                            div(
-                              style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
-                              div(style = "flex: 3;",  # slider takes remaining width
-                                  sliderInput("custom_speed_thresh", "Trajectory speed (m/s):",
-                                              min = 0, max = 500, value = 50)
-                              ),
-                              div(style = "flex: 1;",
-                                  numericInput(
-                                    "custom_speed_thresh_numeric",
-                                    "",
-                                    value = 50, min = 0, max = 500, step = 0.01
-                                  )
-                              ),
-                              div(style = "flex: 0 0 auto;",  # button keeps its natural width
-                                  actionButton("run_custom_speed", "Custom speed", style = "width: 120px;")
-                              )
-                            ),
-
-                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
-                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
-
-                            # 9. Turning angle speed
-                            div(
-                              style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
-                              div(style = "flex: 2;",
-                                  sliderInput(
-                                    "turn_thresh_slider",
-                                    "Turning angle (rads):",
-                                    min = 0, max = round(pi, 3), value = pi/2, step = 0.01)
-                                ),
-                                div(style = "flex: 1;",
-                                      numericInput(
-                                        "turn_thresh_numeric",
-                                        "",
-                                        value = pi/2, min = 0, max = round(pi, 3), step = 0.01
-                                      )
-                                ),
-                                div(style = "flex: 1;",
-                                  radioButtons(
-                                    inputId = "turn_dir",
-                                    label = "Select level",
-                                    choices = c("less_than", "greater_than"),
-                                    selected = "less_than",
-                                    inline = FALSE
-                                  ),
-                                div(style = "flex: 0 0 auto;",
-                                    actionButton("run_turn", "Run turn_filt()", style = "width: 120px;")
-                                )
-                              )
-                            ),
-
-                            #hr(style = "border-top: 1px solid #ddd; margin: 8px 0;"),
-                            hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
-
-                            # 10. lat long extent selector
-                            div(
-                              style = "display: flex; flex-direction: column; gap: 5px; width: 100%; max-width: 100%; box-sizing: border-box;",
-
-                              htmltools::h5(tags$b("Select xy extent for valid fixes:")),
-
-                              # Upper Left Row
-                              div(
-                                style = "display: flex; gap: 5px; align-items: center; width: 100%;",
-                                div(style = "width: 80px;", htmltools::h5(tags$b("Upper left:"))),
-                                div(style = "flex: 1; min-width: 0;", numericInput("lat1", "Latitude", "")),
-                                div(style = "flex: 1; min-width: 0;", numericInput("lng1", "Longitude", ""))
-                              ),
-
-                              # Lower Right Row
-                              div(
-                                style = "display: flex; gap: 5px; align-items: center; margin-top: 5px; width: 100%;",
-                                div(style = "width: 80px;", htmltools::h5(tags$b("Lower right:"))),
-                                div(style = "flex: 1; min-width: 0;", numericInput("lat2", "Latitude", "")),
-                                div(style = "flex: 1; min-width: 0;", numericInput("lng2", "Longitude", ""))
-                              ),
-
-                              # Button Row
-                              div(
-                                style = "display: flex; gap: 10px; margin-top: 10px; width: 100%; max-width: 100%; box-sizing: border-box;",
-                                div(style = "flex: 1 1 0; min-width: 0;", actionButton("activate_rect", "Activate Rectangle", style = "width: 100%;")),
-                                div(style = "flex: 1 1 0; min-width: 0;", actionButton("reset_rect", "Reset Rectangle", style = "width: 100%;")),
-                                div(style = "flex: 1 1 0; min-width: 0;", actionButton("run_ll", "Run extent filter", style = "width: 100%;"))
-                              )
-                            )
                           )
                       )
                     #) # div
@@ -687,20 +471,18 @@ ui <- dashboardPage(
                        )
                 )
               )
-      ),
+      )
+      ,
       tabItem(
         tabName = "readme",
-
         fluidRow(
           column(
             width = 12,
-
             box(
               title = "ShinyRakeR Documentation",
               width = 12,
               status = "primary",
               solidHeader = TRUE,
-
               includeMarkdown(
                 system.file("shiny/ShinyRakeR/readme.md", package = "MoveRakeR")
               )

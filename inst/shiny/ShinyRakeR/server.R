@@ -197,18 +197,34 @@ server <- function(input, output, session) {
     #  map_ready(TRUE)
     #})
 
+    # update the text boxes for the temporal annotator
+
+    #browser()
+
+    req(data_start())
+
+    isolate({
+
+      df <- data_start()
+
+      st <- min(df$DateTime, na.rm = TRUE)
+      en <- max(df$DateTime, na.rm = TRUE)
+
+      updateTextInput(session, "starttime", value = format(st, "%Y-%m-%d %H:%M:%S", tz = "UTC"))
+      updateTextInput(session, "endtime", value = format(en, "%Y-%m-%d %H:%M:%S", tz = "UTC"))
+
+    })
+
     # reset working data
     annotated_data(data_start())
 
   })
 
   observeEvent(map_ready(), {
-
     if (!map_ready()) {
       invalidateLater(250, session)
       map_ready(TRUE)
     }
-
   }, ignoreInit = TRUE)
 
 
@@ -316,6 +332,8 @@ server <- function(input, output, session) {
   # - dup_rm (duplicate data)
   # - speed_rm (speed filter)
   # - angle_rm (angle filter)
+  # - the ll_rm
+  # - and the three time zone ones
   # - combined_rm, A combined remove column using conditions across all annotation rows
 
 
@@ -336,7 +354,10 @@ server <- function(input, output, session) {
     turn = NULL,
     latlong = NULL,
     gap_orph = NULL,
-    extra = NULL
+    extra = NULL,
+    start = NULL,
+    end = NULL,
+    future = NULL
   )
 
   decision_sections <- c(
@@ -352,7 +373,11 @@ server <- function(input, output, session) {
     "Custom speed annotation" = "speed_cus",
     "Turning angle annotation" = "turn",
     "Single gap sections annotated" = "gap_orph",
-    "Extra flag columns used" = "extra"
+    "Extra flag columns used" = "extra",
+    "Start date too early" = "start",
+    "End date too late" = "end",
+    "Future date annotation" = "future"
+
   )
 
   observeEvent(input$show_decisions, {
@@ -846,7 +871,7 @@ server <- function(input, output, session) {
     })
   })
 
-  # -------------------------------------------------------------- #
+    # -------------------------------------------------------------- #
   # FLT_switch
   # -------------------------------------------------------------- #
 
@@ -1619,6 +1644,7 @@ server <- function(input, output, session) {
 
   # -------------------------------------------------------------------- #
   # timeline plot
+  # -------------------------------------------------------------------- #
 
   timeline_data <- reactive({
     df <- get_annotation_base()
@@ -1664,17 +1690,290 @@ server <- function(input, output, session) {
   })
 
 
-  #######################################################################################################
+  # -------------------------------------------------------------- #
+  # maximum temporal extent / flag any datetimes in the past/future
+  # -------------------------------------------------------------- #
 
+  # render text boxes
+
+  output$maxtemp_section <- renderUI({
+
+    tagList(
+      tags$details(
+        open = if(sections_open()) "open" else NULL,
+
+        tags$summary(
+          tags$b("m. Errant temporal annotation")
+        ),
+
+        ############# TO ADD ###########
+
+        # Start and end dates for valid time period
+        # needs to default to the max of the data
+
+        div(
+          style = "display: flex; gap: 5px; align-items: center; width: 100%;",
+          div(style = "width: 80px;", htmltools::h5("Time period:")),
+          div(style = "flex: 2; min-width: 0;",
+              textInput("starttime", htmltools::span("Start", style = "font-weight: normal;"), value = "")
+          ),
+          div(style = "flex: 2; min-width: 0;",
+              textInput("endtime", htmltools::span("End", style = "font-weight: normal;"), value = "")
+          ),
+          div(style = "flex: 0 0 120px;",
+              textInput("timezone", htmltools::span("Timezone:", style = "font-weight: normal;"), value = "UTC")
+          )
+
+        ),
+        # Button Row
+        div(
+          style = "display: flex; gap: 10px; margin-top: 10px; width: 100%; max-width: 100%; box-sizing: border-box;",
+          div(style = "flex: 1 1 0; min-width: 0;", actionButton("filt_start", "Before start", style = "width: 100%;")),
+          div(style = "flex: 1 1 0; min-width: 0;", actionButton("filt_end", "After end", style = "width: 100%;")),
+          div(style = "flex: 1 1 0; min-width: 0;", actionButton("future_rm", "In future", style = "width: 100%;"))
+        )
+
+      ),
+      hr(style = "border-top: 2px solid #888; margin: 8px 0;")
+
+    )
+
+  })
+
+  # ---------------------------- #
+  # At the start, populate these boxes with the range around the data
+  observe({
+
+    #browser()
+    req(data_start())
+    if(is.null(input$starttime) || input$starttime == ""){
+
+      isolate({
+
+        df <- data_start()
+
+        st <- min(df$DateTime, na.rm = TRUE)
+        en <- max(df$DateTime, na.rm = TRUE)
+
+        updateTextInput(session, "starttime", value = format(st, "%Y-%m-%d %H:%M:%S", tz = input$timezone))
+        updateTextInput(session, "endtime", value = format(en, "%Y-%m-%d %H:%M:%S", tz = input$timezone))
+
+      })
+    }
+
+  }) |> bindEvent(data_start(), once = TRUE)
+
+
+  # ----------------------------- #
+  # Annotate data before the start
+
+  # required format
+
+  formats <- c(
+    "%Y-%m-%d %H:%M:%S",
+    "%Y/%m/%d %H:%M:%S",
+    "%d-%m-%Y %H:%M:%S",
+    "%d/%m/%Y %H:%M:%S"
+  )
+
+  parse_datetime_strict <- function(x, formats, tz = "UTC") {
+
+    for(fmt in formats){
+      parsed <- as.POSIXct(x, format = fmt, tz = tz)
+      if(!is.na(parsed)){
+        return(parsed)   # first valid match wins
+      }
+    }
+    return(NA)  # nothing matched
+  }
+
+  is_valid_datetime <- function(x, formats) {
+    !is.na(parse_datetime_strict(x, formats))
+  }
+
+  # ----------------------------------------- #
+  # observe the filt_start input, label fixes
+  observeEvent(input$filt_start, {
+
+    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Annotating data before the start...")
+    removeNotification(id)
+
+    id <- showNotification(
+      "Annotating data before the start...",
+      duration = NULL,
+      closeButton = FALSE,
+      type = "message"
+    )
+
+    if(!(input$timezone %in% OlsonNames())){
+      showNotification("Invalid timezone", type = "error")
+      removeNotification(id)
+      shinybusy::remove_modal_spinner()
+      return()
+    }
+
+    tz <- input$timezone
+
+    parsed_start <- parse_datetime_strict(input$starttime, formats, tz = tz)
+
+    if(is.na(parsed_start)){
+      showNotification(
+        "Invalid datetime or timezone error. Use one of: YYYY-MM-DD HH:MM:SS, YYYY/MM/DD HH:MM:SS..., etc, and check timeezone.",
+        type = "error"
+      )
+      removeNotification(id)
+      shinybusy::remove_modal_spinner()
+      return()
+    }
+
+    df <- get_annotation_base()
+    req(df)
+
+    # annotate the rows
+    df$start_rm <- 0
+
+    # makes sure start is posixct
+    sttime = parsed_start
+
+    df$start_rm <- ifelse(df$DateTime < sttime, 1, 0)
+
+    # remember current choices:
+    filter_state$start <- list(
+      start = sttime,
+      timestamp = Sys.time()
+    )
+
+    removeNotification(id)
+    shinybusy::remove_modal_spinner()
+    annotated_data(df)
+
+  })
+
+
+  # ----------------------------------------- #
+  # observe the filt_end input, label fixes
+  observeEvent(input$filt_end, {
+
+    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Annotating data after the end...")
+    removeNotification(id)
+
+    id <- showNotification(
+      "Annotating data after the end...",
+      duration = NULL,
+      closeButton = FALSE,
+      type = "message"
+    )
+
+    if(!(input$timezone %in% OlsonNames())){
+      showNotification("Invalid timezone", type = "error")
+      removeNotification(id)
+      shinybusy::remove_modal_spinner()
+      return()
+    }
+    tz <- input$timezone
+
+    parsed_end <- parse_datetime_strict(input$endtime, formats, tz = tz)
+
+    if(is.na(parsed_end)){
+      showNotification(
+        "Invalid datetime or timezone error. Use one of: YYYY-MM-DD HH:MM:SS, YYYY/MM/DD HH:MM:SS..., etc, and check timeezone.",
+        type = "error"
+      )
+      removeNotification(id)
+      shinybusy::remove_modal_spinner()
+      return()
+    }
+
+    df <- get_annotation_base()
+    req(df)
+
+    # annotate the rows
+    df$end_rm <- 0
+
+    # makes sure start is posixct
+    entime = parsed_end
+
+    df$end_rm <- ifelse(df$DateTime > entime, 1, 0)
+
+    # remember current choices:
+    filter_state$end <- list(
+      end = entime,
+      timestamp = Sys.time()
+    )
+
+    removeNotification(id)
+    shinybusy::remove_modal_spinner()
+    annotated_data(df)
+
+  })
+
+
+  # ----------------------------------------- #
+  # observe the future input, label fixes
+  observeEvent(input$future_rm, {
+
+    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Annotating data in the future...")
+    removeNotification(id)
+
+    id <- showNotification(
+      "Annotating data in the future...",
+      duration = NULL,
+      closeButton = FALSE,
+      type = "message"
+    )
+
+    df <- get_annotation_base()
+    req(df)
+
+    # annotate the rows
+    df$future_rm <- 0
+
+    # check the data for any dates that are beyond the current date
+    cur_time = as.POSIXct(Sys.time(), tz = "UTC")
+
+    df$future_rm <- ifelse(df$DateTime > cur_time, 1, 0)
+
+    # remember current choices:
+    filter_state$future <- list(
+      future = "future date removal checked",
+      timestamp = Sys.time()
+    )
+
+    removeNotification(id)
+    shinybusy::remove_modal_spinner()
+    annotated_data(df)
+
+  })
+
+
+
+  ######################################################################################################
+  ######################################################################################################
+  ######################################################################################################
+  ######################################################################################################
+  ######################################################################################################
+  # RENDERING ALL THE UI OUTPUTS SERVER SIDE TO ENABLE EXPAND ALL / COLLAPSING OF BOXES (without extra shinyJS usage)
+  ######################################################################################################
+  ######################################################################################################
+  ######################################################################################################
+  ######################################################################################################
+  ######################################################################################################
+
+  sections_open <- reactiveVal(FALSE)
+
+  observeEvent(input$toggle_sections, {
+    sections_open(!sections_open())
+  })
 
   # -------------------------------------------------------------- #
   # Custom flags
-  # -------------------------------------------------------------- #
+
   # user may already have columns flagged and want to include / visualise
   # e.g. different versions of speed filtering from different R packages
 
   # 1. Let user pick extra flags
   # UI for user to select existing flag-like columns (0/1/NA)
+
   output$custom_flag_ui <- renderUI({
     df <- data_start()
     req(df)
@@ -1699,19 +1998,525 @@ server <- function(input, output, session) {
       return(NULL)  # don’t show anything if no eligible columns
     }
 
-    selectInput(
-      inputId = "custom_flags",
-      label = "Add existing flag columns:",
-      choices = flag_candidates,
-      multiple = TRUE,
-      selected = NULL
+    tagList(
+
+      hr(style = "border-top: 2px solid #888; margin: 8px 0;"),
+
+      tags$details(
+        open = if (isTRUE(sections_open())) "open" else NULL,
+
+        tags$summary(
+          tags$b("a. Annotate using existing columns in your data")
+        ),
+
+        selectInput(
+          inputId = "custom_flags",
+          label = htmltools::span(
+            "Select column(s) from your data:",
+            style = "font-weight: normal;"
+          ),
+          choices = flag_candidates,
+          multiple = TRUE,
+          selected = NULL
+        )
+      ),
+
+      hr(style = "border-top: 2px solid #888; margin: 8px 0;")
+    )
+
+  })
+
+
+
+
+  # ----------------------------------------- #
+  # min no fixes/animal
+
+  output$minfix_section <- renderUI({
+
+
+    tagList(
+
+      tags$details(
+        open = if(sections_open()) "open" else NULL,
+
+        tags$summary(
+          tags$b("b. Minimum number of data rows per animal")
+        ),
+
+        div(
+          style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
+          div(style = "flex: 3;",
+              #sliderInput("fix_thresh_slider", "Number of fixes/animal:",
+              #            min = 0, max = 100, value = 5) # that upper value may need to be flexible
+              sliderInput(
+                "fix_thresh_slider",
+                htmltools::span("Sample size/animal:", style = "font-weight: normal;"),
+                min = 0, max = 100, value = 5
+              )
+          ),
+          div(style = "flex: 1;",
+              numericInput(
+                "fix_thresh_numeric",
+                "",
+                value = 5, min = 0, max = 100, step = 1
+              )
+          ),
+          div(style = "flex: 0 0 auto;",
+              actionButton("run_fixflag", "Run", style = "width: 120px;")
+          )
+
+        )
+      ),
+      hr(style = "border-top: 2px solid #888; margin: 8px 0;")
+
+    )
+
+
+  })
+
+  # ----------------------------------------- #
+  # NA lat/long
+  output$NA_section <- renderUI({
+
+    tagList(
+
+      tags$details(
+        open = if(sections_open()) "open" else NULL,
+
+        tags$summary(
+          tags$b("c. Flag any missing location data")
+        ),
+
+        div(
+          style = "display: flex; align-items: center;",
+          div(style = "flex: 1;",
+              htmltools::h5("Run to label any NA data as errant:")
+          ),
+          div(style = "flex: 0 0 auto;",
+              actionButton("close_warn_1", "", style = "width: 30px;", icon = icon("xmark"))
+          ),
+          div(style = "flex: 0 0 auto;",
+              actionButton("run_na_ll", "Flag NAs", style = "width: 120px;")
+          )
+          #,
+          #div(style = "flex: 0 0 auto;",
+          #    actionButton("clear_ll", "clear", style = "width: 60px;") #, icon = icon("ban"))
+          #)
+        ),
+        uiOutput("na_warning")
+
+      ),
+      hr(style = "border-top: 2px solid #888; margin: 8px 0;")
+    )
+
+
+  })
+
+  # ----------------------------------------- #
+  # nsats
+  output$nsats_section <- renderUI({
+
+    tagList(
+
+      tags$details(
+        open = if(sections_open()) "open" else NULL,
+
+        tags$summary(
+          tags$b("d. Minimum number of GPS satellites")
+        ),
+
+        div(
+          style = "margin-bottom: 12px;",  # space below this block
+
+          # --- First row: label + dropdown ---
+          div(
+            style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
+            div(style = "flex: 1;",
+                htmltools::h5("Select column with data:"),
+
+            ),
+            div(style = "flex: 2;",
+                uiOutput("sel_sat_col")
+            )
+          ),
+
+          # --- Second row: slider + numeric + button ---
+          div(style = "flex: 1;",
+              htmltools::h5("Number of satellites:"),
+          ),
+          div(
+            style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px;",
+            div(style = "flex: 3;",
+                sliderInput("nsat_thresh_slider", NULL,
+                            min = 3, max = 6, value = 4)
+            ),
+            div(style = "flex: 1;",
+                numericInput("nsat_thresh_numeric", NULL,
+                             value = 4, min = 0, max = 8, step = 1)
+            ),
+            div(style = "flex: 0 0 auto;",
+                actionButton("run_nsats", "Run nsats", style = "width: 120px;")
+            )
+          )
+        )
+
+      ),
+      hr(style = "border-top: 2px solid #888; margin: 8px 0;")
+    )
+
+
+  })
+
+  # ------------------------------------------ #
+  # pdop
+  output$pdop_section <- renderUI({
+
+    tagList(
+
+      tags$details(
+        open = if(sections_open()) "open" else NULL,
+
+        tags$summary(
+          tags$b("e. Position dilution of precision threshold")
+        ),
+
+        div(
+          style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
+
+          div(style = "flex: 3;",
+              sliderInput(
+                "pdop_thresh",
+                tags$span("PDOP value:", style = "font-weight: normal;"),
+                min = 0, max = 10, value = 5
+              )
+          ),
+
+          div(style = "flex: 1;",
+              numericInput(
+                "pdop_thresh_numeric",
+                NULL,
+                value = 5, min = 0, max = 10, step = 0.01
+              )
+          ),
+
+          div(style = "flex: 0 0 auto;",
+              actionButton("run_pdop", "Run pdop",
+                           style = "width: 120px;")
+          )
+        ),
+
+        uiOutput("pdop_warning")
+      ),
+      hr(style = "border-top: 2px solid #888; margin: 8px 0;")
+    )
+
+  })
+
+  # ------------------------------------------ #
+  #  hdop
+  output$hdop_section <- renderUI({
+
+    tagList(
+      tags$details(
+        open = if(sections_open()) "open" else NULL,
+
+        tags$summary(
+          tags$b("f. Horizontal dilution of precision threshold")
+        ),
+
+        div(
+          style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
+          div(style = "flex: 3;",
+              sliderInput("hdop_thresh",
+                          htmltools::span("HDOP value:", style = "font-weight: normal;"),
+                          min = 0, max = 10, value = 5)
+          ),
+          div(style = "flex: 1;",
+              numericInput(
+                "hdop_thresh_numeric",
+                "",
+                value = 5, min = 0, max = 10, step = 0.01
+              )
+          ),
+          div(style = "flex: 0 0 auto;",
+              actionButton("run_hdop", "Run hdop", style = "width: 120px;")
+          )
+        ),
+        uiOutput("hdop_warning")
+      ),
+      hr(style = "border-top: 2px solid #888; margin: 8px 0;")
+    )
+
+  })
+
+
+  # ------------------------------------------ #
+  # custom filter
+  output$custom_section <- renderUI({
+
+    tagList(
+      tags$details(
+        open = if(sections_open()) "open" else NULL,
+
+        tags$summary(
+          tags$b("g. Custom annotation using columns in your data")
+        ),
+
+        div(
+          style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
+
+          div(
+            style = "flex: 1 1 120px; min-width: 120px;",
+            actionButton(
+              "cust_filt",
+              "Run custom filt_err()",
+              style = "width: 100%; white-space: normal; text-align: center;"
+            )
+          ),
+
+          div(
+            style = "flex: 1 1 140px; min-width: 140px;",
+            actionButton(
+              "show_rm_summary",
+              "Filter summary",
+              style = "width: 100%; white-space: normal; text-align: center;"
+            )
+          )
+        )
+
+      ),
+      hr(style = "border-top: 2px solid #888; margin: 8px 0;")
+    )
+
+  })
+
+  # ------------------------------------------ #
+  # gapsection isolation
+  output$gapsec_section <- renderUI({
+
+    tagList(
+      tags$details(
+        open = if(sections_open()) "open" else NULL,
+
+        tags$summary(
+          tags$b("h. Flag single gapsections (linked to gap definition under step 1)")
+        ),
+
+        div(style = "display: flex; align-items: centre;",
+            div(style = "flex: 1;",
+                htmltools::h5(tags$b("Single gapsections:"))
+            ),
+            div(style = "flex: 0 0 auto;",
+                actionButton("close_warn_2", "", style = "width: 30px;", icon = icon("xmark"))
+            ),
+            div(style = "flex: 0 0 auto;",
+                actionButton("run_orph", "Single gapsecs", style = "width: 120px;")
+            )
+        ),
+        uiOutput("singlegap_warning")
+
+      ),
+      hr(style = "border-top: 2px solid #888; margin: 8px 0;")
     )
   })
 
 
+  # ------------------------------------------ #
+  # speedfilt
+  output$speedfilt_section <- renderUI({
+
+    tagList(
+      tags$details(
+        open = if(sections_open()) "open" else NULL,
+
+        tags$summary(
+          tags$b("i. Iterative trajectory speed annotation")
+        ),
+
+        div(
+          style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
+          div(style = "flex: 3;",  # slider takes remaining width
+              #sliderInput("speed_thresh", "Trajectory speed (m/s):",
+              #            min = 0, max = 500, value = 50)
+              sliderInput(
+                "speed_thresh",
+                htmltools::span("Trajectory speed (m/s):", style = "font-weight: normal;"),
+                min = 0, max = 500, value = 50
+              )
+          ),
+          div(style = "flex: 1;",
+              numericInput(
+                "speed_thresh_numeric",
+                "",
+                value = 50, min = 0, max = 500, step = 0.01
+              )
+          ),
+          div(style = "flex: 0 0 auto;",  # button keeps its natural width
+              actionButton("run_speed", "Run speed_filt()", style = "width: 120px;")
+          )
+        )
+      ),
+      hr(style = "border-top: 2px solid #888; margin: 8px 0;")
+    )
+  })
+
+
+  # ------------------------------------------ #
+  # custom speedfilt
+
+  output$custspeedfilt_section <- renderUI({
+
+    tagList(
+      tags$details(
+        open = if(sections_open()) "open" else NULL,
+
+        tags$summary(
+          tags$b("j. Custom trajectory speed annotation")
+        ),
+
+        div(
+          style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
+          div(style = "flex: 3;",  # slider takes remaining width
+              #sliderInput("custom_speed_thresh", "Trajectory speed (m/s):",
+              #            min = 0, max = 500, value = 50)
+              sliderInput(
+                "custom_speed_thresh",
+                htmltools::span("Trajectory speed (m/s):", style = "font-weight: normal;"),
+                min = 0, max = 500, value = 50
+              )
+          ),
+          div(style = "flex: 1;",
+              numericInput(
+                "custom_speed_thresh_numeric",
+                "",
+                value = 50, min = 0, max = 500, step = 0.01
+              )
+          ),
+          div(style = "flex: 0 0 auto;",  # button keeps its natural width
+              actionButton("run_custom_speed", "Custom speed", style = "width: 120px;")
+          )
+        )
+      ),
+      hr(style = "border-top: 2px solid #888; margin: 8px 0;")
+    )
+  })
+
+
+
+
+  # ------------------------------------------ #
+  # turning angle
+  output$turnangle_section <- renderUI({
+
+    tagList(
+      tags$details(
+        open = if(sections_open()) "open" else NULL,
+
+        tags$summary(
+          tags$b("k. Turning angle threshold")
+        ),
+        div(
+          style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
+          div(style = "flex: 2;",
+              sliderInput(
+                "turn_thresh_slider",
+                htmltools::span("Turning angle (rads):", style = "font-weight: normal;"),
+                min = 0, max = round(pi, 3), value = pi/2, step = 0.01)
+          ),
+          div(style = "flex: 1;",
+              numericInput(
+                "turn_thresh_numeric",
+                "",
+                value = pi/2, min = 0, max = round(pi, 3), step = 0.01
+              )
+          ),
+          div(style = "flex: 1;",
+              radioButtons(
+                inputId = "turn_dir",
+                label = "Select level",
+                choices = c("less_than", "greater_than"),
+                selected = "less_than",
+                inline = FALSE
+              ),
+              div(style = "flex: 0 0 auto;",
+                  actionButton("run_turn", "Run turn_filt()", style = "width: 120px;")
+              )
+          )
+        )
+      ),
+      hr(style = "border-top: 2px solid #888; margin: 8px 0;")
+    )
+
+  })
+
+
+  # ------------------------------------------ #
+  # maximum extent
+
+  output$maxext_section <- renderUI({
+
+    tagList(
+      tags$details(
+        open = if(sections_open()) "open" else NULL,
+
+        tags$summary(
+          tags$b("l. Maximum extent annotation")
+        ),
+
+        div(
+          style = "display: flex; flex-direction: column; gap: 5px; width: 100%; max-width: 100%; box-sizing: border-box;",
+
+          htmltools::h5("Select xy extent for valid fixes:"),
+
+          # Upper Left Row
+          div(
+            style = "display: flex; gap: 5px; align-items: center; width: 100%;",
+            div(style = "width: 80px;", htmltools::h5("Upper left:")),
+            div(style = "flex: 1; min-width: 0;",
+                numericInput("lat1", htmltools::span("Latitude", style = "font-weight: normal;"),"")
+                ),
+            div(style = "flex: 1; min-width: 0;",
+                numericInput("lng1", htmltools::span("Longitude", style = "font-weight: normal;"), "")
+                )
+          ),
+
+          # Lower Right Row
+          div(
+            style = "display: flex; gap: 5px; align-items: center; margin-top: 5px; width: 100%;",
+            div(style = "width: 80px;", htmltools::h5("Lower right:")),
+            div(style = "flex: 1; min-width: 0;",
+                numericInput("lat2", htmltools::span("Latitude", style = "font-weight: normal;"),"")
+                ),
+            div(style = "flex: 1; min-width: 0;",
+                numericInput("lng2", htmltools::span("Longitude", style = "font-weight: normal;"), "")
+                )
+          ),
+
+          # Button Row
+          div(
+            style = "display: flex; gap: 10px; margin-top: 10px; width: 100%; max-width: 100%; box-sizing: border-box;",
+            div(style = "flex: 1 1 0; min-width: 0;", actionButton("activate_rect", "Activate Rectangle", style = "width: 100%;")),
+            div(style = "flex: 1 1 0; min-width: 0;", actionButton("reset_rect", "Reset Rectangle", style = "width: 100%;")),
+            div(style = "flex: 1 1 0; min-width: 0;", actionButton("run_ll", "Run extent filter", style = "width: 100%;"))
+          )
+        )
+
+      ),
+      hr(style = "border-top: 2px solid #888; margin: 8px 0;")
+    )
+
+  })
+
+
+
+  ##########################################################################################################
   #
   #
+  # FLAGGING AND RAKING
   #
+  #
+  ##########################################################################################################
 
   # Combine annotation columns automatically
   # mapping between human labels and real column names
@@ -1728,7 +2533,10 @@ server <- function(input, output, session) {
     "Turn angle"   = "angle_rm",
     "Duplicates" = "dup_rm",
     "Single gap"   = "singlegap_rm",
-    "Extreme latlongs" = "ll_rm"
+    "Extreme latlongs" = "ll_rm",
+    "Too early" = "start_rm",
+    "Too late" = "end_rm",
+    "In future" = "future_rm"
   )
 
 
@@ -1818,7 +2626,8 @@ server <- function(input, output, session) {
     base_flags <- c(
       "tid_rm","NA_latlong_rm", "all_NA_rm", "sat_rm", "flt_rm",
       "gps_pdop_rm", "gps_hdop_rm", "all_rm","singlegap_rm",
-      "dup_rm", "speed_rm", "cust_speed_rm","angle_rm", "ll_rm"
+      "dup_rm", "speed_rm", "cust_speed_rm","angle_rm", "ll_rm",
+      "start_rm", "end_rm", "future_rm"
     )
 
     # Add user-selected flags
@@ -1936,7 +2745,6 @@ server <- function(input, output, session) {
 
     req(map_ready())   # HARD GATE
 
-
     #df <- filtered_annotated()
     df <- filtered_data_threshold()
     req(df)
@@ -1979,8 +2787,9 @@ server <- function(input, output, session) {
     ### flag reasoning....
     base_flags <- c(
       "tid_rm","NA_latlong_rm", "all_NA_rm", "sat_rm", "flt_rm",
-      "gps_pdop_rm", "gps_hdop_rm", "singlegap_rm",
-      "dup_rm", "speed_rm", "cust_speed_rm","angle_rm", "ll_rm"
+      "gps_pdop_rm", "gps_hdop_rm", "all_rm","singlegap_rm",
+      "dup_rm", "speed_rm", "cust_speed_rm","angle_rm", "ll_rm",
+      "start_rm", "end_rm", "future_rm"
     )
 
     # Add user-selected flags
@@ -2015,8 +2824,12 @@ server <- function(input, output, session) {
       all_rm = NA, # custom filtering
       dup_rm       = NA,
       singlegap_rm = NA,
-      ll_rm        = NA
+      ll_rm        = NA,
+      start_rm = NA,
+      end_rm = NA,
+      future_rm = NA
     )
+
 
     # Add any user-selected flags as NA by default
     extra_flags <- input$custom_flags
@@ -2124,8 +2937,13 @@ server <- function(input, output, session) {
       "Turn angle"    = "angle_rm",
       "Duplicates" = "dup_rm",
       "Single gap"    = "singlegap_rm",
-      "Extreme latlongs" = "ll_rm"
+      "Extreme latlongs" = "ll_rm",
+      "Too early" = "start_rm",
+      "Too late" = "end_rm",
+      "In future" = "future_rm"
     )
+
+
 
     extra_flags <- input$custom_flags
     if(!is.null(extra_flags)){
@@ -2169,7 +2987,10 @@ server <- function(input, output, session) {
         "Turn angle"    = "angle_rm",
         "Duplicates" = "dup_rm",
         "Single gap"    = "singlegap_rm",
-        "Extreme latlongs" = "ll_rm"
+        "Extreme latlongs" = "ll_rm",
+        "Too early" = "start_rm",
+        "Too late" = "end_rm",
+        "In future" = "future_rm"
       )
 
       extra_flags <- input$custom_flags
@@ -2230,7 +3051,10 @@ server <- function(input, output, session) {
       "Turn angle"    = "angle_rm",
       "Duplicates" = "dup_rm",
       "Single gap"    = "singlegap_rm",
-      "Extreme latlongs" = "ll_rm"
+      "Extreme latlongs" = "ll_rm",
+      "Too early" = "start_rm",
+      "Too late" = "end_rm",
+      "In future" = "future_rm"
     )
 
 
@@ -2262,7 +3086,10 @@ server <- function(input, output, session) {
                           "Turn angle" = input$turn_thresh_numeric,
                           "Duplicates" = "n/a",
                           "Single gap"    = "n/a",
-                          "Extreme latlongs" = "n/a"
+                          "Extreme latlongs" = "n/a",
+                          "Too early" = "n/a",
+                          "Too late" = "n/a",
+                          "In future" = "n/a"
                           )
       if(is.null(param_val)){param_val <- "n/a"}
 
