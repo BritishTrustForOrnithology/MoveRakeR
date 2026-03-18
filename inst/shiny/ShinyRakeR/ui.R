@@ -10,8 +10,17 @@ ui <- dashboardPage(
       menuItem("Threshold Explorer", tabName = "threshold_explorer", icon = icon("sliders-h")),
       menuItem("Temporal Inspector", tabName = "temporal_inspect", icon = icon("clock")),
       menuItem("Read Me", tabName = "readme", icon = icon("book")),
-      checkboxInput("link_maps", "Link maps to each other", value = FALSE)
-
+      checkboxInput("link_maps", "Link maps to each other", value = FALSE),
+      hr(),
+      div(
+        style = "padding-left: 15px;",
+        uiOutput("map_status")
+      ),
+      #hr(),
+      div(
+        style = "padding-left: 15px;",
+        uiOutput("map_status2")
+      )
     )
   ),
   dashboardBody(
@@ -257,6 +266,16 @@ ui <- dashboardPage(
                               actionButton("show_decisions", "Current Decisions"),
                               actionButton("clear", "Reset")
                             )
+                          ),
+                          actionButton(
+                            "activate_map",
+                            "Activate / deactivate map",
+                            class = "btn",
+                            style = "
+                              background-color: #6c757d;
+                              color: white;
+                              border-color: #6c757d;
+                              "
                           )
                         ), # divider close
                         leafletOutput("mymap2", height = "700px"),
@@ -380,6 +399,16 @@ ui <- dashboardPage(
                                    checkboxInput("show_points_ti", "Show GPS fixes", value = TRUE),
                                    checkboxInput("show_legend_ti", "Show Legend", value = TRUE)
                                  )
+                               ),
+                               actionButton(
+                                 "activate_map2",
+                                 "Activate / deactivate map",
+                                 class = "btn",
+                                 style = "
+                              background-color: #6c757d;
+                              color: white;
+                              border-color: #6c757d;
+                              "
                                )
                              ), # divider close
                         leafletOutput("mymap", height = "700px"),

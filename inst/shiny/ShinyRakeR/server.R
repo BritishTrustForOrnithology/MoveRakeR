@@ -10,6 +10,7 @@ server <- function(input, output, session) {
 
   data <- shiny::getShinyOption("userData", default = fake_data)
   Providers <- shiny::getShinyOption("Providers", default = c("OpenStreetMap", "GoogleEarth"))
+  mapstart <- shiny::getShinyOption("mapstart", default = TRUE)
 
   #browser()
   if(is.null(data)){data <- fake_data} # fallback example dataset
@@ -178,6 +179,9 @@ server <- function(input, output, session) {
 
     dup_resolved(FALSE)
 
+    output$gap_done_ui <- renderUI({NULL})
+
+
     for(n in names(reactiveValuesToList(filter_state))){
       filter_state[[n]] <- NULL
     }
@@ -215,8 +219,13 @@ server <- function(input, output, session) {
 
     })
 
+    #output$gap_done_ui <- NULL
+
     # reset working data
     annotated_data(data_start())
+
+    #leafletProxy("mymap2") %>% clearMarkers() %>% clearGroup("trajectories")
+
 
   })
 
@@ -227,6 +236,61 @@ server <- function(input, output, session) {
     }
   }, ignoreInit = TRUE)
 
+
+  # ------------------------------- #
+  # mapaactiviation and deactivation
+
+  # ------------------ #
+  # Threshold explorer
+  # ------------------ #
+  map_ready2 <- reactiveVal(mapstart) # from the global input
+  observeEvent(input$activate_map,{
+    leafletProxy("mymap2") %>% clearMarkers() %>% clearGroup("trajectories") %>% clearControls()
+    map_ready2(!map_ready2())
+  })
+
+  # add a notifaction that the map is of certain status
+  output$map_status <- renderUI({
+    if(isTRUE(map_ready2())) {
+      tags$span(
+        icon("check-circle"),
+        "Explorer map activated",
+        style = "color: #28a745; font-weight: 600; font-weight: bold;"
+      )
+    } else {
+      tags$span(
+        icon("ban"),
+        "Explorer map de-activated",
+        style = "color: #d32f2f; font-weight: 600; font-weight: bold;"
+      )
+    }
+  })
+
+  # ------------------ #
+  # Temporal inspector
+  # ------------------ #
+  map_ready3 <- reactiveVal(mapstart) # from the global input
+  observeEvent(input$activate_map2,{
+    leafletProxy("mymap") %>% clearMarkers() %>% clearGroup("trajectories_ti") %>% clearControls()
+    map_ready3(!map_ready3())
+  })
+
+  # notification
+  output$map_status2 <- renderUI({
+    if(isTRUE(map_ready3())) {
+      tags$span(
+        icon("check-circle"),
+        "Inspector map activated",
+        style = "color: #28a745; font-weight: 600; font-weight: bold;"
+      )
+    } else {
+      tags$span(
+        icon("ban"),
+        "Inspector map de-activated",
+        style = "color: #d32f2f; font-weight: 600; font-weight: bold;"
+      )
+    }
+  })
 
   # -------------------------------------------------------------- #
   # Map reset, in case drawing goes wrong
@@ -284,13 +348,16 @@ server <- function(input, output, session) {
 
   })
 
+
   # UI element for showing the tick
   output$gap_done_ui <- renderUI({
+
     if(gap_done()){
-      tags$span(style="color:green; font-weight:bold;", "\u2714 Gap section applied!")  # ✓ symbol
+        tags$span(style="color:green; font-weight:bold;", "\u2714 Gap section applied!")  # ✓ symbol
     } else {
       NULL
     }
+
   })
 
   # ---------------------------------------- #
@@ -772,16 +839,12 @@ server <- function(input, output, session) {
         style = "color: #d32f2f; font-weight: 600; font-weight: bold;"
       )
 
-
     } else {
 
       NULL
     }
 
   })
-
-
-
 
 
   # -------------------------------------------------------------- #
@@ -1038,7 +1101,16 @@ server <- function(input, output, session) {
 
         selectizeInput(
           "cust_filter_cols",
-          "Columns to filter",
+          #"Columns to filter",
+          label = tagList(
+            "Columns to filter",
+            tags$span(
+              icon("circle-info"),
+              title = "Select columns to apply filtering from your data.\nMultiple slections are allowed.\nNote the Match (character) box is for character variables, for which a value should indicate an errant point.\ne.g. column name = 'flag', match = 'wrong'",
+              style = "cursor: help; margin-left: 5px;"
+            )
+          ),
+
           choices = names(get_annotation_base()),
           multiple = TRUE
         ),
@@ -1273,6 +1345,7 @@ server <- function(input, output, session) {
         mutate(singlegap_rm = if_else(n() == 1, 1L, 0L)) %>%  # 1 if only one row in group
         ungroup()
 
+      removeNotification(id)
       shinybusy::remove_modal_spinner()
       annotated_data(df)
     } else{
@@ -1330,11 +1403,31 @@ server <- function(input, output, session) {
         ),
 
         checkboxInput("speed_hybrid",
-                      "Hybrid filter (raw traj speed + smoother)",
+                      #"Hybrid filter (raw traj speed + smoother)",
+                      label = tagList(
+                        "Hybrid filter (traj speed + RMS/smoother)",
+                        tags$span(
+                          icon("circle-info"),
+                          title = "Using raw traj. speed and an averaged localised measure:\n\n- Raw traj. speed, useful for flagging single bad spikes\n- Smoothing/RMS, useful to flag a series of fixes that may reflect local implausible movement",
+                          style = "cursor: help; margin-left: 5px;"
+                        )
+                      ),
                       value = FALSE),
 
         selectInput("speed_method",
-                    "Smoothing / RMS method",
+                    #"Smoothing / RMS method",
+
+                    label = tagList(
+                      "Root mean square (RMS) method",
+                      tags$span(
+                        icon("circle-info"),
+                        title = "Choose how the moving average speed is calculated:\n\nNone = raw trajectory speed\nMcConnell = classic root mean square calculation\nFlexi = adjusts the number of points around the fix at the start/end of time series within the calculation\n(vectorised is faster but may give slightly different results to clip)",
+                        style = "cursor: help; margin-left: 5px;"
+                      )
+                    ),
+
+                    #How to treat edge conditions
+
                     choices = c(
                       "None (raw trajectory speed)" = "none",
                       "McConnell RMS" = "mcconnell",
@@ -1344,15 +1437,40 @@ server <- function(input, output, session) {
                     selected = "none"),
 
         numericInput("points_each_side",
-                     "Points each side (window size)",
+                     #"Points each side (window size)",
+                     label = tagList(
+                       "Points each side (window size)",
+                       tags$span(
+                         icon("circle-info"),
+                         title = "The number of points either side within the moving window, default = 2",
+                         style = "cursor: help; margin-left: 5px;"
+                       )
+                     ),
                      value = 2, min = 1, step = 1),
 
         checkboxInput("include_centre",
-                      "Include centre point in window",
+                      #"Include centre point in window",
+                      label = tagList(
+                        "Include centre point in window",
+                        tags$span(
+                          icon("circle-info"),
+                          title = "The original McConell filter was designed to exclude the centre-point.\n\nThis is to identify points surrounding the current one that may reflect transient spikes in speeds,\ni.e. to avoid the current point contaminating its own value.\n\nUse with caution.",
+                          style = "cursor: help; margin-left: 5px;"
+                        )
+                      ),
                       value = TRUE),
 
         checkboxInput("use_custom_fun",
-                      "Use custom smoothing function",
+                      #"Use custom smoothing function",
+                      label = tagList(
+                        "Use custom 'smoothing' function",
+                        tags$span(
+                          icon("circle-info"),
+                          title = "This overrides the window size argument and RMS method above.\nA rolling mean, median, max or min function is coded in, that use a custom k window size, e.g. 5 here.\nA bespoke function can also be supplied but this has to exist already in your R session and would have to also use k.",
+                          style = "cursor: help; margin-left: 5px;"
+                        )
+                      ),
+
                       value = FALSE),
 
         uiOutput("custom_fun_args_ui"),
@@ -1374,7 +1492,7 @@ server <- function(input, output, session) {
 
   output$custom_fun_args_ui <- renderUI({
 
-    if (!isTRUE(input$use_custom_fun)) return(NULL)
+    if(!isTRUE(input$use_custom_fun)) return(NULL)
 
     div(
       style = "
@@ -1423,7 +1541,7 @@ server <- function(input, output, session) {
 
     shinybusy::show_modal_spinner(
       spin = "fading-circle",
-      text = "Running MoveRakeR::speed_filt() ..."
+      text = "Running MoveRakeR::speed_filt()..."
     )
 
     id <- showNotification(
@@ -1442,7 +1560,7 @@ server <- function(input, output, session) {
     fun_obj <- NULL
     fun_args <- list()
 
-    if (isTRUE(input$use_custom_fun)) {
+    if(isTRUE(input$use_custom_fun)) {
 
       smoother <- switch(
         input$custom_fun_name,
@@ -1515,11 +1633,18 @@ server <- function(input, output, session) {
 
   observeEvent(input$run_custom_speed, {
 
-    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running custom speed filt ...")
+    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running custom speed filt...")
 
     df <- get_annotation_base()
     req(df)
     has_gaps <- "gapsec" %in% names(df)
+
+    id <- showNotification(
+      "Running custom speed filt...",
+      duration = NULL,
+      closeButton = FALSE,
+      type = "message"
+    )
 
     # for each gapsection per animal - just do a simple speed filter from x to x+1
     #browser()
@@ -1555,6 +1680,7 @@ server <- function(input, output, session) {
       timestamp = Sys.time()
     )
 
+    removeNotification(id)
     shinybusy::remove_modal_spinner()
     annotated_data(df0)
 
@@ -1566,11 +1692,18 @@ server <- function(input, output, session) {
   # -------------------------------------------------------------- #
   observeEvent(input$run_turn, {
 
-    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running MoveRakeR::turn_filt() ...")
+    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running MoveRakeR::turn_filt()...")
 
     df <- get_annotation_base()
     req(df)
     has_gaps <- "gapsec" %in% names(df)
+
+    id <- showNotification(
+      "Running MoveRakeR::turn_filt()...",
+      duration = NULL,
+      closeButton = FALSE,
+      type = "message"
+    )
 
     #browser()
     df <- turn_filt(data = df, turnFilt = input$turn_thresh_numeric, turnFilt_dir = input$turn_dir,
@@ -1585,6 +1718,7 @@ server <- function(input, output, session) {
       timestamp = Sys.time()
     )
 
+    removeNotification(id)
     shinybusy::remove_modal_spinner()
     annotated_data(df)
 
@@ -1601,10 +1735,17 @@ server <- function(input, output, session) {
 
   observeEvent(input$run_ll,{
 
-    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running extreme lat longs ...")
+    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running lat long annotation...")
 
     df <- get_annotation_base()
     req(df)
+
+    id <- showNotification(
+      "Running lat long annotation...",
+      duration = NULL,
+      closeButton = FALSE,
+      type = "message"
+    )
 
     # if rectangle mode is on, compute:
     if(rect_active()){
@@ -1637,6 +1778,7 @@ server <- function(input, output, session) {
 
     }
 
+    removeNotification(id)
     shinybusy::remove_modal_spinner()
     annotated_data(df)
 
@@ -2771,6 +2913,8 @@ server <- function(input, output, session) {
 
     req(map_ready())   # HARD GATE
 
+    req(map_ready2())
+
     #df <- filtered_annotated()
     df <- filtered_data_threshold()
     req(df)
@@ -2793,11 +2937,12 @@ server <- function(input, output, session) {
     }
   })
 
-
   # GPS fixes
   observe({
 
     req(map_ready())   # HARD GATE
+
+    req(map_ready2())
 
     #df <- filtered_annotated()
     df <- filtered_data_threshold()
@@ -2877,17 +3022,50 @@ server <- function(input, output, session) {
 
       flagged_text <- c()
 
+      #if(length(flagged) > 0){
+      #  flagged_text <- sapply(flagged, function(f){
+      #    value_col <- flag_value_map[[f]]
+      #    if(!is.na(value_col) && value_col %in% names(df)){
+      #      val <- df[i, value_col]  # <- take value from **current row only**
+      #      paste0(f, " (", round(val, 2), ")")
+      #    } else {
+      #      paste0(f, " (1)")
+      #    }
+      #  })
+      #}
+
+      #browser()
       if(length(flagged) > 0){
         flagged_text <- sapply(flagged, function(f){
           value_col <- flag_value_map[[f]]
-          if(!is.na(value_col) && value_col %in% names(df)){
-            val <- df[i, value_col]  # <- take value from **current row only**
-            paste0(f, " (", round(val, 2), ")")
+
+          #value_col <- flag_value_map[["sat_rm"]]
+          #f = "sat_rm"
+
+          if(!is.null(value_col) &&
+             length(value_col) == 1 &&
+             !is.na(value_col) &&
+             value_col %in% names(df)){
+
+            #class(df)
+
+            #val <- df[i, value_col, drop = TRUE]
+            val <- df[[value_col]][i]
+
+            if(length(val) == 1 && !is.na(val)){
+              paste0(f, " (", round(val, 2), ")")
+            } else if(length(val) == 1 && is.na(val)){
+              paste0(f, " (NA)")
+            } else {
+              paste0(f, " (missing)")
+            }
+
           } else {
             paste0(f, " (1)")
           }
-        })
+        }, USE.NAMES = FALSE)
       }
+
 
       if(length(nas) > 0){
         flagged_text <- c(flagged_text, paste0(nas, " (NA)"))
@@ -2921,6 +3099,9 @@ server <- function(input, output, session) {
 
   # Legend
   observeEvent(input$show_legend,{
+
+    req(map_ready2())
+
     #df <- filtered_annotated()
     df <- filtered_data_threshold()
     req(df)
@@ -3433,6 +3614,7 @@ server <- function(input, output, session) {
 
   # --- Update slider bounds whenever TagID changes ---
   observeEvent(filtered_data_tag(), {
+
     #browser()
     df <- filtered_data_tag()
     min_time <- min(df$DateTime)
@@ -3449,13 +3631,16 @@ server <- function(input, output, session) {
       )
     }
 
-    updateSliderInput(
-      session,
-      "time_slider",
-      min = min_time,
-      max = max_time,
-      value = new_val
-    )
+    if(!identical(current, new_val)) {
+      updateSliderInput(
+        session,
+        "time_slider",
+        min = min_time,
+        max = max_time,
+        value = new_val
+      )
+    }
+
   })
 
   # --- Store user changes safely ---
@@ -3591,33 +3776,20 @@ server <- function(input, output, session) {
 
   # --- Render each plot ---
   observeEvent(xy_plot_data(),{
-    #req(input$xy_vars)
-
-    #req(rv$current_xy_vars)
 
     data_list <- xy_plot_data()
     df <- data_list$df
     vars <- data_list$vars
     pal <- tag_palette()
 
-
-    #for(var in input$xy_vars){
-    #for(var in rv$current_xy_vars){
     for(var in vars){
-      local({ #local() keeps each variable’s render isolated
+      local({
         v <- var
 
-        #if(input$plot_type == "plotly"){
-
           output[[paste0("xy_", v, "_plotly")]] <- renderPlotly({
-            #df <- filtered_data()
-            #df_local <- isolate(df)  # Use isolate() to avoid re-triggering when filtered_data() changes; note debounced already above though in xy_plot_data()
-            #df_local <- data_list$df
 
             req(nrow(df) > 0)
 
-            # build ggplot
-            #suppressWarnings(
               p <- ggplot(df, aes(
                 x = DateTime,
                 y = .data[[v]],
@@ -3633,24 +3805,16 @@ server <- function(input, output, session) {
                 scale_color_manual(values = pal(sort(unique(df$TagID)))) +
                 labs(y = v, x = "", col = "TagID") +
                 theme_minimal() +
-                #theme(legend. position = “none”)  +
                 guides(color = "none")
-            #)
-            # convert ggplot -> plotly
+
             ggplotly(p, tooltip = "text") %>%
               layout(legend = list(orientation = "h", x = 0, y = -0.2))
           })
-        #}
 
-        #if(input$plot_type == "ggplot"){
           output[[paste0("xy_", v, "_gg")]] <- renderPlot({
-            #df <- filtered_data()
-            #df_local <- isolate(df)
 
-            #df_local <- data_list$df
             req(nrow(df) > 0)
 
-            #suppressWarnings(
               ggplot(df, aes(
                 x = DateTime,
                 y = .data[[v]],
@@ -3662,10 +3826,9 @@ server <- function(input, output, session) {
                 labs(y = v, x = "", col = "TagID") +
                 theme_minimal() +
                 guides(color = "none")
-             #)
+
           })
 
-       # }
       })
     }
   })
@@ -3818,6 +3981,8 @@ server <- function(input, output, session) {
 
   observe({
 
+    req(map_ready3())
+
     df <- filtered_data()
     req(df)
     req(nrow(df) > 0)
@@ -3891,6 +4056,9 @@ server <- function(input, output, session) {
   #df_debounced <- debounce(filtered_data, 500)  # 500 ms delay
 
   observe({
+
+    req(map_ready3())
+
     #df <- as.data.frame(df_debounced()) # for leafgl
     df <- filtered_data()
     req(df)
@@ -3931,7 +4099,6 @@ server <- function(input, output, session) {
 #    pal <- tag_palette()
 #    proxy <- leafletProxy("mymap")
 #
-#    if(isTRUE(input$show_points_ti)) {
 #
 #      # Optional: limit points for performance
 #      max_points <- 5000
@@ -3959,6 +4126,9 @@ server <- function(input, output, session) {
 
   ############## LEGEND ###################
   observeEvent(filtered_data(),{
+
+    req(map_ready3())
+
     # Only proceed if legend toggle is TRUE
     req(input$show_legend_ti)
 
@@ -3971,7 +4141,9 @@ server <- function(input, output, session) {
     proxy <- leafletProxy("mymap")
 
     # Always clear existing legend first
-    proxy %>% clearControls()
+    isolate({
+      proxy %>% clearControls()
+    })
 
     # Add updated legend
     proxy %>% addLegend(
@@ -3981,6 +4153,36 @@ server <- function(input, output, session) {
       title = "Animals"
     )
   })
+
+  # Legend
+  observeEvent(input$show_legend_ti,{
+
+    req(map_ready3())
+
+    df <- filtered_data()
+    req(df)
+    if(isTRUE(input$show_legend_ti)) {
+
+      pal <- tag_palette()
+      tags <- sort(unique(df$TagID))
+
+      leafletProxy("mymap") %>%
+        clearControls() %>%
+        addLegend(
+          pal = pal,
+          values = tags,
+          opacity = 1,
+          title = "Animals"
+        )
+
+    } else{
+      leafletProxy("mymap") %>% clearControls()
+    }
+
+
+  }, ignoreInit = FALSE)
+
+
 
   ########################################################################################################
   # collapsible histogram box

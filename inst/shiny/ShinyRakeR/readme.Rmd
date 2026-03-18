@@ -13,6 +13,24 @@ knitr::opts_chunk$set(echo = TRUE)
 
 This Shiny app allows the user to experiment with setting parameters to annotate GPS data as erroneous, and to evaluate the consequences of selecting certain parameters. The app is flexible to allow choices to update if you select different parameters.
 
+The app will obviously have been started by the time you read this. However, should you wish to start the app with custom tile providers for leaflet, then use:
+
+```{r setup1, eval=FALSE}
+
+ShinyRakeR(data, Providers = c("OpenStreetMap", "GoogleEarth", "Esri.OceanBasemap", "Esri.WorldImagery"))
+
+```
+
+And further, if you wish to start the app with the map plotting deactivated (both maps), then these can be achieved via:
+
+```{r setup2, eval=FALSE}
+
+ShinyRakeR(data, mapstart=FALSE)
+
+```
+
+Note that the map plotting in the explorer and the inspector tabs can be reactivated (or deactivated) by toggling the *Activate/deactivate map* buttons above the maps. **Starting the map the map deactivated, or deactivating it during the app, can be useful if you have a very large dataset**. For example, you may be more concerned with proportions of fixes dropped through certain annotation decisions, rather than the spatial distribution of where those errant locations may be.
+
 ### **The threshold explorer**
 
 Upon start-up, the app will display the main tab called *Threshold explorer*. This is the tab where you can set parameters and explore the number of fixes that would be lost if you were to follow this particular set of choices.
@@ -76,6 +94,7 @@ Above the map there are different drop down menus:
 - **Map settings**: gives severl options to change the display of points and lines with point sizes, line thickness, and opacity; toggle the legend to display it;
 - **Export data**: the current data with annotations can be exported to the R session at any point with a particular name to then carry out further work outside of the app;
 - **Current decisions**: a model box appears after clicking the *Current decision* box - this tracks the decisions and parameters that are currently selected for annotation under each step, including gap sections and duplicates; the *Reset* button resets all decisions and removes the current annoation steps, which thus removes decisions under the rake part below and resets the map.
+- **Activate/deactivate map** As noted above, this button turns off rendering of points and lines on the map which speeds up the use of the app if the dataset is very large; tip - you can start the map deactivated, then move the time slider to a reasonable proportion of the data, and re-activate the map, which also speeds up plotting.
 
 ### **The temporal inspector**
 
@@ -83,7 +102,7 @@ Separate to the threshold explorer, the temporal inspector tab can be used to ex
 
 The tab also has a map in the top right, that can be linked together to the map in the threshold explorer by ticking the *Link maps to each other* box on the left-hand side, but beware that this doubles the map rendering time so the app can be slowed, possibly beyond realistic usage if you have large data.
 
-Select an animal from the top drop down menu (note also in this map, colours are plotted different per animal using the `viridis` scale). The same map settings are also available similar to the map in the threshold explorer. 
+Select an animal from the top drop down menu (note also in this map, colours are plotted different per animal using the `viridis` scale). The same map settings are also available similar to the map in the threshold explorer. There is also an *Activate/deactivate map* option similar to the explorer that, as above, turns of point, line and legend rendering on the map, useful for large datasets, e.g. to jump from map off -> animal changed or slider changed -> map on.
 
 The left had side of the temporal inspector is blank to start but numeric covariates can be selected from your data that when individually clicked are sequentially added as temporal line plots. This can help visualise the covariates through time alongside the spatial distribution of fixes. As with the map in the threshold explorer, there is a time slider that can narrow or widen the temporal extent. Under map settings above the map, there is a further option to switch between `ggplot` or `plotly` for visualisation of the covariate line plots.
 

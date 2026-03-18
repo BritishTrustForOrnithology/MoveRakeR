@@ -53,8 +53,11 @@
 #' window will be used in RStudio, but app visual performance may then be sub-optimal.
 #' @param Providers A list of providers to use in the base leaflet maps for options of switching between
 #' tiled layers; defaults to: c("OpenStreetMap", "GoogleEarth", "Esri.OceanBasemap", "Esri.WorldImagery").
+#' @param mapstart Default set to TRUE. This argument is for deactivating the Threshold Explorer map on start-up, which can also
+#' be toggled within the app as well, but this can be useful for large datasets where you are concerned more about the
+#' proportions of fixes potentially dropped under certain decisions made.
 #'
-#' @seealso [MoveRakeR::rake], @seealso [MoveRakeR::rake_outlie]
+#' @seealso [MoveRakeR::rake], [MoveRakeR::rake_outlie]
 #'
 #' @examples
 #' indata <- yourdata # data.frame with a minimum of columns named TagID, DateTime, longitude, latitude
@@ -62,7 +65,7 @@
 #' ShinyRakeR(data)
 #'
 #' @export
-ShinyRakeR <- function(data = NULL, dev = FALSE, launchBrowser = TRUE,
+ShinyRakeR <- function(data = NULL, dev = FALSE, launchBrowser = TRUE, mapstart=TRUE,
                        Providers = c("OpenStreetMap", "GoogleEarth", "Esri.OceanBasemap", "Esri.WorldImagery")
   ){
 
@@ -77,7 +80,7 @@ ShinyRakeR <- function(data = NULL, dev = FALSE, launchBrowser = TRUE,
   # Inject data into global environment of app
   if(!is.null(data)) assign("userData", data, envir = .GlobalEnv)
 
-  shiny::shinyOptions(userData = data, Providers = Providers)
+  shiny::shinyOptions(userData = data, Providers = Providers, mapstart = mapstart)
 
   require(data.table)
   require(shinydashboard)

@@ -5,6 +5,25 @@ annotate GPS data as erroneous, and to evaluate the consequences of
 selecting certain parameters. The app is flexible to allow choices to
 update if you select different parameters.
 
+The app will obviously have been started by the time you read this.
+However, should you wish to start the app with custom tile providers for
+leaflet, then use:
+
+    ShinyRakeR(data, Providers = c("OpenStreetMap", "GoogleEarth", "Esri.OceanBasemap", "Esri.WorldImagery"))
+
+And further, if you wish to start the app with the map plotting
+deactivated (both maps), then these can be achieved via:
+
+    ShinyRakeR(data, mapstart=FALSE)
+
+Note that the map plotting in the explorer and the inspector tabs can be
+reactivated (or deactivated) by toggling the *Activate/deactivate map*
+buttons above the maps. **Starting the map the map deactivated, or
+deactivating it during the app, can be useful if you have a very large
+dataset**. For example, you may be more concerned with proportions of
+fixes dropped through certain annotation decisions, rather than the
+spatial distribution of where those errant locations may be.
+
 ### **The threshold explorer**
 
 Upon start-up, the app will display the main tab called *Threshold
@@ -151,6 +170,11 @@ Above the map there are different drop down menus:
     including gap sections and duplicates; the *Reset* button resets all
     decisions and removes the current annoation steps, which thus
     removes decisions under the rake part below and resets the map.
+-   **Activate/deactivate map** As noted above, this button turns off
+    rendering of points and lines on the map which speeds up the use of
+    the app if the dataset is very large; tip - you can start the map
+    deactivated, then move the time slider to a reasonable proportion of
+    the data, and re-activate the map, which also speeds up plotting.
 
 ### **The temporal inspector**
 
@@ -166,7 +190,10 @@ if you have large data.
 Select an animal from the top drop down menu (note also in this map,
 colours are plotted different per animal using the `viridis` scale). The
 same map settings are also available similar to the map in the threshold
-explorer.
+explorer. There is also an *Activate/deactivate map* option similar to
+the explorer that, as above, turns of point, line and legend rendering
+on the map, useful for large datasets, e.g. to jump from map off -&gt;
+animal changed or slider changed -&gt; map on.
 
 The left had side of the temporal inspector is blank to start but
 numeric covariates can be selected from your data that when individually
