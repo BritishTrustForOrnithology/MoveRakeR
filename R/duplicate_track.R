@@ -32,7 +32,7 @@
 #' @param quality_fun Function used to aggregate row-level quality scores at the segment or group level (default: \code{mean}).
 #' @param time_fun Function used to aggregate \code{DateTime} values when resolving same-location/different-time conflicts with
 #'   \code{dup_method_same_loc = "avg_time"} (default: \code{mean}).
-#' @use_dup_coords Logical defaulting to FALSE as to whether to use the search for duplicate coordinates across
+#' @param use_dup_coords Logical defaulting to FALSE as to whether to use the search for duplicate coordinates across
 #' different DateTimes This may be contentious given animals sat for long periods may have a high likelihood of
 #' hitting upon the same GPS coordinates even with GPS error, for different datetimes. FALSE bypasses this check entirely.
 #' @param annotate Logical. Legacy argument retained for backward compatibility. If \code{TRUE} and \code{mode}

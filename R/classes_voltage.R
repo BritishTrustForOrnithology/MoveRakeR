@@ -258,7 +258,7 @@ is.VoComMultiStack <- is_VoComMultiStack
 #' @param vsll column in your data relating to solar voltage charging (e.g. voltage or percentage)
 #' @param vbat column in your data relating to the battery charge (e.g. voltage, or percentage)
 #'
-#' @example
+#' @examples
 #' Vo_obj = Track2Vo(data, vbat = "tag-voltage", vsll = "battery-charging-current")
 #'
 #' Vo_obj_subset = Vo_obj[Vo_obj$TagID == "animal_1",] # subsetting for one animal if wanted
