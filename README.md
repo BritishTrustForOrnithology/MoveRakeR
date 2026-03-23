@@ -50,12 +50,26 @@ devtools::install_github('BritishTrustForOrnithology/MoveRakeR', build_vignettes
 
 ## Vignettes
 
-There is currently one vignette called *“Cleaning and Raking”*, that
-gives a more detailed overview of the initial error-checking and data
-annotation/filtering processes involved at the outset. Further vignettes
-will be added to show the overall layout and general usage of the
-package, initial read in and data handling, data manipulation, and
-defining trips.
+There are currently two vignettes:
+
+- *clean_track* This that gives a more detailed overview of the initial
+  error-checking and data annotation/filtering processes involved.
+
+- *ShinyRakeR* This details the `ShinyRakeR` app in more detail for the
+  interactive means of carrying out annotation of your data through a
+  number of processes available within `MoveRakeR` as detailed in the
+  *clean_track* vignette.
+
+These can be accessed through:
+
+``` r
+vignette(package="MoveRakeR") 
+vignette("clean_track", package = "MoveRakeR")
+vignette("ShinyRakeR", package = "MoveRakeR")
+```
+
+A further vignette will be added for defining trips and computing trip
+metrics.
 
 ## Data
 
