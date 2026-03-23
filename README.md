@@ -319,7 +319,7 @@ duplicate data, minimum numbers of satellites, dilution of precision
 values, trajectory speeds, turning angles and spatial xy extents. Gaps
 in the data can be investigated where isolated fixes may be left.
 
-![](README_files/Shiny_app_1.JPG)
+![](README_files/Explorer_after_step1.JPG)
 
 The temporal inspector tab allows for visualisation of variables
 associated with the data through time as line plots, alongside a map.
@@ -327,7 +327,7 @@ The histogram distribution of the variable chosen can be explored and a
 plot for the density of tracking data across animals through time is
 also displayed.
 
-![](README_files/Shiny_app_2.JPG)
+![](README_files/Temporal_inspector_4.JPG)
 
 Among other packages, the `ExMove` toolkit (Langley et al. 2024)
 provides a Shiny App to investigate the effect of filter effects of
