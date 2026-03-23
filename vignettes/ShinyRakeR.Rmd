@@ -1,0 +1,298 @@
+---
+title: "ShinyRakeR"
+author: "Chris Thaxter"
+date: "2026-03-23"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Cleaning and Raking}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+  
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = identical(Sys.getenv("NOT_CRAN"), "true")
+)
+
+```
+
+## Interactive investigation using ShinyRakeR
+
+The ```MoveRakeR``` package contains a built-in shiny app called ```ShinyRakeR``` that provides an interactive way to quantify and visualise the impact of the choices of labeling fixes as erroneous. The app allows the cumulative effect of labelling fixes from different pathways to be assessed. The app can be called as follows:
+
+
+```{r MoveRakeR ShinyRakeR() 1, eval=FALSE, echo=TRUE}
+ShinyRakeR(data)
+
+```
+
+This can use the built in `MoveRakeR` dataset. Alternatively to start the application with a randomly simulated set of trips using function ```sim_data()``` that calls ```simulate_trip()```. You can compute some fake data using these functions or ```ShinyRakeR``` will simulate some for you using 50 points of three trips of three animals.
+
+```{r MoveRakeR ShinyRakeR() 2, eval=FALSE, echo=TRUE}
+
+fake_data <- sim_data(
+  hub_lat = -54.5, hub_lon = -36.1, # central place 'hub'
+  dt = 300, # seconds GPS rate
+  animals = c("A001", "B002"),
+  points_per_trip = 100,
+  n_trips = 10,
+  max_speed = 50, # m/s
+  cp_time_mean = 5, # hours
+  cp_time_sd = 1 # variation
+)
+
+ShinyRakeR(fake_data)
+
+# or for defaults
+ShinyRakeR()
+
+```
+
+
+
+### Start up options
+
+Before running the app, there are some global arguments that you can use to control some initial behaviour of the app. The argument *Providers* is available to specify specific tiles of the `leaflet` maps that are used. For example:
+
+```{r MoveRakeR ShinyRakeR() startup1, eval=FALSE, echo=TRUE}
+
+ShinyRakeR(data, Providers = c("OpenStreetMap", "GoogleEarth", "Esri.OceanBasemap", "Esri.WorldImagery"))
+
+
+```
+
+A further useful option is to control map activation at the start - this is useful if for example you have very large data and/or are perhaps not so concerned with spatial distribution of fixes but proportions of data rows that are labelled through 'raking' through the data. The map is activated by default, but to deactivate it initially use:
+
+```{r MoveRakeR ShinyRakeR() startup2, eval=FALSE, echo=TRUE}
+
+ShinyRakeR(data, mapstart = FALSE)
+
+
+```
+
+### The Threshold explorer 
+
+Upon start up, the app will load up an application in your default web browser, defaulting to a tab called *Threshold explorer*. 
+
+![](figures/Vignette_shiny_startup.jpg){width=100%}
+
+No spatial data is displayed at start-up (even if the activate map option is set to TRUE). Note in the above example, we specified no map plotting, as indicated on the left hand side messages in read that tell us the map plotting is deactivated currently in both explorer and inspector tabs
+
+### Annotation steps
+
+The app is divided into three main steps:
+
+- Step 1: Identify gaps
+- Step 2: Assess duplicate data
+- Step 3: Annotate data
+
+You can run through each of these in turn to annotate the dataset as you go, for which all changes are tracked in the dropdown menu *Current decision* above the map. 
+
+#### Step 1: Identify gaps
+
+The first step is concerned with assigning *gapsections* to your data, that is, labelling consecutive strings of points that you consider the tag to operating normally, and not subject to gaps in the timestamp record. use this first step to first identify a 'gap' in your data beyond which you believe it dangerous to consider consecutive fixes as still valid. This can be achived through the *Gap threshold* box in seconds, with a further *tolerance* value available to give lee-way above that value (set to zero if not needed). Clecking *Run gap_section()* will run the `MoveRakeR::gap_section()` function.
+
+![](figures/Explorer_after_step1.jpg){width=100%}
+
+
+If you have set the app to display GPS points and lines, then the map will display the first animal in the dataset.
+
+#### Step 2: Assess duplicate data
+
+The second step is for determining (and optionally resolving) duplicate data that may be present. This is achieved using the `MoveRakeR::duplicate_track()` function. Buy clicking the *Run duplicate_track()* button, a modal dialogue box will appear that relate to the duplication checks that are performed. Four main types of data duplicates are checked: (1) parallel time streams, (2) duplicate time stamps for varying locations, (3) duplicate locations for different time stamps, and a hidden (4) check for both location and DateTime duplicates; a further fifth all duplicate across all columns is also performed automatically. 
+
+How duplicates are flagged and resolved depends on the drop down boxes. Option four above is solely governed by the global duplicate method *Global dup_method* box at the top. This global method by default applies to all the different duplication possibilities, and the further boxes then relate to bespoke separate conditions that can be applied to duplicate types 1-3. These are nearly all the same, with the exception of (i) the **parallel** method that has a *merge* option to simply combine two parallel data streams with no removal; (ii) the **same time / different location** method that has a *centroid* option to average over the locations, and (iii) the **same location / different time** method that has an *avg_time* option to average over time for duplicates found. Otherwise options across the methods for dealing with duplicates are the same, being one of *random* pick (default), *first* duplicate chosen, *last* duplicate chosen, or a *best quality* among duplicates, based on other columns in the data. I would advocate for the best quality option but it is up to you and your research question. If *best quality* is chosen, you will need to pick variables in your data to use to quantify which duplicate is the "best" and thus should be kept and the direction of the gradient of the variable indicating what constitutes better for your variable.
+
+An important point: the box **Use duplicate coordinates check?** is by default unchecked at the start and thus means that the duplicate check involving same location and different time option is NOT used. This is intentional as for stationary animals, it is possible that fixes could be identical to a high precision value in the GPS and thus could be flagged erroneously. However, this is left coded in if that is indeed required.
+
+![](figures/Duplicate_modal.jpg){width=35%}
+
+Selecting apply will carry through the chosen decisions. At the bottom of the screen is where the summary decisions are visualised and tallied as a summary **rake** of the data. These now show a *Duplicates* gauge, that actually says here there were no duplicates found out of a large number of GPS fixes. We'll come back to that panel below.
+
+![](figures/Duplicate_run_1.jpg){width=100%}
+
+Back above in the step box, there is a further option for *Summary* where a tally across animals is available. This confirms no duplicates were found.
+
+![](figures/Duplicate_run_2.jpg){width=50%}
+
+It may be important to actually resolve duplicates (if you had any). These would be resolved using the current values and approach you specified for labelling the data rows as duplicates - e.g. best methods would be applied following your selection, or the random method, and so forth. This is important for further workflow if you have supplied a truly raw dataset that may have duplicate issues, such as jumps in time, that without resolving could risk mis-use for other annotations in step 3, such as trajectory speed filtering (if that tag suddenly jumps back in time to give an impossible negative value). It is therefore safer to resolve duplicates first before proceeding. Doing so gives a duplicates resolved notification in the top right of the app.
+
+![](figures/Duplicate_run_3_resolved.jpg){width=20%}
+
+#### Step 3: Annotate data
+
+Thereafter, there are several options to then annotate the data as '1' denoting a 'bad' data row, or '0' a good data row. These are the same operations that are provided in the wider `MoveRakeR` workflow, and feed into the  ```clean_track()``` function as well. By default, the annotate data box is collapsed but each stage can be expanded individual, or all by clicking the *Expand / Collapse all* toggle. 
+
+Each step from "a" through to "m" results in an annotation column added to the data. This is what is used to track the number of data rows in the summary 'rake' section at the bottom right of the app.
+
+In turn, these steps include:
+
+(a) Annotation by a column already present in your data, for which you can specific a column
+
+![](figures/step3_a.jpg){width=40%}
+
+(b) A minimum number of fixes per animal; use the slider, or enter in a value. This section allows fixes to be annotated for a minimum number of GPS fixes for the animal, or alternatively a minimum number per day. For the latter, this is either *strict* where all days for that animal have to meet the threshold, or *granular* where only the days where the threshold is not met for the animal are flagged. A *summary* button also gives a summary table of the fixes per day and animal, as partly covered by the `MoveRakeR::summary()` function as well.
+
+![](figures/step3_b.jpg){width=40%}
+
+(c) Missing latitude / longitude (although note this will only be indicated in the 'summary' box - see below).
+
+![](figures/step3_c.jpg){width=40%}
+
+(d) A minimum number of satellites, using a specified column supplied in the box and enter a value inclusive of the bound.
+
+![](figures/step3_d.jpg){width=40%}
+
+(e) and f. A pdop and hdop dilution of precision filter; again values can be supplied to keep values *below* a certain value, inclusive of the bound.
+
+![](figures/step3_e_f.jpg){width=40%}
+
+(g) Custom annotations. This process uses the `MoveRakeR::filt_err()` function that is activated when the first box is pressed. 
+
+![](figures/step3_g.jpg){width=40%}
+
+This in turn brings up another box that allows you to select variables from your data to filter from, and in turn select bounds within which data will be annotated as '0' i.e. data are ok, and for character variables, the right hand box matching that value will also be labelled as ok.
+
+```{r, echo=FALSE, out.width="45%", fig.show="hold"}
+knitr::include_graphics(c(
+  "figures/step3_g_modal2.jpg",
+  "figures/step3_g_modal3.jpg"
+))
+
+```
+
+An annotation summary can also be obtained for the results from `filt_err()` by clicking the 'Summary' box.
+
+(h) Flag single gapsections. These sections of data that end up as just one GPS fix isolated, i.e. with gaps before and after depending on the values chosen under step 1. This annotation flags these as problematic.
+
+![](figures/step3_h.jpg){width=40%}
+
+(i) A trajectory speed filter. This uses the ```MoveRakeR::speed_filt()``` process, to assess trajectory speed between consecutive GPS fixes. Using a threshold specified as a maximum travel speed of the animal, this annotates the data where that value is exceeded. This works by hypothetically removing that fix and recalculating the traj. speed with to removed, so this is different to just labelling fixes greater than a value (see j below). 
+
+![](figures/step3_i.jpg){width=40%}
+
+By clicking the `run speed_filt()` button this brings up a dialogue box that accepts the arguments needed by the function. 
+
+![](figures/step3_i_modal.jpg){width=50%}
+
+The information icons give more detail. The options here are whether to use the 'raw' trajectory speed as it is, i.e. the point-to-point speed consecutive process, and/or further consider the local GPS fix speed landscape within a number of fixes of the current point. This second part is more subtle but asks a slightly different question of whether there is a sustained erroneous process driving inaccuracies in a string of fixes, rather than just a single bad spike. This is primarily achieved using the McConnell et al. (1992) process, a root mean square approach with two points either side, excluding the current point from the moving window, but variation on those values are allowed to increase number of point or including the centre point, and custom functions can also be applied. 
+
+(j) Custom speed filter. This can also be achieved using the custom filtering above, but is added here as a separate process to allow annotation of the data if trajectory speeds are exceeded above a set value of maximal animal speed, which is again different to the consecutive filtering approach in section i above.  
+
+![](figures/step3_j.jpg){width=40%}
+
+(k) A turning angle filter using ```MoveRakeR::turn_filt()```, with options for values flagged less than or greater than the turn value.
+
+![](figures/step3_k.jpg){width=40%}
+
+(l) A static xy box that can be drawn on the map interactively by activating the 'Rect Mode' (or manually in the boxes) to then run the extent filter.
+
+![](figures/step3_l.jpg){width=40%}
+
+(m) A temporal extent annotation tool to consider fixes as potentially incorrect if they fall outside a window of time (same across all animals). A separate box is available to label fixes separately if they are in the future. The animal extents are automatically shown in the starts and ends, but if they do not show, clicking the 'Display times' box brings them up.
+
+![](figures/step3_m.jpg){width=40%}
+
+### The map
+
+Once choices have been selected, the map will update so that red coloured points are those flagged as problematic user choices.
+
+![](figures/Explorer_map.jpg){width=100%}
+
+Above the map the dropdowns allow further options.  
+
+```{r, echo=FALSE, out.width="15%", fig.show="hold"}
+knitr::include_graphics(c(
+  "figures/Explorer_map_dropdown1.jpg",
+  "figures/Explorer_map_dropdown2.jpg",
+  "figures/Explorer_map_dropdown3.jpg",
+  "figures/Explorer_map_dropdown4.jpg",
+  "figures/Explorer_map_dropdown5.jpg"
+))
+
+```
+
+The first (top left) *Select animals*, allows different animals to be selected (no doubt you could have worked that out for yourself). The time slider below the map may also be of use to narrow down temporal focus; the time slider updates each time an annotation is used.
+
+The second from the left dropdown *Filter bad points* is where you can spatially filter out the fixes labelled as good (blue) from those that are bad (red) defaulting to the combined labelling across all annotation steps, or you can specify separate filters from any of the choices made, that appear in the same dropdown.
+
+The third from left dropdown is for *Map settings* to toggle display of fixes, their interconnecting lines, and the legend, as well as further controls for point sizes, line thicknesses and point and line opacities. 
+
+The fourth dropdown box *Export data* allows you to retain the current dataset in the current R session from where the app was started, although note this will duplicate your data. At present there is no external .csv write out option.
+
+The fifth dropdown box *Current decisions* keeps a record of all the current decisions you have made (note these update each time a new annotation is made). These give the R-code parameters used.
+
+![](figures/Explorer_map_dropdown5a.jpg){width=60%}
+
+The last dropdown (as mentioned above) is a toggle to suspend or reactive the plotting of the map entirely, which can be handy if you have a large dataset - annotation process cause the map to update each time and redraw, so this can be handy to turn off to only display once you are done.
+
+### The summary 'rake' 
+
+At the bottom of map on the right, a summary 'rake' panel is provided that gives an overview of the choices made and the number of fixes proportionally that are impacted by the decisions, alongside the combined (all choices) annotation. The small gauges give the number and percentage of fixes identified for each annotation and a 'Combined' gauge capturing all rows that meet any one of the individual annotations.
+
+The table below the gauges provides a breakdown of each of those tallies per choice per animal in the dataset. 
+
+![](figures/Rake.jpg){width=100%}
+
+### The Temporal inspector
+
+The temporal inspector tab can work alongside the threshold explorer to explore variables in the data through time and spatially where they are located. The tab will be blank on initial switch over, but clicking on animals drop the drop down will activate it. Note, however that if the map is not activated (red notification in the left hand side panel) then no data will show. The colours of points and lines are set using the viridis colour palette.
+
+![](figures/Temporal_inspector_1.jpg){width=100%}
+
+Also on the left hand side, there is a tick box for linking maps together. This is for synchronising the two maps in the threshold explorer and the temporal inspector, the reason being that this may help identify patterns in distributions on the fly when making annotations to the data. Note, however that my linking the maps, each map has to redraw with decisions made in one or either of the tabs, so if computer resources or data sizes are an issue, this can slow the app down.
+
+The top left of the temporal inspector panel allows variables to be selected from your data to then view these temporally through the time currently selected (via the time slider under the map). These are blank at the start but using the *Select numeric covariates* drop down at the top will allow any number or combination of variables to be viewed, for example trajectory speed, number of satellites or altitude (as displayed in this example). The XY plot height and point sizes can be controlled just above the plots.
+
+![](figures/Temporal_inspector_2.jpg){width=100%}
+
+It is also possible to switch from `ggplot` to `plotly` from the *Map settings* menu to give a different view of the line plots. Using `plotly` option enables a number of additional interactions with the xy plots.
+
+![](figures/Temporal_inspector_3.jpg){width=100%}
+
+Any number of animals can be displayed, but again wary of computer resources available for your system if you have loaded in many fixes.
+
+![](figures/Temporal_inspector_4.jpg){width=100%}
+
+Also, as in the threshold explorer tab too, the map backdrops can be altered, switching in this example to ESRI Ocean basemap. These can be altered through an argument provided directly to the function on startup:
+
+```{r MoveRakeR ShinyRakeR() 3, eval=FALSE, echo=TRUE}
+
+ShinyRakeR(Providers = c("OpenStreetMap", "GoogleEarth", "Esri.OceanBasemap", "Esri.WorldImagery"))
+  
+```
+
+### Histogram
+
+Below the maps and xy plots within the inspector tab, are further boxes showing the histogram distribution of the variables selected, per animal, in this example showing the distribution of trajectory speed (m/s).
+
+![](figures/Temporal_inspector_5_histogram.jpg){width=100%}
+
+Here, the histogram can be truncated at lower minima or upper maxima across animals, and the number of histogram bins can be selected within ```ggplot2``` that underpins the visualisation. A scale transformation is also available between linear, log10 or natural log and square-root (e.g. below). Here this would show a clear break in the the trajectory speeds for these animals likely denoting different behaviours.
+
+![](figures/Temporal_inspector_5_histogram2.jpg){width=100%}
+
+### Density of animals through time
+
+Below the histogram, a timeline of tracking is then given per animal (which is fixed independent of the time slider above below the map); this plot is obtained through the ```tag_timeline()``` function. If you have lots of animals, thi can be useful to see how individual animals compare to other in your data and where most tracking (sampling effort) was carried out for this dataset.
+
+![](figures/Temporal_inspector_5_density.jpg){width=100%}
+
+### Troubleshooting in the app
+
+This app has several moving components and as noted above a few times, this can be slower for large data; the app uses leaflet, which can struggle for many thousands of points. This issue is naturally linked to hardware and PCs with much higher RAM e.g. 8GB+ and fast processors will cope much better. In the examples provided here, the test data was carried out on ca 150K rows of data for six animals (only two displayed at a time) on an i5 windows PC with 8GM RAM. A greater RAM and processor speed will perform much better. Future releases map take the approach of the `RakeRvis` R package and use `mapdeck` as a separate option to `leaflet` that can help speed things up. 
+
+Any feedback of suggestions for improvements would be much appreciated.
+
+### References
+
+McConnell, B. J. and Chambers, C. and Fedak, M. A. (1992) Foraging ecology of southern elephant seals in
+relation to the bathymetry and productivity of the southern ocean. *Antarctic Science*, **4**, 393-398.
+
+
+
