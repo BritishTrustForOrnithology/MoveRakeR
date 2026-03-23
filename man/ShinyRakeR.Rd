@@ -8,6 +8,7 @@ ShinyRakeR(
   data = NULL,
   dev = FALSE,
   launchBrowser = TRUE,
+  mapstart = TRUE,
   Providers = c("OpenStreetMap", "GoogleEarth", "Esri.OceanBasemap", "Esri.WorldImagery")
 )
 }
@@ -19,6 +20,10 @@ a fake dataset is automatically generated.}
 
 \item{launchBrowser}{TRUE/FALSE (Default TRUE) whether to launch a browser window (preferred) otherwise a local
 window will be used in RStudio, but app visual performance may then be sub-optimal.}
+
+\item{mapstart}{Default set to TRUE. This argument is for deactivating the Threshold Explorer map on start-up, which can also
+be toggled within the app as well, but this can be useful for large datasets where you are concerned more about the
+proportions of fixes potentially dropped under certain decisions made.}
 
 \item{Providers}{A list of providers to use in the base leaflet maps for options of switching between
 tiled layers; defaults to: c("OpenStreetMap", "GoogleEarth", "Esri.OceanBasemap", "Esri.WorldImagery").}
@@ -78,5 +83,5 @@ ShinyRakeR(data)
 
 }
 \seealso{
-\link{rake}, @seealso \link{rake_outlie}
+\link{rake}, \link{rake_outlie}
 }

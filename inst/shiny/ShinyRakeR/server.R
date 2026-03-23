@@ -154,8 +154,6 @@ server <- function(input, output, session) {
     updateSliderInput(session, "fix_thresh_slider", value = input$fix_thresh_numeric)
   })
 
-
-
   # -------------------------------------------------------------- #
   # Reactive data start
   # -------------------------------------------------------------- #
@@ -186,10 +184,6 @@ server <- function(input, output, session) {
       filter_state[[n]] <- NULL
     }
 
-    #leafletProxy("mymap2") %>%
-    #  clearMarkers() %>%
-    #  clearShapes()
-
     output$mymap2 <- leaflet::renderLeaflet({
       map_reactive()
     })
@@ -200,10 +194,6 @@ server <- function(input, output, session) {
     #  req(!map_ready())  # just to ensure reactive context exists
     #  map_ready(TRUE)
     #})
-
-    # update the text boxes for the temporal annotator
-
-    #browser()
 
     req(data_start())
 
@@ -348,7 +338,6 @@ server <- function(input, output, session) {
 
   })
 
-
   # UI element for showing the tick
   output$gap_done_ui <- renderUI({
 
@@ -380,31 +369,10 @@ server <- function(input, output, session) {
 
   }
 
-
-
   ########################################################################################################
   # Actions for annotating
   ########################################################################################################
 
-  # possible column names:
-  # - NA_latlong_rm (lat/long point NA)
-  # - all_NA_rm (NA rows)
-  # - sat_NA (NA of rows without satellites)
-  # - sat_rm (number of satellites)
-  # - flt_rm (flt_switch)
-  # - gps_pdop_rm (pdop)
-  # - gps_hdop_rm (hdop)
-  # - all_rm # combination of custom filtering options
-  # - singlegap_rm ('orphaned' gapsections)
-  # - dup_rm (duplicate data)
-  # - speed_rm (speed filter)
-  # - angle_rm (angle filter)
-  # - the ll_rm
-  # - and the three time zone ones
-  # - combined_rm, A combined remove column using conditions across all annotation rows
-
-
-  #########################################################################################################
   # track changes: the options currently used
 
   filter_state <- reactiveValues(
@@ -464,11 +432,6 @@ server <- function(input, output, session) {
             title
           ),
 
-          #div(
-          #  style = "margin-top:6px;",
-          #  verbatimTextOutput(paste0("dec_", id))
-          #)
-
           div(
             style = "
               margin-top:6px;
@@ -505,40 +468,321 @@ server <- function(input, output, session) {
 
   })
 
-  #########################################################################################################
+  # -------------------------------------------------------------- #
+  # Animals with too few fixes (overall or per day)
+  # -------------------------------------------------------------- #
 
-  # -------------------------------------------------------------- #
-  # Animals with too few fixes
-  # -------------------------------------------------------------- #
+#  observeEvent(input$run_fixflag, {
+#
+#    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running pdop simple filter ...")
+#
+#    # basically, if any animals have too few fixes, flag it.
+#    # basic dplyr
+#    df <- get_annotation_base()
+#
+#    df0 = df %>% group_by(TagID) %>%
+#      summarise(n = n()) %>%
+#      mutate(flag = ifelse(n < input$fix_thresh_numeric, 1L, 0L))
+#
+#    # which animals have less than the min number
+#    tid_rm <- df0[df0$flag == 1L,]$TagID
+#   df$tid_rm <- ifelse(df$TagID %in% tid_rm, 1L, 0L)
+#
+#    # remember current choices:
+#    filter_state$nfix <- list(
+#      nfix = input$fix_thresh_numeric,
+#      timestamp = Sys.time()
+#    )
+#
+#    shinybusy::remove_modal_spinner()
+#    annotated_data(df)
+#
+#  })
 
   observeEvent(input$run_fixflag, {
 
-    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running pdop simple filter ...")
+    shinybusy::show_modal_spinner(
+      spin = "fading-circle",
+      text = "Running number of fixes filter ..."
+    )
 
-    # basically, if any animals have too few fixes, flag it.
-    # basic dplyr
     df <- get_annotation_base()
 
-    df0 = df %>% group_by(TagID) %>%
-      summarise(n = n()) %>%
-      mutate(flag = ifelse(n < input$fix_thresh_numeric, 1L, 0L))
+    if (input$fix_mode == "animal") {
 
-    # which animals have less than the min number
-    tid_rm <- df0[df0$flag == 1L,]$TagID
-    df$tid_rm <- ifelse(df$TagID %in% tid_rm, 1L, 0L)
+      # ---- PER ANIMAL ---- #
+      df0 <- df %>%
+        group_by(TagID) %>%
+        summarise(n = n(), .groups = "drop") %>%
+        mutate(flag = ifelse(n < input$fix_thresh_numeric, 1L, 0L))
 
+      tid_rm <- df0$TagID[df0$flag == 1L]
 
-    # remember current choices:
+      df$tid_rm <- ifelse(df$TagID %in% tid_rm, 1L, 0L)
+
+    } else if (input$fix_mode == "animal_day") {
+
+      # ---- PER ANIMAL PER DAY ---- #
+      df$Date <- as.Date(df$DateTime)
+
+      df0 <- df %>%
+        group_by(TagID, Date) %>%
+        summarise(n = n(), .groups = "drop") %>%
+        mutate(flag = ifelse(n < input$fix_thresh_numeric, 1L, 0L))
+
+      if (input$fix_day_mode == "strict") {
+
+        # ---- STRICT: flag entire animal if ANY bad day ----
+        tid_rm <- df0 %>%
+          group_by(TagID) %>%
+          summarise(any_flag = any(flag == 1L), .groups = "drop") %>%
+          filter(any_flag) %>%
+          pull(TagID)
+
+        df$tid_rm <- ifelse(df$TagID %in% tid_rm, 1L, 0L)
+
+      } else if (input$fix_day_mode == "granular") {
+
+        # ---- GRANULAR: flag only specific bad days ----
+        df <- df %>%
+          left_join(
+            df0[, c("TagID", "Date", "flag")],
+            by = c("TagID", "Date")
+          ) %>%
+          mutate(tid_rm = ifelse(flag == 1L, 1L, 0L)) %>%
+          select(-flag)
+
+      }
+    }
+
+    # store state
     filter_state$nfix <- list(
       nfix = input$fix_thresh_numeric,
+      mode = input$fix_mode,
       timestamp = Sys.time()
     )
 
     shinybusy::remove_modal_spinner()
     annotated_data(df)
+  })
+
+  ####
+  fix_summary <- reactiveVal(NULL)
+
+  observeEvent(input$summarise_fixflag, {
+
+    shinybusy::show_modal_spinner(
+      spin = "fading-circle",
+      text = "Building summary..."
+    )
+
+    df <- get_annotation_base()
+
+    # ---- Base per-animal summary ----
+    sum_animal <- df %>%
+      group_by(TagID) %>%
+      summarise(
+        total_fixes = n(),
+        .groups = "drop"
+      )
+
+    # ---- Per-day summary ----
+    df$Date <- as.Date(df$DateTime)
+
+    sum_day <- df %>%
+      group_by(TagID, Date) %>%
+      summarise(n = n(), .groups = "drop") %>%
+      group_by(TagID) %>%
+      summarise(
+        n_days = n(),
+        min_fixes_day = min(n),
+        mean_fixes_day = round(mean(n),2),
+        max_fixes_day = max(n),
+        bad_days = sum(n < input$fix_thresh_numeric),
+        prop_bad_days = round(bad_days / n_days,2),
+        .groups = "drop"
+      )
+
+    # ---- Join into wide table ----
+    summary_wide <- sum_animal %>%
+      left_join(sum_day, by = "TagID") %>%
+      mutate(
+        below_thresh_animal = total_fixes < input$fix_thresh_numeric
+      )
+
+    # store or display
+    fix_summary(summary_wide)
+    shinybusy::remove_modal_spinner()
+
+    # ---- SHOW MODAL ----
+    showModal(
+      modalDialog(
+        title = "Fix Summary",
+
+        easyClose = TRUE,
+        DT::dataTableOutput("fix_summary_table"),
+        size = "l",
+        footer = modalButton("Close")
+      )
+    )
 
   })
 
+  output$fix_summary_table <- DT::renderDataTable({
+    req(fix_summary())
+    DT::datatable(
+      fix_summary(),
+      options = list(pageLength = 10, scrollX = TRUE)
+    )
+  })
+
+  ######################
+  # UI
+
+  # ----------------------------------------- #
+  # min no fixes/animal
+
+  output$minfix_section <- renderUI({
+
+    tagList(
+
+      tags$details(
+        open = if(sections_open()) "open" else NULL,
+
+        tags$summary(
+          tags$b("b. Minimum number of data rows per animal")
+        ),
+
+        # ---- ROW 1: RADIO BUTTONS ---- #
+        div(
+          style = "display: flex; align-items: center; gap: 20px; flex-wrap: wrap;",
+
+          radioButtons(
+            "fix_mode",
+            "Mode:",
+            choices = c(
+              "Per animal" = "animal",
+              "Per animal per day" = "animal_day"
+            ),
+            selected = "animal",
+            inline = TRUE
+          ),
+
+          conditionalPanel(
+            condition = "input.fix_mode == 'animal_day'",
+
+            radioButtons(
+              "fix_day_mode",
+              "Flagging behaviour:",
+              choices = c(
+                "Strict (flag whole animal if any bad day)" = "strict",
+                "Granular (flag only bad days)" = "granular"
+              ),
+              selected = "strict",
+              inline = TRUE
+            )
+          )
+        ),
+
+        # ---- ROW 2: CONTROLS ---- #
+        div(
+          style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px;",
+
+          #div(style = "flex: 3;",
+          #    sliderInput(
+          #      "fix_thresh_slider",
+          #      htmltools::span("Sample size/animal:", style = "font-weight: normal;"),
+          #      min = 0, max = 100, value = 5
+          #    )
+          #),
+          div(style = "flex: 1; display: flex; flex-direction: column;",
+              numericInput("fix_thresh_numeric",label = "Sample size",value = 5, min = 0, step = 1 #min = 0, max = 100, step = 1
+              )
+          ),
+          div(style = "flex: 1; display: flex; flex-direction: column;",
+              selectInput(
+                "fix_presets",
+                "Quick select:",
+                choices = c("5", "10", "20", "50", "100"),
+                selected = NULL
+              )
+          ),
+          div(
+            style = "flex: 0 0 auto; display: flex; flex-direction: column;",
+
+            # invisible label to match input label height
+            tags$div(style = "height: 10px;"),
+
+            div(
+              style = "display: flex; gap: 10px;",
+              actionButton("run_fixflag", "Run", style = "width: 120px;"),
+              actionButton("summarise_fixflag", "Summary", style = "width: 120px;")
+            )
+          ),
+          tags$small(
+            style = "color: #666;",
+            textOutput("fix_hint", inline = TRUE)
+          )
+        )
+      ),
+
+      hr(style = "border-top: 2px solid #888; margin: 8px 0;")
+    )
+  })
+
+  observeEvent(input$fix_presets, {
+    req(input$fix_presets)
+
+    updateNumericInput(
+      session,
+      "fix_thresh_numeric",
+      value = as.numeric(input$fix_presets)
+    )
+  })
+
+  output$fix_hint <- renderText({
+
+    df <- get_annotation_base()
+    req(df)
+
+    # min animal
+    min_animal <- df %>%
+      count(TagID) %>%
+      summarise(min(n)) %>%
+      pull()
+
+    # max per animal
+    max_animal <- df %>%
+      count(TagID) %>%
+      summarise(max(n)) %>%
+      pull()
+
+    # max per animal per day
+    min_day <- df %>%
+      mutate(Date = as.Date(DateTime)) %>%
+      count(TagID, Date) %>%
+      summarise(min(n)) %>%
+      pull()
+
+    # max per animal per day
+    max_day <- df %>%
+      mutate(Date = as.Date(DateTime)) %>%
+      count(TagID, Date) %>%
+      summarise(max(n)) %>%
+      pull()
+
+    paste0(
+      "Per animal: ",
+      "Min: ", min_animal,
+      " | Max: ", max_animal,
+      " || Per day: ",
+      " Min: ", min_day,
+      " | Max: ", max_day
+    )
+  })
+
+
+  ######################
 
 
   # -------------------------------------------------------------- #
@@ -594,31 +838,9 @@ server <- function(input, output, session) {
 
   })
 
-
-  # thought: clear button to remove the flag from the data and thus also the map?
-
-
-
   # -------------------------------------------------------------- #
   # Duplicate data
   # -------------------------------------------------------------- #
-
-#  observeEvent(input$run_dup, {
-#
-#    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running pdop simple filter ...")
-#
-#    df <- get_annotation_base()
-#    req(df)
-#
-#    df <- df %>%
-#      group_by(TagID) %>%
-#      mutate(dup_rm = if_else(duplicated(DateTime) | duplicated(DateTime, fromLast = TRUE), 1L, 0L)) %>%
-#      ungroup()
-#
-#    shinybusy::remove_modal_spinner()
-#    annotated_data(df)
-#
-#  })
 
   # Show modal when user clicks "Duplicates"
   observeEvent(input$run_dup, {
@@ -656,19 +878,6 @@ server <- function(input, output, session) {
     cols <- names(annotated_data())
     selectizeInput("quality_vars", "Quality variables", choices = cols, multiple = TRUE)
   })
-
-  #output$quality_dir_ui <- renderUI({
-  #  req(input$quality_vars)
-  #  n <- length(input$quality_vars)
-  #  tagList(
-  #    lapply(seq_len(n), function(i) {
-  #      selectInput(paste0("quality_dir_", i),
-  #                  paste("Direction for", input$quality_vars[i]),
-  #                  choices = c("Higher better" = 1, "Lower better" = -1),
-  #                  selected = 1)
-  #    })
-  #  )
-  #})
 
   output$quality_dir_ui <- renderUI({
     req(input$quality_vars)
@@ -846,7 +1055,6 @@ server <- function(input, output, session) {
 
   })
 
-
   # -------------------------------------------------------------- #
   # Number of satellites
   # -------------------------------------------------------------- #
@@ -864,22 +1072,6 @@ server <- function(input, output, session) {
     )
 
   })
-
-  #observeEvent(input$run_nsats, {
-  #
-  #  shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running pdop simple filter ...")
-  #
-  #  #browser()
-  #  df <- get_annotation_base()
-  #  req(df)
-  #
-  #  # annotate the rows
-  #  df$sat_rm <- ifelse(df$nsats >= input$nsat_thresh_numeric, 0, 1)
-  #
-  #  shinybusy::remove_modal_spinner()
-  #  annotated_data(df)
-  #
-  #})
 
   observeEvent(input$run_nsats, {
     shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running nfix/animal ...")
@@ -934,7 +1126,7 @@ server <- function(input, output, session) {
     })
   })
 
-    # -------------------------------------------------------------- #
+  # -------------------------------------------------------------- #
   # FLT_switch
   # -------------------------------------------------------------- #
 
@@ -957,7 +1149,6 @@ server <- function(input, output, session) {
      NULL
     }
   })
-
 
   observeEvent(input$run_pdop, {
 
@@ -1009,7 +1200,6 @@ server <- function(input, output, session) {
     shinybusy::remove_modal_spinner()
     annotated_data(df)
   })
-
 
   # -------------------------------------------------------------- #
   # HDOP filter button
@@ -1128,8 +1318,6 @@ server <- function(input, output, session) {
 
   })
 
-
-
   output$cust_filter_options <- renderUI({
 
     req(input$cust_filter_cols)
@@ -1180,7 +1368,6 @@ server <- function(input, output, session) {
     )
 
   })
-
 
   observeEvent(input$apply_cust_filt, {
 
@@ -1256,7 +1443,7 @@ server <- function(input, output, session) {
     if(length(rm_cols) == 0){
 
       showModal(modalDialog(
-        title = "Filter Summary",
+        title = "Summary",
         "No filt_err() columns found for this run.",
         easyClose = TRUE
       ))
@@ -1283,8 +1470,6 @@ server <- function(input, output, session) {
 
   })
 
-
-
   # -------------------------------------------------------------- #
   # Singlegap_rm ('orphaned' gapsections)
   # -------------------------------------------------------------- #
@@ -1303,7 +1488,6 @@ server <- function(input, output, session) {
       NULL
     }
   })
-
 
   observeEvent(input$close_warn_2,{
     output$singlegap_warning <- NULL
@@ -1366,35 +1550,12 @@ server <- function(input, output, session) {
   # -------------------------------------------------------------- #
   # MoveRakeR speed filter
   # -------------------------------------------------------------- #
-#  observeEvent(input$run_speed, {
-#
-#    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running MoveRakeR::speed_filt() ...")
-#
-#    id <- showNotification(
-#      "Running speed filter...",
-#      duration = NULL,
-#      closeButton = FALSE,
-#      type = "message"
-#    )
-#
-#    df <- get_annotation_base()
-#    req(df)
-#    has_gaps <- "gapsec" %in% names(df)
-#    df <- speed_filt(df, sp_thres = input$speed_thresh, annotate = TRUE,
-#                     verbose = TRUE, detailed_verbose = FALSE, hasgaps = has_gaps)
-#
-#    removeNotification(id)
-#    shinybusy::remove_modal_spinner()
-#    annotated_data(df)
-#
-#  })
 
-  ##########
   observeEvent(input$run_speed, {
 
     showModal(
       modalDialog(
-        title = "Speed Filter Options",
+        title = "Speed filter Options",
         size = "m",
         easyClose = TRUE,
         footer = tagList(
@@ -1534,7 +1695,6 @@ server <- function(input, output, session) {
 
   })
 
-
   observeEvent(input$apply_speed_options, {
 
     removeModal()
@@ -1620,16 +1780,9 @@ server <- function(input, output, session) {
 
   })
 
-
   # -------------------------------------------------------------- #
   # Simple speed filter
   # -------------------------------------------------------------- #
-
-  # ok here - my process works best for really unusual points and the filter can remove points that
-  # point-by-point are ok but once one is removed may still be in violation
-
-  # so we may want to have FURTHER flexibility to just look at a flat filter or use a t+1 t-1 approach
-  # or bring distance in as well!!!!! That goes somewhat against the MR process!
 
   observeEvent(input$run_custom_speed, {
 
@@ -1686,7 +1839,6 @@ server <- function(input, output, session) {
 
   })
 
-
   # -------------------------------------------------------------- #
   # Turning angle filter button
   # -------------------------------------------------------------- #
@@ -1705,7 +1857,6 @@ server <- function(input, output, session) {
       type = "message"
     )
 
-    #browser()
     df <- turn_filt(data = df, turnFilt = input$turn_thresh_numeric, turnFilt_dir = input$turn_dir,
                          annotate = TRUE, verbose = TRUE, hasgaps = has_gaps) # using pre-identified gaps from step #6
 
@@ -1727,11 +1878,6 @@ server <- function(input, output, session) {
   # -------------------------------------------------------------- #
   # Extreme lat long selector
   # -------------------------------------------------------------- #
-
-  # this uses the map clicks when rectangle mode is ON
-
-  # need an oberver to automatically detect population of the coordinates
-  # and remove the option again if it is NULL
 
   observeEvent(input$run_ll,{
 
@@ -1831,12 +1977,10 @@ server <- function(input, output, session) {
 
   })
 
-
   # -------------------------------------------------------------- #
   # maximum temporal extent / flag any datetimes in the past/future
   # -------------------------------------------------------------- #
 
-  # ---------------------------- #
   # At the start, populate these boxes with the range around the data
   observe({
 
@@ -1945,7 +2089,6 @@ server <- function(input, output, session) {
 
   })
 
-
   # ----------------------------------------- #
   # observe the filt_end input, label fixes
   observeEvent(input$filt_end, {
@@ -2003,7 +2146,6 @@ server <- function(input, output, session) {
 
   })
 
-
   # ----------------------------------------- #
   # observe the future input, label fixes
   observeEvent(input$future_rm, {
@@ -2041,14 +2183,12 @@ server <- function(input, output, session) {
 
   })
 
-
   # ---------------------------------------- #
   # display current times after box expanded/collapsed
 
   observeEvent(input$cur_times, {
 
     req(data_start())
-    #if(is.null(input$starttime) || input$starttime == ""){
 
       isolate({
 
@@ -2061,13 +2201,8 @@ server <- function(input, output, session) {
         updateTextInput(session, "endtime", value = format(en, "%Y-%m-%d %H:%M:%S", tz = input$timezone))
 
       })
-    #}
 
   })
-
-
-
-
 
   ######################################################################################################
   ######################################################################################################
@@ -2149,54 +2284,6 @@ server <- function(input, output, session) {
   })
 
 
-
-
-  # ----------------------------------------- #
-  # min no fixes/animal
-
-  output$minfix_section <- renderUI({
-
-
-    tagList(
-
-      tags$details(
-        open = if(sections_open()) "open" else NULL,
-
-        tags$summary(
-          tags$b("b. Minimum number of data rows per animal")
-        ),
-
-        div(
-          style = "display: flex; align-items: center; gap: 10px; flex-wrap: wrap;",
-          div(style = "flex: 3;",
-              #sliderInput("fix_thresh_slider", "Number of fixes/animal:",
-              #            min = 0, max = 100, value = 5) # that upper value may need to be flexible
-              sliderInput(
-                "fix_thresh_slider",
-                htmltools::span("Sample size/animal:", style = "font-weight: normal;"),
-                min = 0, max = 100, value = 5
-              )
-          ),
-          div(style = "flex: 1;",
-              numericInput(
-                "fix_thresh_numeric",
-                "",
-                value = 5, min = 0, max = 100, step = 1
-              )
-          ),
-          div(style = "flex: 0 0 auto;",
-              actionButton("run_fixflag", "Run", style = "width: 120px;")
-          )
-
-        )
-      ),
-      hr(style = "border-top: 2px solid #888; margin: 8px 0;")
-
-    )
-
-
-  })
-
   # ----------------------------------------- #
   # NA lat/long
   output$NA_section <- renderUI({
@@ -2231,7 +2318,6 @@ server <- function(input, output, session) {
       ),
       hr(style = "border-top: 2px solid #888; margin: 8px 0;")
     )
-
 
   })
 
@@ -2286,7 +2372,6 @@ server <- function(input, output, session) {
       ),
       hr(style = "border-top: 2px solid #888; margin: 8px 0;")
     )
-
 
   })
 
@@ -2372,7 +2457,6 @@ server <- function(input, output, session) {
 
   })
 
-
   # ------------------------------------------ #
   # custom filter
   output$custom_section <- renderUI({
@@ -2443,7 +2527,6 @@ server <- function(input, output, session) {
     )
   })
 
-
   # ------------------------------------------ #
   # speedfilt
   output$speedfilt_section <- renderUI({
@@ -2482,7 +2565,6 @@ server <- function(input, output, session) {
       hr(style = "border-top: 2px solid #888; margin: 8px 0;")
     )
   })
-
 
   # ------------------------------------------ #
   # custom speedfilt
@@ -2523,9 +2605,6 @@ server <- function(input, output, session) {
       hr(style = "border-top: 2px solid #888; margin: 8px 0;")
     )
   })
-
-
-
 
   # ------------------------------------------ #
   # turning angle
@@ -2571,7 +2650,6 @@ server <- function(input, output, session) {
     )
 
   })
-
 
   # ------------------------------------------ #
   # maximum extent
@@ -2707,7 +2785,6 @@ server <- function(input, output, session) {
     "In future" = "future_rm"
   )
 
-
 #  # 2. Main flag source selector (built-in + user-provided)
 #  output$flag_source_ui <- renderUI({
 #    df <- annotated_data()
@@ -2781,7 +2858,6 @@ server <- function(input, output, session) {
       }
     )
   })
-
 
   # Combine annotation columns automatically (built-in + user-provided)
   observe({
@@ -2875,7 +2951,6 @@ server <- function(input, output, session) {
         df <- df[keep, ]
       }
     }
-
 
     # Apply TagID filter
     if(!is.null(input$tid2) && length(input$tid2) > 0){
@@ -3001,7 +3076,6 @@ server <- function(input, output, session) {
       future_rm = NA
     )
 
-
     # Add any user-selected flags as NA by default
     extra_flags <- input$custom_flags
     if(!is.null(extra_flags)){
@@ -3066,7 +3140,6 @@ server <- function(input, output, session) {
         }, USE.NAMES = FALSE)
       }
 
-
       if(length(nas) > 0){
         flagged_text <- c(flagged_text, paste0(nas, " (NA)"))
       }
@@ -3119,8 +3192,6 @@ server <- function(input, output, session) {
 
   }, ignoreInit = FALSE)
 
-
-
   # ---------------------------------------------------------------------------------------- #
   # The rake elements
   # ---------------------------------------------------------------------------------------- #
@@ -3150,8 +3221,6 @@ server <- function(input, output, session) {
       "In future" = "future_rm"
     )
 
-
-
     extra_flags <- input$custom_flags
     if(!is.null(extra_flags)){
       extra_map <- setNames(extra_flags, extra_flags)
@@ -3179,7 +3248,6 @@ server <- function(input, output, session) {
   observeEvent(annotated_data(),{
       df <- annotated_data()
       req(df)
-
 
       steps <- c(
         "Combined"      = "combined_rm",
@@ -3239,11 +3307,9 @@ server <- function(input, output, session) {
   ####################
 
   output$rake_summary_table <- DT::renderDataTable({
-    #browser()
+
     df <- annotated_data()
     req(df)
-
-    #browser()
 
     steps <- c(
       "Combined"      = "combined_rm",
@@ -3263,7 +3329,6 @@ server <- function(input, output, session) {
       "Too late" = "end_rm",
       "In future" = "future_rm"
     )
-
 
     extra_flags <- input$custom_flags
     if(!is.null(extra_flags)){
@@ -3325,8 +3390,6 @@ server <- function(input, output, session) {
                   )
   })
 
-
-
   ##################################
   # DATA EXPORT TO R SESSION
 
@@ -3359,7 +3422,6 @@ server <- function(input, output, session) {
   # Initialize reactive values
   points <- reactiveVal(list())
   rect_state <- reactiveVal(0)  # 0 = waiting top-left, 1 = waiting bottom-right, 2 = drawn rectangle
-
 
   rect_active <- reactiveVal(FALSE)
 
@@ -3447,7 +3509,6 @@ server <- function(input, output, session) {
       annotated_data(df)
     }
   })
-
 
   ###########################################################################################################################
   ###########################################################################################################################
@@ -3551,24 +3612,19 @@ server <- function(input, output, session) {
     min_time <- min(df$DateTime)
     max_time <- max(df$DateTime)
 
-    #browser()
-
     if(is.null(min_time)){browser()}
     if(is.null(max_time)){browser()}
 
     if(is.na(min_time)){
       df <- annotated_data()
       min_time <- min(df$DateTime)
-      #browser()
+
     }
     if(is.na(max_time)){
-      #browser()
       df <- annotated_data()
       max_time <- max(df$DateTime)
     }
 
-
-    #browser()
     sliderInput(
       "time_slider_threshold", "Select time range:",
       min = min_time,
@@ -3578,21 +3634,6 @@ server <- function(input, output, session) {
       width = "100%"
     )
   })
-
-  #############
-  #observeEvent(input$time_slider, {
-  #  req(input$time_slider)
-  #  updateSliderInput(session, "time_slider_threshold",
-  #                    value = input$time_slider)
-  #}, ignoreInit = TRUE, ignoreNULL = TRUE)
-  #
-  #observeEvent(input$time_slider_threshold, {
-  #  req(input$time_slider_threshold)
-  #  updateSliderInput(session, "time_slider",
-  #                    value = input$time_slider_threshold)
-  #}, ignoreInit = TRUE, ignoreNULL = TRUE)
-
-  #sync_time_flag <- reactiveVal(FALSE)
 
   observeEvent(input$time_slider, {
     if(isTRUE(input$link_maps)){
@@ -3608,9 +3649,6 @@ server <- function(input, output, session) {
     }
 
   }, ignoreInit = TRUE)
-
-
-  ############
 
   # --- Update slider bounds whenever TagID changes ---
   observeEvent(filtered_data_tag(), {
@@ -3656,39 +3694,36 @@ server <- function(input, output, session) {
                   DateTime <= input$time_slider[2])
   }) %>% debounce(200)
 
-
-
   ########################################################################################################
   # reactiveValues guard
   sync_flag <- reactiveVal(FALSE)
 
   observeEvent(input$tid, {
+
     req(input$tid)
+
     if(!sync_flag()) {
+
       sync_flag(TRUE)
 
-      # Keep only IDs that actually exist in tid2 choices
-      #valid_choices <- input$tid2_choices  # store the current choices for tid2
-      #new_selection <- intersect(input$tid, valid_choices)
-      #updatePickerInput(session, "tid2", selected = new_selection)
-
       updatePickerInput(session, "tid2", selected = input$tid)
+
       sync_flag(FALSE)
     }
   }, ignoreInit = TRUE)
 
   observeEvent(input$tid2, {
+
     req(input$tid2)
+
     if(!sync_flag()) {
+
       sync_flag(TRUE)
 
-      # Keep only IDs that exist in tid choices
-      #valid_choices <- input$tid_choices  # store current choices for tid
-      #new_selection <- intersect(input$tid2, valid_choices)
-      #updatePickerInput(session, "tid", selected = new_selection)
-
       updatePickerInput(session, "tid", selected = input$tid2)
+
       sync_flag(FALSE)
+
     }
   }, ignoreInit = TRUE)
   ########################################################################################################
@@ -3714,20 +3749,6 @@ server <- function(input, output, session) {
     )
   })
 
-
-
-  # Update tracked variables when user changes selection
-  #observeEvent(input$xy_vars, {
-  #  if (is.null(rv$current_xy_vars)) {
-  #    rv$current_xy_vars <- input$xy_vars
-  #  } else {
-  #    # Merge new selections with existing
-  #    rv$current_xy_vars <- unique(c(rv$current_xy_vars, input$xy_vars))
-  #  }
-  #}, ignoreNULL = FALSE)
-
-
-
   observeEvent(input$xy_vars, {
     req(input$xy_vars)
 
@@ -3737,11 +3758,9 @@ server <- function(input, output, session) {
 
 
   output$xy_plots_ui <- renderUI({
-    #req(input$xy_vars)
-    #req(rv$current_xy_vars)
+
     req(debounced_xy_vars())
 
-    #plot_list <- lapply(input$xy_vars, function(var) {
     plot_list <- lapply(rv$current_xy_vars, function(var) {
       tagList(
         conditionalPanel(
@@ -3756,13 +3775,6 @@ server <- function(input, output, session) {
     })
     do.call(tagList, plot_list)
   })
-
-
-  #xy_plot_data <- reactive({
-  #  df <- filtered_data() #%>% debounce(400)  # Debounce to avoid multiple triggers
-  #  vars <- rv$current_xy_vars
-  #  list(df = df, vars = vars)
-  #})
 
   debounced_xy_vars <- reactive({
     rv$current_xy_vars
@@ -3833,9 +3845,6 @@ server <- function(input, output, session) {
     }
   })
 
-
-
-
   # ---------------------------------------------------------------------- #
   # leaflet map reactive
   map_reactive <- reactive({
@@ -3851,17 +3860,11 @@ server <- function(input, output, session) {
       )
     )
 
-    # ADDITIONAL
-    # moving the +- button: https://stackoverflow.com/questions/71013017/move-zoom-controls-in-leaflet-for-r-shiny
-    # this is to allow the trips selector menu to sit more neatly at the top left of the map
-    #if(input$zoom_control){
     m <- m %>%
       htmlwidgets::onRender( # java script code goes in the JsCode arg
         "function(el, x) {
                               L.control.zoom({position:'topright'}).addTo(this);
                           }")
-
-    #}
 
     # --------------------------- #
     # Layer tile options
@@ -3904,21 +3907,6 @@ server <- function(input, output, session) {
       m <- m %>% leaflet::setView(lat = 56.1, lng = -3.2, zoom = 7)
     }
 
-
-    # add right mouse click
-    # https://stackoverflow.com/questions/60750953/r-shiny-leaflet-right-click-context-menu
-    #m <- m  %>%
-    #  htmlwidgets::onRender("
-    #function(el,x) {
-    #    mymap = this;
-    #    mymap.on('contextmenu', function(e) {
-    #    var coords = {lng: e.latlng.lng, lat: e.latlng.lat}
-    #    Shiny.setInputValue('mymap_right_click', coords);
-    #});
-    #}
-    #")
-
-
     m <- m %>%
           htmlwidgets::onRender("
       function(el, x) {
@@ -3937,8 +3925,6 @@ server <- function(input, output, session) {
       ")
 
     m$dependencies <- c(m$dependencies, leaflet:::leafletAwesomeMarkersDependencies())
-
-    #m <- m %>%   addEasyprint(options = easyprintOptions( exportOnly = TRUE ))
 
     m
 
@@ -3972,7 +3958,6 @@ server <- function(input, output, session) {
     #sf::st_agr(lines_sf) <- "constant"
     #lines_sf <- sf::st_cast(lines_sf, "LINESTRING") # for leafgl
     #lines_sf
-
 
   })
 
@@ -4182,8 +4167,6 @@ server <- function(input, output, session) {
 
   }, ignoreInit = FALSE)
 
-
-
   ########################################################################################################
   # collapsible histogram box
 
@@ -4267,8 +4250,6 @@ server <- function(input, output, session) {
     #  labs(x = xlab, y = "Count", title = paste("Histogram of", var)) +
     #  theme(legend.position = "right")
 
-
-
   })
 
   observe({
@@ -4284,7 +4265,5 @@ server <- function(input, output, session) {
       updateSelectInput(session, "hist_var", selected = data_list$vars[1])
     }
   })
-
-
 
 }
