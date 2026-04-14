@@ -7,7 +7,7 @@ Chris Thaxter
 
 # MoveRakeR
 
-### Current version: 1.1.4
+### Current version: 1.1.5
 
 [![DOI](https://zenodo.org/badge/948019784.svg)](https://doi.org/10.5281/zenodo.15275175)
 
