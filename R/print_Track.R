@@ -80,12 +80,23 @@ print.Track <- function(x, len = 6, ...){
       }, logical(1)))
     }
 
+    # Determine class
+    Class <- if (is_Track(x)) {
+      "Track"
+    } else if (is_TrackStack(x)) {
+      "TrackStack"
+    } else if (is_TrackMultiStack(x)) {
+      "TrackMultiStack"
+    } else {
+      stop("Unknown object class for print.Track")
+    }
+
     if((is_Track(x) && nrow(x) == 0) ||
         (is_TrackStack(x) && .all_zero(x)) ||
         (is_TrackMultiStack(x) && .all_zero_TMS(x))){
 
       # Determine class
-      Class <- if(is_Track(x)) "Track" else if (is_TrackStack(x)) "TrackStack" else "TrackMultiStack"
+      #Class <- if(is_Track(x)) "Track" else if (is_TrackStack(x)) "TrackStack" else "TrackMultiStack"
 
       # Colours & page-width
       w <- getOption("width")
@@ -152,8 +163,12 @@ print.Track <- function(x, len = 6, ...){
     .risub <- function(x,n){substring(x,nchar(x)-n+1)}
 
     # assess global printing options
-    print_style <- get_options$print_method
-    print_type <- get_options$print_type
+    opts <- get_options_mR()
+    print_style <- attr(opts, "print_method")
+    print_type  <- attr(opts, "print_type")
+
+    #print_style <- get_options$print_method
+    #print_type <- get_options$print_type
 
     #######################
     # for summary of TS and TMS objects, get the first data set of an animal
@@ -676,27 +691,33 @@ print.Track <- function(x, len = 6, ...){
 #' @keywords internal
 strip_tbl_classes <- function(x){
 
-  # Base Track object
-  if(inherits(x, c("tbl_df", "grouped_df", "tbl"))){
-    # Keep only Track/TrackStack/TrackMultiStack classes, drop tibbles
-    track_classes <- intersect(class(x), c("Track","TrackStack","TrackMultiStack"))
-    class(x) <- c(track_classes, "data.frame")
-    # Ungroup if it was grouped
-    #x <- dplyr::ungroup(x)
+  # ONLY modify actual data.frames inside Tracks
+  if (inherits(x, c("tbl_df","tbl","grouped_df"))) {
+    class(x) <- setdiff(class(x), c("tbl_df","tbl","grouped_df"))
+    return(x)
   }
 
-  # For TrackStack (list of Tracks)
-  if(inherits(x, "TrackStack") && is.list(x)){
-    x <- lapply(x, strip_tbl_classes)
+  # If TrackStack: go ONE level only (not recursive explosion)
+  if (inherits(x, "TrackStack")) {
+    for (i in seq_along(x)) {
+      x[[i]] <- strip_tbl_classes(x[[i]])
+    }
+    return(x)
   }
 
-  # For TrackMultiStack (list of TrackStacks)
-  if(inherits(x, "TrackMultiStack") && is.list(x)){
-    x <- lapply(x, function(stack) lapply(stack, strip_tbl_classes))
+  # If TrackMultiStack: one controlled level deeper
+  if (inherits(x, "TrackMultiStack")) {
+    for (i in seq_along(x)) {
+      for (j in seq_along(x[[i]])) {
+        x[[i]][[j]] <- strip_tbl_classes(x[[i]][[j]])
+      }
+    }
+    return(x)
   }
 
-  return(x)
+  x
 }
+
 
 #' Subsetting for Track objects
 #'
