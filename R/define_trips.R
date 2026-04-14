@@ -535,9 +535,12 @@ define_trips <- function(data, use_current_by = FALSE, by = NULL, birdyear = TRU
       mutate(gap = case_when(row_number() == n() ~ 0, TRUE ~ gap)) %>%
       filter_at(vars(gap), all_vars(!is.na(.)))
 
-    if(new_after_gap){
-      data_dp <- data_dp %>% mutate(Beh = if_else(gap == 1, 'Colony', Beh))
-    }
+    #if(new_after_gap){
+    #  data_dp <- data_dp %>% mutate(Beh = if_else(gap == 1, 'Colony', Beh))
+    #}
+
+    data_dp <- data_dp %>%
+      mutate(gap_break = if_else(new_after_gap & gap == 1, 1, 0))
 
     ########## trips that come-and-go - not a good process as adds in extra information but removing locational information and any other variables are NAd
     st <- data_dp %>%
@@ -592,7 +595,14 @@ define_trips <- function(data, use_current_by = FALSE, by = NULL, birdyear = TRU
     # Trips only, we  want to keep colony locations in the output
     data_dp_trip <- data_dp  %>%
       filter(Beh == "Trip") %>%
-      mutate(pnum = case_when(stend == "start" ~ cur_group_rows())) %>%
+      #mutate(pnum = case_when(stend == "start" ~ cur_group_rows())) %>%
+
+      mutate(pnum = case_when(
+        stend == "start" ~ cur_group_rows(),
+        lag(gap_break, default = 0) == 1 ~ cur_group_rows(),
+        TRUE ~ NA_real_
+      )) %>%
+
       tidyr::fill(pnum) %>% # fills NAs in between (down default) non NA entries: https://tidyr.tidyverse.org/reference/fill.html
       mutate(tripNo = consecutive_id(pnum)) %>% # neat trick using consecutive_ids: https://dplyr.tidyverse.org/reference/consecutive_id.html
       dplyr::select(-c(lag, lead, stend, pnum, first_col_row, max_col_row, rn, Beh))
