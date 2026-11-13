@@ -237,4 +237,9 @@ PLoS ONE, 4(10). \url{http://dx.plos.org/10.1371/journal.pone.0007324}.
 \author{
 \strong{Maintainer}: Chris Thaxter \email{chris.thaxter@bto.org} (\href{https://orcid.org/0000-0003-0341-4199}{ORCID})
 
+Authors:
+\itemize{
+  \item Chris Thaxter \email{chris.thaxter@bto.org} (\href{https://orcid.org/0000-0003-0341-4199}{ORCID})
+}
+
 }

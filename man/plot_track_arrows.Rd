@@ -22,6 +22,7 @@ plot_track_arrows(data, ...)
   corr_size_arr = 0.35,
   geo_transform = TRUE,
   verbose = TRUE,
+  return_coords = FALSE,
   p4s = 32631,
   ...
 )
@@ -91,6 +92,8 @@ to adjust the \emph{r} parameter.}
 \item{geo_transform}{Logical (defaults to TRUE) to transform the coordinates of the arrow lines to WGS84 geographic cartesian.}
 
 \item{verbose}{Logical defaulting to TRUE for detailed messaging.}
+
+\item{return_coords}{Option to return the coordinates directly Boolean (deafult FALSE).}
 
 \item{p4s}{A numeric or \code{sf} \code{CRS} argument, here defaulting to the UTM 31N (32631).}
 

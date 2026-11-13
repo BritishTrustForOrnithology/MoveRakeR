@@ -70,6 +70,7 @@ plot_track_arrows <- function(data, ...){
 #' directly, hence e.g. could be if you want to manually use a wider custom extent for the arrow size.
 #' This latter option is most handy for automatic use in the \code{plot.Track} function
 #' that works on a bird-by-bird basis so needed direct use of \emph{r} in that instance.
+#' @param return_coords Option to return the coordinates directly Boolean (deafult FALSE).
 #' @param p4s A numeric or \code{sf} \code{CRS} argument, here defaulting to the UTM 31N (32631).
 #' @param col Colour of the arrow to be plotted, defaults to "black".
 #' @param corr_size_arr Value to control the size of arrows along the
@@ -158,6 +159,7 @@ plot_track_arrows <- function(data, ...){
 #' @export
 plot_track_arrows.Track <- function(data, tol = 0.5, u = 100, nnew = 500, r = NULL, N_keep = NULL, col = "black",
                                     corr_no_arr = 0.005, corr_size_arr=0.35, geo_transform = TRUE, verbose = TRUE,
+                                    return_coords = FALSE,
                                     #p4s = sp::CRS("+proj=utm +zone=31 ellps=WGS84")
                                     p4s = 32631
                                     ,...){
@@ -255,6 +257,7 @@ plot_track_arrows.Track <- function(data, tol = 0.5, u = 100, nnew = 500, r = NU
     segments(x0 = ap3$x, y0 = ap3$y, x1 = ap3$X2, y1 = ap3$Y2, col = col)
 
     return(ap3)
+ 
   }
 
   ##########
@@ -265,11 +268,16 @@ plot_track_arrows.Track <- function(data, tol = 0.5, u = 100, nnew = 500, r = NU
 
   ##########
   if(is_Track(data)){
-
-   .plot_track_arrows(data, r = r)
-
+  
+    
+    if(return_coords){
+      return(.plot_track_arrows(data, r = r))
+    } else{
+      .plot_track_arrows(data, r = r)
+    }
+    
   }
-
+  
   # reclaculate r value for use across animals
   if(is_TrackStack(data) | is_TrackMultiStack(data)){
     # get bounds of the whole track and assess overall
@@ -289,14 +297,19 @@ plot_track_arrows.Track <- function(data, tol = 0.5, u = 100, nnew = 500, r = NU
     }
     if(length(col) > 1){
       for(i in 1:length(data)){
-        .plot_track_arrows(data, col = col[i], r = r)
+        
+        if(return_coords){
+          return(.plot_track_arrows(data, col = col[i], r = r))
+        } else{
+          .plot_track_arrows(data, col = col[i], r = r)
+        }
+        
       }
     }
 
   }
 
   if(is_TrackMultiStack(data)){
-
 
     if(length(col) == 1){
       for(i in 1:length(data)){
