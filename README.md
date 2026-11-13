@@ -1,13 +1,13 @@
 README
 ================
 Chris Thaxter
-11/03/2026
+13/11/2026
 
 <!-- README.md is generated from README.Rmd. Please edit that file, but only with package maintainer's permission -->
 
 # MoveRakeR
 
-### Current version: 1.1.5
+### Current version: 1.1.6
 
 [![DOI](https://zenodo.org/badge/948019784.svg)](https://doi.org/10.5281/zenodo.15275175)
 
