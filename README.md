@@ -48,6 +48,12 @@ using:
 devtools::install_github('BritishTrustForOrnithology/MoveRakeR', build_vignettes = TRUE)
 ```
 
+However, note this function is now deprecated so best to use:
+
+``` r
+pak::pak("BritishTrustForOrnithology/MoveRakeR") 
+```
+
 ## Vignettes
 
 There are currently two vignettes:
