@@ -181,7 +181,14 @@ plot_track_arrows.Track <- function(data, tol = 0.5, u = 100, nnew = 500, r = NU
 
     onebird <- onebird[!duplicated(onebird$DateTime),] # done also in plot.Track
 
-    lt = adehabitatLT::as.ltraj(subset(onebird, select = c(X,Y)), date = onebird$DateTime, id = onebird$TagID, burst = onebird$gapsec)
+    xy <- as.data.frame(onebird[, c("X", "Y")])
+    rownames(xy) <- as.character(seq_len(nrow(xy)))
+    lt <- adehabitatLT::as.ltraj(
+      xy = xy,
+      date = onebird$DateTime,
+      id = onebird$TagID
+    )
+    
     if(length(which(sapply(lt,function(x) nrow(x) == 1))) > 0){
       lt_ <- lt[-which(sapply(lt,function(x) nrow(x) == 1))]
     } else{
