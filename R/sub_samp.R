@@ -354,8 +354,6 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.2, u_tol=NULL,
                     verbose = TRUE,
                     verbose_repair = FALSE){
 
-
-
   # --------------------------------------- #
   # assessment of relevant minimum namings in data
   attr_list <- get_attributes(data)
@@ -843,12 +841,14 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.2, u_tol=NULL,
     # ------------------------------------------- #
     # TagID
     # ------------------------------------------- #
-    #ti = 7
+    #ti = 1
     for(ti in seq_along(tag_ids)){
 
       tag <- tag_ids[ti]
-      df_tag <- df %>% filter(TagID == tag)
-
+      #df_tag <- df %>% filter(TagID == tag)
+      #df_tag = MoveRakeR::simplify(df_tag) # test bug 16 11 2026
+      df_tag <- df %>% filter(.data$TagID == .env$tag)
+      
       # Determine var levels for this tag, if used
       if(use_var){
         vars_tag <- unique(df_tag$var)
@@ -859,7 +859,7 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.2, u_tol=NULL,
 
       var_list <- vector("list", length(vars_tag))
       names(var_list) <- as.character(vars_tag)
-
+    
       # ------------------------------------------- #
       # VAR LOOP (or a single NOVAR)
       # ------------------------------------------- #
@@ -867,10 +867,9 @@ sub_samp = function(data, dt=300, Unit='secs', by = NULL, tol = 0.2, u_tol=NULL,
       for(vi in seq_along(vars_tag)){
 
         v <- vars_tag[vi]
-        df_tv <- df_tag %>% filter(var == v)
-
-        #data[data$TagID %in% "5377_stack_2",]
-
+        #df_tv <- df_tag %>% filter(var == v) # bug 16 11 2026
+        df_tv <- df_tag %>% filter(.data$var == .env$v)
+        
         gapsecs <- sort(unique(df_tv$gapsec))
         boot_list <- vector("list", n_boot)
 
