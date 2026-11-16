@@ -66,36 +66,29 @@
 #'
 #' @export
 gap_section <- function(data, GAP=28800, tol = 0.2, drop_single_gap = FALSE, verbose = TRUE, attr = TRUE, ...){
-
+  
   data_dp <- tibble(data)
-
+  
   if(exists("drop", inherits = FALSE)){
     drop_single_gap = drop # legacy code of drop from previous funcion version retained
     message("Newer version of gap_section() in MoveRakeR v 1.02+ uses 'drop_single_gap' instead of 'drop'")
     cat(rep(" ",  getOption("width")), "\n", sep = "")
   }
-
-  # --------------------------------------- #
-  # assessment of relevant minimum namings in data
-  #cond <- ifelse(all(c("TagID","DateTime", "longitude", "latitude") %in% names(data_dp)), TRUE, FALSE) # required columns
-  #if(!cond){
-  #  stop("Missing column names! Check input data for named columns: 'TagID','DateTime','longitude','latitude'")
-  #}
-
+  
   # get attributes from previous function runs
   attr_list <- get_attributes(data)
   # --------------------------------------- #
-
+  
   if(verbose){
-
+    
     message("Object of ", length(unique(data$TagID)), " animals, ", nrow(data), " rows of data")
-
+    
     message("tol value of ", tol, "; GAP = ", GAP, " " ,"secs", "; Real GAP = ",GAP," + ", GAP,"*",tol, " = ", GAP+(GAP*tol), " ", "secs")
   }
-
+  
   # the real gao being used
   GAP = GAP+(GAP*tol)
-
+  
   data_dp = data_dp %>%
     #mutate(year = lubridate::year(DateTime)) %>%
     group_by(TagID) %>%
@@ -115,39 +108,41 @@ gap_section <- function(data, GAP=28800, tol = 0.2, drop_single_gap = FALSE, ver
     #ungroup() %>%
     dplyr::select(-c(gap_num, rn_,gap0)) %>%
     group_by(TagID)
-
+  
   # the first row always comes out with gap == 1 in new code from above process
   data_dp = data_dp %>%  group_by(TagID) %>%
     mutate(gap = if_else(row_number() == min(row_number()), 0, gap),
-           gapsec = if_else(row_number() == min(row_number()) & (lead(gapsec)-1) != gapsec, lead(gapsec), gapsec)
-           )
+           gapsec = if_else(row_number() == min(row_number()) & (lead(gapsec)-1) != gapsec, lead(gapsec), gapsec),
+           gapsec = if_else(is.na(gapsec),1,gapsec) # Issue if there is only 1 row this will not work - any NAs will be single rows for animals
+    )  
+  
   if(data_dp$gapsec[1] > 1){
     data_dp$gapsec = data_dp$gapsec+1
-    } else{
-      data_dp$gapsec = data_dp$gapsec
+  } else{
+    data_dp$gapsec = data_dp$gapsec
   }
-
+  
   ############
-  # 5. if drop_single_gap = TRUE then drop OUT single gapsection fixes as cannot be assessed in the speed filter
+  # if drop_single_gap = TRUE then drop OUT single gapsection fixes as cannot be assessed in the speed filter
   if(drop_single_gap){
-
+    
     if(verbose){message("Keeping only consecutive fixes within gap sections")}
-
+    
     data_dp = data_dp %>% group_by(TagID,gapsec) %>% mutate(nn = n()) %>%
       filter(nn > 1) %>% # drop any single gapsecs
       dplyr::select(-nn) %>%
       group_by(TagID) %>%
       mutate(dt = as.vector(difftime(lead(DateTime), DateTime, units = 'secs'))) %>%
       ungroup()
-
+    
   }
-
+  
   # --------------------------------------------------------- #
   # assign attributes that may have been present at the start
-
+  
   if(attr){
     data_dp <- give_attributes(data_dp, attr_list)
-
+    
     # --------------------------------------------------------- #
     #### retain attributes of the choices made
     # main attribute entry for the function
@@ -158,20 +153,19 @@ gap_section <- function(data, GAP=28800, tol = 0.2, drop_single_gap = FALSE, ver
     # sub_attributes for arguments
     attr(attr(data_dp, "general"), "GAP") <- get("GAP")
     attr(attr(attr(data_dp, "general"), "GAP"),"function") <- "gap_section"
-
+    
     attr(attr(data_dp, "general"), "unit") <- "secs"
     attr(attr(attr(data_dp, "general"), "unit"),"function") <- "gap_section"
-
+    
     attr(attr(data_dp, "general"), "drop_single_gap") <- get("drop_single_gap")
     attr(attr(attr(data_dp, "general"), "drop_single_gap"),"function") <- "gap_section"
-
-
+    
   }
-
-
+  
+  
   data_dp <- structure(.Data = data_dp, class = c("Track", "tbl_df","tbl","data.frame"))
   return(data_dp)
-
+  
 }
 
 
